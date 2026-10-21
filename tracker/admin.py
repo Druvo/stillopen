@@ -45,7 +45,7 @@ class SiteConfigForm(forms.ModelForm):
 class SiteConfigAdmin(admin.ModelAdmin):
     form = SiteConfigForm
     fieldsets = (
-        ("Dashboard", {"fields": ("site_title", "score_scale", "urgent_days", "auto_close_expired")}),
+        ("Dashboard", {"fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired")}),
         (
             "Registration",
             {
@@ -282,7 +282,8 @@ class ApplicationAdmin(admin.ModelAdmin):
         (None, {"fields": ("owner", "company", "role", "url", "source", "status", "careerops_num")}),
         ("Job description", {"fields": ("description", "ai_evaluated_at", "ai_method")}),
         ("Evaluation", {"fields": ("score", "decision", "legitimacy", "risk", "summary", "next_action", "advertised_pay", "report_path")}),
-        ("Dates", {"fields": ("found_date", "applied_date", "deadline")}),
+        ("Dates", {"fields": ("found_date", "applied_date", "deadline", "follow_up_date")}),
+        ("Application sent", {"fields": ("applied_cv", "applied_channel", "applied_note", "jd_at_apply")}),
         ("Notes", {"fields": ("notes",)}),
         ("Open / closed check", {"fields": ("live_state", "live_detail", "live_checked_at")}),
     )

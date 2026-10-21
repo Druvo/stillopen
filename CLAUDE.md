@@ -17,7 +17,7 @@ python mcp_server.py                       # MCP server over stdio
 
 - `tracker/models.py`: SiteConfig (singleton, all settings), Application, Status/Bucket/ScoreBand/... (config tables seeded by migration 0002)
 - `tracker/services/`: `careerops.py` (import), `liveness.py` (open/closed), `ai.py` (providers, prompt, keyword fallback), `knowledge.py` (candidate knowledge base, chunking, BM25/embeddings retrieval), `text.py` (shared tokenizer), `jobtext.py` (guarded URL fetch), `paperless.py`
-- `tracker/services/`: also `cvgen.py` (tailoring: AI or keyword), `cvversions.py` (immutable history, restore, approve), `factcheck.py` (flags claims not in the person's material), `cvexport.py` (Markdown to safe HTML, DOCX, diff); views in `tracker/views_cv.py`
+- `tracker/services/`: also `cvgen.py` (tailoring: AI or keyword), `cvversions.py` (immutable history, restore, approve), `factcheck.py` (flags claims not in the person's material), `cvexport.py` (Markdown to safe HTML, DOCX, diff); views in `tracker/views_cv.py`, `apply.py` (apply assistant: checklist, record, follow-ups, email draft); views in `tracker/views_apply.py`
 - `tracker/mcp_tools.py`: plain functions behind the MCP tools; `mcp_server.py` registers them
 - `tracker/auth.py`: allauth adapters (Google sign-in gated by an allowlist)
 - `.claude/skills/stillopen/SKILL.md`: how an AI should use the MCP tools
@@ -37,3 +37,4 @@ python mcp_server.py                       # MCP server over stdio
 - Tests that touch SiteConfig should clear `careerops_path` (use `isolated_config` in `tests_ai.py`) so they never read a developer's real career-ops folder.
 - Use `python manage.py makemigrations` after model changes; commit the migration.
 - CV versions are immutable (`CVVersion.save` refuses content changes). A tailored version with flagged claims must stay un-exportable until the person approves it; MCP/AI clients may never approve. Never render CV Markdown without `cvexport.to_html` (it escapes everything).
+- The app never submits an application or sends a message. `apply.record` only records what the person did; it must refuse CV versions that are flagged and unapproved, another person's, or tailored for a different job. `Application.applied_cv` is RESTRICT so a sent CV cannot be deleted on its own (account and application deletion still cascade).

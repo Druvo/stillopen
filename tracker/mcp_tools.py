@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from .models import Application, Bucket, CVVersion, Event, KnowledgeSource, SiteConfig, Status
 from .services import ai, cvversions, knowledge, liveness
+from .services import apply as apply_service
 from .services.factcheck import fact_check
 
 MAX_TEXT = 30000
@@ -288,3 +289,34 @@ def save_tailored_cv(app_id: int, content: str, label: str = "") -> dict:
         "next_step": "Ask the person to open the CVs page, review the flagged claims, and approve before downloading." if findings
         else "Nothing unsupported was found. The person can download it from the CVs page.",
     }
+
+
+def list_follow_ups() -> list[dict]:
+    """Applications whose follow-up reminder is due today or overdue."""
+    return [
+        {"id": a.pk, "company": a.company, "role": a.role, "status": a.status.name,
+         "applied": a.applied_date.isoformat() if a.applied_date else None, "follow_up_due": a.follow_up_date.isoformat(),
+         "cv_version_sent": a.applied_cv_id}
+        for a in apply_service.due_followups(_owner())
+    ]
+
+
+def record_application(app_id: int, cv_version_id: int | None = None, channel: str = "", note: str = "",
+                       follow_up_days: int | None = None) -> dict:
+    """Record that the PERSON has applied (sets status Applied, saves the CV version sent, schedules a follow-up).
+
+    Only call this after the person confirms they actually submitted the application. This never submits anything.
+    channel is one of: site, linkedin, email, referral, recruiter, other."""
+    app = _app(app_id)
+    config = _config()
+    version = None
+    if cv_version_id is not None:
+        version = CVVersion.objects.filter(owner=_owner(), pk=cv_version_id).first()
+        if version is None:
+            raise ValueError(f"No CV version with id {cv_version_id}.")
+    try:
+        apply_service.record(app, version, channel, note, follow_up_days or config.apply_followup_days, config)
+    except apply_service.ApplyError as exc:
+        raise ValueError(str(exc)) from exc
+    return {"id": app.pk, "status": app.status.name, "applied_date": app.applied_date.isoformat(),
+            "cv_version_sent": app.applied_cv_id, "follow_up_date": app.follow_up_date.isoformat()}

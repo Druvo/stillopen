@@ -180,7 +180,7 @@ class ServerProtocolTests(SimpleTestCase):
         self.assertEqual(
             set(tools),
             {"summary", "list_applications", "get_application", "get_profile", "list_statuses", "add_application",
-             "set_description", "save_evaluation", "update_status", "add_note", "check_open", "search_profile", "list_knowledge", "list_cv_versions", "get_cv_version", "save_tailored_cv"},
+             "set_description", "save_evaluation", "update_status", "add_note", "check_open", "search_profile", "list_knowledge", "list_cv_versions", "get_cv_version", "save_tailored_cv", "list_follow_ups", "record_application"},
         )
         self.assertTrue(tools["summary"].annotations.read_only_hint)
         self.assertFalse(added.is_error)

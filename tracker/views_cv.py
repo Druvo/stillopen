@@ -4,6 +4,7 @@ import re
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import RestrictedError
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -106,7 +107,11 @@ def cv_delete(request, pk):
     if version.kind != "tailored":
         messages.error(request, "Master CV versions are your history and cannot be deleted. Delete your account to remove everything.")
         return redirect("cv_detail", pk=version.pk)
-    version.delete()
+    try:
+        version.delete()
+    except RestrictedError:
+        messages.error(request, "This CV is recorded as sent with an application, so it is kept as your record.")
+        return redirect("cv_detail", pk=version.pk)
     messages.success(request, "Deleted.")
     return redirect("cv_list")
 

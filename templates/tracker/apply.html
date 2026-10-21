@@ -1,0 +1,80 @@
+{% extends "tracker/base_app.html" %}
+{% block title %}Apply: {{ app.company }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'dashboard' %}">&larr; Dashboard</a></p>
+<h1>Apply: {{ app.company }} <span class="muted">— {{ app.role }}</span></h1>
+<p class="muted">StillOpen does not submit applications for you. Check the list, choose the CV, apply on the employer's site, then record it here so you always know what you sent.</p>
+
+<h2>1. Before you apply</h2>
+<div class="card">
+  <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
+    {% for c in checks %}
+    <li><strong style="color:{% if c.level == 'ok' %}var(--ok){% elif c.level == 'warn' %}var(--warn){% else %}var(--muted){% endif %}">{% if c.level == 'ok' %}&#10003;{% elif c.level == 'warn' %}!{% else %}i{% endif %}</strong> {{ c.text }}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<form method="post" action="{% url 'mark_applied' app.pk %}">
+  {% csrf_token %}
+  <h2>2. Choose the CV you will send</h2>
+  <div class="card">
+    {% if versions %}
+      {% for v in versions %}
+      <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+        <label style="display:flex;gap:8px;align-items:flex-start;margin:0;font-weight:600">
+          <input type="radio" name="cv" value="{{ v.pk }}" {% if v.pk == selected %}checked{% endif %} style="margin-top:4px">
+          <span>{{ v.label|default:v.get_kind_display }} <span class="pill">v{{ v.pk }}</span>
+            <span class="muted" style="font-weight:400"><br>{{ v.get_kind_display }} · {{ v.created_at|date:"j M Y" }}{% if v.flagged %} · you approved the flagged claims{% endif %}</span></span>
+        </label>
+        <div class="row" style="margin:6px 0 0 24px">
+          <a class="btn" href="{% url 'cv_download' v.pk 'docx' %}">DOCX</a>
+          <a class="btn" href="{% url 'cv_print' v.pk %}" target="_blank" rel="noopener">Print / PDF</a>
+          <a class="btn" href="{% url 'cv_detail' v.pk %}">Open</a>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="muted" style="margin:0">No CV is ready to send yet. Add your CV in <a href="{% url 'profile' %}">Profile</a>.</p>
+    {% endif %}
+    <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:400"><input type="radio" name="cv" value="none" {% if not versions %}checked{% endif %}> I am sending a different CV (do not link a version)</label>
+    {% if not versions or has_flagged %}<p class="muted" style="margin:10px 0 0">{% if has_flagged %}Your tailored CV still has flagged claims, so it is not offered. {% endif %}</p>{% endif %}
+  </div>
+  <div class="row" style="margin:8px 0">
+    <button type="submit" formaction="{% url 'tailor_cv' app.pk %}" formnovalidate>Tailor a CV for this job</button>
+    <span class="muted">Makes a new version from your own CV; you review it before it can be sent.</span>
+  </div>
+
+  <h2>3. Apply on the employer's site</h2>
+  <div class="card">
+    {% if app.url %}<p style="margin-top:0"><a class="btn primary" href="{{ app.url }}" target="_blank" rel="noopener noreferrer">Open the job posting</a></p>{% else %}<p class="muted" style="margin-top:0">This job has no link saved. Apply through whatever channel you found it on.</p>{% endif %}
+    <details>
+      <summary>Applying by email? Start from this draft</summary>
+      <label for="draft_subject">Subject</label>
+      <input type="text" id="draft_subject" value="{{ draft.subject }}" readonly onclick="this.select()">
+      <label for="draft_body">Message</label>
+      <textarea id="draft_body" rows="10" readonly onclick="this.select()">{{ draft.body }}</textarea>
+      <p class="help">A starting point only. Replace [Your name], attach the CV, and check every statement is true. It is never sent for you.</p>
+    </details>
+  </div>
+
+  <h2>4. Record what you sent</h2>
+  <div class="card">
+    {% if app.live_state == "expired" %}
+    <label style="display:flex;gap:8px;align-items:center;font-weight:600;color:var(--warn)"><input type="checkbox" name="confirm_closed"> This posting looks closed, but I applied anyway</label>
+    {% endif %}
+    <label for="channel">How did you apply?</label>
+    <select id="channel" name="channel">
+      <option value="">Not recorded</option>
+      {% for value, label in channels %}<option value="{{ value }}" {% if value == app.applied_channel %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <label for="applied_on">Date applied (blank = today)</label>
+    <input type="date" id="applied_on" name="applied_on" {% if app.applied_date %}value="{{ app.applied_date|date:'Y-m-d' }}"{% endif %}>
+    <label for="note">Note (optional)</label>
+    <input type="text" id="note" name="note" maxlength="300" value="{{ app.applied_note }}" placeholder="Contact name, reference number, anything you want to remember">
+    <label for="days">Remind me to follow up in (days)</label>
+    <input type="number" id="days" name="days" min="1" max="90" value="{{ followup_days }}">
+    <div class="row" style="margin-top:16px"><button class="primary" type="submit">I submitted it: record it</button></div>
+    <p class="help">Recording sets the status to Applied, saves which CV version you sent and a snapshot of the job description as it is today, and schedules the reminder.</p>
+  </div>
+</form>
+{% endblock %}

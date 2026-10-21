@@ -170,6 +170,9 @@ class SiteConfig(PersonalSettings):
     urgent_days = models.PositiveIntegerField(
         default=7, help_text="Deadlines within this many days are highlighted and sorted first."
     )
+    apply_followup_days = models.PositiveIntegerField(
+        default=7, validators=[MinValueValidator(1)], help_text="Default number of days before a follow-up reminder after someone applies.",
+    )
     auto_close_expired = models.BooleanField(
         default=True,
         help_text="Show applications whose posting is confirmed expired under the closed tab (unless already applied).",
@@ -447,6 +450,15 @@ class DocumentKind(models.Model):
 
 class Application(models.Model):
     RISKS = [("", "—"), ("Low", "Low"), ("Medium", "Medium"), ("High", "High")]
+    CHANNELS = [
+        ("", "Not recorded"),
+        ("site", "Company site or job board"),
+        ("linkedin", "LinkedIn"),
+        ("email", "Email"),
+        ("referral", "Referral"),
+        ("recruiter", "Recruiter or agency"),
+        ("other", "Other"),
+    ]
     LIVE = [
         ("unknown", "Not checked"),
         ("active", "Open"),
@@ -479,6 +491,14 @@ class Application(models.Model):
     deadline = models.DateField(null=True, blank=True)
     report_path = models.CharField(max_length=500, blank=True, help_text="Path to the career-ops report (relative to the career-ops folder).")
     description = models.TextField(blank=True, help_text="Job description text. Paste it, or leave blank to fetch it from the URL.")
+    applied_cv = models.ForeignKey(
+        "CVVersion", null=True, blank=True, on_delete=models.RESTRICT, related_name="sent_for",
+        help_text="The exact CV version that was sent. It cannot be deleted while it is recorded here.",
+    )
+    applied_channel = models.CharField(max_length=10, choices=CHANNELS, blank=True)
+    applied_note = models.CharField(max_length=300, blank=True)
+    follow_up_date = models.DateField(null=True, blank=True)
+    jd_at_apply = models.TextField(blank=True, help_text="The job description as it was when the application was sent (postings disappear).")
     ai_evaluated_at = models.DateTimeField(null=True, blank=True)
     ai_method = models.CharField(max_length=40, blank=True)
 

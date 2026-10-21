@@ -71,6 +71,20 @@ a{color:var(--accent)}
 </div>
 {% endif %}
 
+{% if followups %}
+<div class="card" style="margin:12px 20px;border-color:var(--warn);gap:6px">
+  <strong>Follow-ups due</strong>
+  {% for f in followups %}
+  <div class="row" style="justify-content:space-between">
+    <span>{{ f.company }} — {{ f.role }} <span class="muted">(due {{ f.follow_up_date|date:"j M" }}{% if f.applied_date %}, applied {{ f.applied_date|date:"j M" }}{% endif %})</span></span>
+    <span class="row">
+      <form method="post" action="{% url 'followup_action' f.pk 'done' %}" style="display:inline">{% csrf_token %}<button type="submit">Done</button></form>
+      <form method="post" action="{% url 'followup_action' f.pk 'snooze' %}" style="display:inline">{% csrf_token %}<input type="hidden" name="days" value="3"><button type="submit">In 3 days</button></form>
+    </span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 <div class="stats">
   <div class="stat"><b>{{ stats.total }}</b><span class="muted">Tracked roles</span></div>
   <div class="stat"><b>{{ stats.submitted }}</b><span class="muted">CV submitted</span></div>
@@ -130,11 +144,16 @@ a{color:var(--accent)}
       {% if a.description or a.url %}<button data-eval="{{ a.pk }}" title="Provider: {{ config.get_ai_provider_display }}">{% if a.ai_evaluated_at %}Re-evaluate{% else %}Evaluate match{% endif %}</button>{% endif %}
       {% if a.description or a.url %}<form method="post" action="{% url 'tailor_cv' a.pk %}" style="display:inline">{% csrf_token %}<button type="submit" title="Make a CV tailored to this job from your own CV. Nothing is invented.">Tailor CV</button></form>{% endif %}
       {% if c.cv %}<a href="{% url 'cv_detail' c.cv.pk %}" class="pill" style="color:{% if c.cv.flagged and not c.cv.approved %}var(--warn){% else %}var(--ok){% endif %}">CV v{{ c.cv.pk }}{% if c.cv.flagged and not c.cv.approved %} · review{% endif %}</a>{% endif %}
+      <a class="btn" href="{% url 'apply_page' a.pk %}">{% if a.applied_date and a.applied_cv_id %}Application{% else %}Apply{% endif %}</a>
       {% if a.ai_method %}<span class="muted" style="font-size:12px">{% if a.ai_method == "keywords" %}keyword match{% else %}AI-evaluated{% endif %}</span>{% endif %}
     </div>
 
     {% if a.summary %}<div>{{ a.summary }}</div>{% endif %}
     {% if a.next_action %}<div class="muted">Next: {{ a.next_action }}</div>{% endif %}
+
+    {% if a.applied_date and a.status.counts_as_applied %}
+    <div class="muted" style="font-size:13px">Applied {{ a.applied_date|date:"j M Y" }}{% if a.applied_channel %} via {{ a.get_applied_channel_display }}{% endif %}{% if a.applied_cv_id %} · sent <a href="{% url 'cv_detail' a.applied_cv_id %}">CV v{{ a.applied_cv_id }}</a>{% endif %}{% if a.follow_up_date %} · follow up {{ a.follow_up_date|date:"j M" }}{% endif %}</div>
+    {% endif %}
 
     {% if c.strengths or c.gaps or a.notes or c.documents %}
     <details>

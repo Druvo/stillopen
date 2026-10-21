@@ -16,6 +16,7 @@ from .models import (
     Application, Bucket, Document, Event, KnowledgeSource, ScoreBand, SiteConfig, Status, UserProfile,
 )
 from .services import ai, careerops, cvversions, knowledge, liveness
+from .services import apply as apply_service
 from .services.cvversions import CVError
 from .services.files import resolve_document_path
 from .services.paperless import PaperlessClient, PaperlessError, push_document
@@ -119,7 +120,7 @@ def dashboard(request):
     bands = list(ScoreBand.objects.all())
     buckets = list(Bucket.objects.all())
     statuses = list(Status.objects.all())
-    apps = mine(request).select_related("status", "status__bucket", "source").prefetch_related("insights", "documents__kind", "cv_versions")
+    apps = mine(request).select_related("status", "status__bucket", "source").prefetch_related("insights", "documents__kind", "cv_versions").select_related("applied_cv")
 
     tabs = {b.pk: [] for b in buckets}
     for app in apps:
@@ -147,6 +148,7 @@ def dashboard(request):
         },
         "paperless_on": paperless_on,
         "paperless_url": config.effective_paperless_url if paperless_on else "",
+        "followups": list(apply_service.due_followups(request.user)),
         "can_import": request.user.is_staff and bool(config.careerops_path),
         "run": liveness.current_run(request.user),
         "checked_at": apps.exclude(live_checked_at=None).order_by("-live_checked_at").values_list("live_checked_at", flat=True).first(),
@@ -372,6 +374,8 @@ def export_data(request):
             {
                 "company": a.company, "role": a.role, "url": a.url, "status": a.status.name,
                 "score": a.score, "verdict": a.decision, "summary": a.summary, "notes": a.notes,
+                "applied_channel": a.applied_channel, "applied_note": a.applied_note, "applied_cv_label": a.applied_cv.label if a.applied_cv else None,
+                "follow_up_date": a.follow_up_date.isoformat() if a.follow_up_date else None, "description_at_apply": a.jd_at_apply,
                 "found": a.found_date.isoformat(), "applied": a.applied_date.isoformat() if a.applied_date else None,
                 "deadline": a.deadline.isoformat() if a.deadline else None, "description": a.description,
                 "strengths": [i.text for i in a.insights.all() if i.kind == "strength"],

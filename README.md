@@ -90,7 +90,18 @@ Press **Tailor CV** on a job to make a CV for that role from your own CV and doc
 - **Export.** DOCX (plain single column, real headings and bullets, no tables or images) and a print view for "Save as PDF". The output is Markdown you can also download.
 - **Claude Code.** The `list_cv_versions`, `get_cv_version` and `save_tailored_cv` MCP tools let an AI client write a tailored CV; it goes through the same check and cannot approve its own work.
 
-Limits: 200 versions and 20 tailorings per hour per person (`STILLOPEN_MAX_CV_VERSIONS`, `STILLOPEN_CVGEN_PER_HOUR`). Not built yet: cover letters, and an apply assistant that records which version you sent.
+Limits: 200 versions and 20 tailorings per hour per person (`STILLOPEN_MAX_CV_VERSIONS`, `STILLOPEN_CVGEN_PER_HOUR`). Not built yet: cover letters.
+
+## Applying
+
+StillOpen never submits an application for you: employer sites need your login and block bots, and a robot applying in your name is a bad idea. The **Apply** button on a job opens an assistant that prepares everything and then records what you did.
+
+1. **Before you apply**: a checklist (is the posting still open, how close is the deadline, is it a poor fit below 50%, do you have a CV tailored for this job).
+2. **Choose the CV to send**: your tailored versions for this job (only ones that passed the fact check or that you approved) or your current CV, with DOCX and print links. You can tailor a new one from here.
+3. **Apply on the employer's site**: the posting link opens in a new tab. For email applications there is a plain draft (subject and body with `[Your name]`) that is never sent.
+4. **Record it**: channel, date, a note, and a follow-up reminder (default 7 days, `Site configuration > Dashboard`). It sets the status to Applied (never moving you backwards from Interview), links the exact CV version you sent, and saves a snapshot of the job description as it was that day. A CV recorded as sent cannot be deleted. A posting that looks closed needs an explicit confirmation.
+
+Follow-ups due appear at the top of the dashboard with Done and "In 3 days" buttons. In Claude Code, `record_application` and `list_follow_ups` do the same, and `record_application` is only for after you confirm you really submitted.
 
 ## Retrieval (RAG)
 

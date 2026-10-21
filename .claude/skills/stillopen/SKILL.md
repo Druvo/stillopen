@@ -19,6 +19,8 @@ StillOpen is a self-hosted tracker for one person's job search. The `stillopen` 
 | `list_knowledge` | Which extra documents (projects, work history, notes) the user has added |
 | `list_cv_versions` / `get_cv_version` | The person's CV history and tailored CVs, with fact-check findings |
 | `save_tailored_cv` | Store a CV you tailored for an application. It is fact-checked; you cannot approve it |
+| `list_follow_ups` | Applications whose follow-up reminder is due or overdue |
+| `record_application` | Record that the person applied (status, CV version sent, channel, follow-up). Only after they confirm they submitted |
 | `list_statuses` | Valid status names and what they mean |
 | `add_application` | Add a role (pass the full posting text as `description` when you have it) |
 | `set_description` | Attach or replace a role's posting text |
@@ -59,10 +61,10 @@ There are no delete tools and no way to read settings, keys or file contents. Th
 2. Offer to evaluate it straight away.
 
 **After the user applies**
-1. Confirm they actually submitted it, then `update_status` to `Applied` with a short note (channel, which CV version).
+1. Confirm they actually submitted it, then `record_application` with the CV version they sent (from `list_cv_versions`), the channel and a note. It sets the status, snapshots the posting and schedules a follow-up. Never record an application the person has not confirmed.
 
 **Weekly review**
-1. `summary`, then `list_applications` for the Applied and pending tab. Flag anything quiet for two weeks or more and suggest a follow-up. Do not send it.
+1. `summary`, `list_follow_ups`, then `list_applications` for the Applied and pending tab. Flag anything quiet for two weeks or more and suggest a follow-up. Do not send it.
 
 ## Setup (once)
 
