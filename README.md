@@ -1,4 +1,4 @@
-# jobtrack
+# StillOpen
 
 Job-search dashboard on Django, fed by your career-ops folder, with Paperless-ngx for documents.
 Everything that changes behaviour is a row in the admin, not code.
@@ -6,7 +6,7 @@ Everything that changes behaviour is a row in the admin, not code.
 ## Run it
 
 ```bash
-cd D:\Projects\jobtrack
+cd stillopen
 .venv\Scripts\python.exe manage.py migrate
 .venv\Scripts\python.exe manage.py createsuperuser
 .venv\Scripts\python.exe manage.py import_careerops
@@ -46,7 +46,7 @@ docker compose up -d
 
 1. Open http://127.0.0.1:8010 and sign in with the admin user you chose.
 2. Create an API token (profile menu, My Profile) and paste it into Site configuration, or set `PAPERLESS_TOKEN` in `.env` (the environment variable wins).
-3. Tick "Paperless enabled". Documents then get a "Send to Paperless" button on the dashboard; titles are `Company - Role - Kind`, tagged `jobtrack` plus the kind's tag. Re-sending finds the existing title instead of duplicating.
+3. Tick "Paperless enabled". Documents then get a "Send to Paperless" button on the dashboard; titles are `Company - Role - Kind`, tagged `stillopen` plus the kind's tag. Re-sending finds the existing title instead of duplicating.
 
 Optional container + nginx front end: `docker compose --profile web up -d --build` serves the dashboard on http://127.0.0.1:8080. Set `CAREEROPS_HOST_PATH` in `.env` to mount your career-ops folder, and use `http` check mode there (the image has no Node).
 

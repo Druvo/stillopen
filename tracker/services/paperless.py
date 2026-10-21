@@ -94,7 +94,7 @@ def push_document(doc: Document, client: PaperlessClient, config: SiteConfig, wa
             doc.paperless_id, doc.paperless_error = existing, ""
             doc.save(update_fields=["paperless_id", "paperless_error"])
             return existing
-        tag_ids = [t for t in (client.ensure_named("tags", "jobtrack"), client.ensure_named("tags", doc.kind.paperless_tag)) if t]
+        tag_ids = [t for t in (client.ensure_named("tags", "stillopen"), client.ensure_named("tags", doc.kind.paperless_tag)) if t]
         type_id = client.ensure_named("document_types", doc.kind.paperless_document_type)
         task_id = client.upload(path, title, tag_ids, type_id)
         doc_id = client.wait_for_document(task_id) if wait else None

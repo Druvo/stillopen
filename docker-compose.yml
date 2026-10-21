@@ -1,4 +1,4 @@
-# Paperless-ngx for document management. The jobtrack app itself runs on the host (python manage.py runserver)
+# Paperless-ngx for document management. The StillOpen app itself runs on the host (python manage.py runserver)
 # so it can reach career-ops and Node; Paperless needs no access to either.
 #
 #   1. cp .env.example .env   and fill PAPERLESS_ADMIN_USER / PAPERLESS_ADMIN_PASSWORD / PAPERLESS_SECRET_KEY
@@ -6,7 +6,7 @@
 #   3. open http://127.0.0.1:8010, create an API token (profile menu > My Profile), paste it in the Django admin
 #      under Site configuration (or set PAPERLESS_TOKEN in .env)
 #
-# Optional profile "web" also runs jobtrack in a container behind nginx on http://127.0.0.1:8080
+# Optional profile "web" also runs StillOpen in a container behind nginx on http://127.0.0.1:8080
 #   docker compose --profile web up -d --build
 services:
   broker:
@@ -43,14 +43,14 @@ services:
     env_file: .env
     environment:
       DJANGO_DEBUG: "0"
-      JOBTRACK_DB: /data/db.sqlite3
-      JOBTRACK_MEDIA: /data/media
+      STILLOPEN_DB: /data/db.sqlite3
+      STILLOPEN_MEDIA: /data/media
       DJANGO_ALLOWED_HOSTS: web,127.0.0.1,localhost
       PAPERLESS_URL: http://paperless:8000
       # In a container the host's career-ops folder must be mounted and the path set in Site configuration.
       CAREEROPS_PATH: /careerops
     volumes:
-      - jobtrack_data:/data
+      - stillopen_data:/data
       - ${CAREEROPS_HOST_PATH:-./careerops-empty}:/careerops:ro
 
   nginx:
@@ -68,4 +68,4 @@ volumes:
   paperless_data:
   paperless_media:
   paperless_redis:
-  jobtrack_data:
+  stillopen_data:

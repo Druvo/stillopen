@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from tracker.models import Application, ExpiredPhrase, LivenessRun, SiteConfig
 
-USER_AGENT = "Mozilla/5.0 (compatible; jobtrack-liveness/1.0)"
+USER_AGENT = "Mozilla/5.0 (compatible; stillopen-liveness/1.0)"
 STALE_AFTER = timedelta(minutes=20)
 
 

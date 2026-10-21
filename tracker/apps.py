@@ -4,4 +4,4 @@ from django.apps import AppConfig
 class TrackerConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "tracker"
-    verbose_name = "Job search"
+    verbose_name = "StillOpen"

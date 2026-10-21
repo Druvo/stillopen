@@ -15,7 +15,7 @@ class SiteConfig(models.Model):
         ("node", "career-ops checker (Playwright, handles JavaScript sites)"),
     ]
 
-    site_title = models.CharField(max_length=80, default="Job search dashboard")
+    site_title = models.CharField(max_length=80, default="StillOpen")
     score_scale = models.FloatField(
         default=5.0,
         validators=[MinValueValidator(1.0)],

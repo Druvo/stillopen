@@ -81,7 +81,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": os.environ.get("JOBTRACK_DB", str(BASE_DIR / "db.sqlite3")),
+        "NAME": os.environ.get("STILLOPEN_DB", str(BASE_DIR / "db.sqlite3")),
     }
 }
 
@@ -106,7 +106,7 @@ STORAGES = {
 WHITENOISE_USE_FINDERS = DEBUG
 
 MEDIA_URL = "media/"
-MEDIA_ROOT = Path(os.environ.get("JOBTRACK_MEDIA", str(BASE_DIR / "media")))
+MEDIA_ROOT = Path(os.environ.get("STILLOPEN_MEDIA", str(BASE_DIR / "media")))
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 LOGIN_URL = "/admin/login/"
