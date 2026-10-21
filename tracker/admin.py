@@ -112,7 +112,7 @@ class UserProfileAdmin(admin.ModelAdmin):
     search_fields = ("user__username", "user__email")
     fieldsets = (
         (None, {"fields": ("user",)}),
-        ("What they want", {"fields": ("target_roles", "locations", "remote_preference", "salary_floor", "deal_breakers", "about")}),
+        ("What they want", {"fields": ("target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages", "notice_period", "salary_floor", "deal_breakers", "about")}),
         ("CV", {"fields": ("profile_cv",)}),
         (
             "AI evaluation",

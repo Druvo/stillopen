@@ -17,7 +17,7 @@ import requests
 from django.utils import timezone
 
 from tracker.models import Application, Event, Insight, SiteConfig
-from tracker.services import knowledge
+from tracker.services import geo, knowledge
 from tracker.services.jobtext import fetch_description
 from tracker.services.netguard import FetchError, check_public_url
 from tracker.services.text import terms as _terms
@@ -395,6 +395,7 @@ def ensure_description(app: Application, config: SiteConfig) -> None:
     except FetchError as exc:
         raise AIError(str(exc)) from exc
     app.save(update_fields=["description"])
+    geo.fill_details(app)
 
 
 def store_result(app: Application, result: dict, config: SiteConfig, method: str, note: str = "") -> None:

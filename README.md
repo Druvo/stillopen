@@ -77,9 +77,26 @@ Rules: a Google account must have a verified email. A user already in the databa
 
 Each person keeps their own, in the web app (not the admin):
 
-- **Profile**: target roles, locations, remote preference, salary floor, deal-breakers, an "about" note, and the CV. Upload a PDF, .txt or .md (up to 2 MB, PDFs up to 60 pages); the text is read in and the file itself is not kept.
+- **Profile**: target roles, the country you live in, kinds of employment, seniority, industries, languages, notice period, salary floor, deal-breakers, an "about" note, your **search areas** (below), and the CV. Upload a PDF, .txt or .md (up to 2 MB, PDFs up to 60 pages); the text is read in and the file itself is not kept.
 - **Documents**: any number of extra documents (up to 40): project write-ups, work-history details, certificates, cover letters. Hide one from the AI without deleting it.
 - Admins can also use **Import from career-ops** (cv.md, article-digest.md, modes/_profile.md) in the admin, or `python manage.py index_knowledge --import-careerops --user NAME`.
+
+## What you are looking for: search areas
+
+A person's search is a list of **search areas**, one row per place, set on the Profile page:
+
+| Where | Accepts | Needs from the employer |
+| --- | --- | --- |
+| Bangladesh (Dhaka) | on-site, hybrid | nothing |
+| Anywhere | remote | nothing |
+| Malaysia | on-site, hybrid | visa sponsorship, relocation support |
+| Gulf | on-site | sponsorship, relocation, at least 8,000 USD per month |
+
+A place is a country, a region (Gulf, Europe, Southeast Asia, EU, MENA...), a city, or **Anywhere**. Each row says which of remote, hybrid and on-site you accept there, whether you need visa sponsorship or relocation support, and an optional minimum pay with its own currency. The profile also records the country you live in, because a remote job limited to one country only fits someone who lives there.
+
+Each job has a location, country, work arrangement, whether it offers sponsorship and relocation, a type (full-time, contract...) and seniority. They are **suggested by reading the posting** (no AI needed) and you can correct them on the job's **Details** page; what you set by hand is never overwritten. Every job is then checked against your areas, and the result shows as **Fits**, **Check fit** or **Fit unknown** on the dashboard and in the apply checklist: outside your areas, sponsorship not offered or not mentioned, pay below your minimum, wrong employment type or seniority. A job is only ever flagged, never hidden.
+
+Detection recognises about 90 countries, regions and several hundred cities from a built-in table. An unrecognised place is kept and matched by name, and unclear postings are reported as unknown rather than guessed. The Profile page also has an Account section: change email or password, connected accounts, what is stored, export, delete.
 
 ## Tailored CVs and versions
 

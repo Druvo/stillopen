@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from tracker.models import Application, Bucket, Document, DocumentKind, Insight, Status
+from tracker.services import geo
 
 MONTHS = {m: i + 1 for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
 LIST_KEYS = {"soft_gaps": "gap", "hard_stops": "gap", "top_strengths": "strength"}
@@ -220,6 +221,7 @@ def import_all(config, owner, sync_status: bool = False) -> dict:
             app.description = parse_jd(report_md)[:30000]
         app.deadline = parse_deadline(row["notes"]) or app.deadline
         app.save()
+        geo.fill_details(app)  # where the job is and what kind of role it is, read from the archived posting
 
         app.insights.all().delete()
         order = 0

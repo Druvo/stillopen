@@ -72,6 +72,7 @@ mcp.tool(annotations=READ, description="One CV version with its Markdown and fac
 mcp.tool(annotations=WRITE, description="Save a CV you tailored for an application. Use only facts from the person's own CV and documents; it is fact-checked, and you cannot approve it: flagged claims need the person's review in the web app.")(_friendly(t.save_tailored_cv))
 mcp.tool(annotations=READ, description="Applications whose follow-up reminder is due today or overdue.")(_friendly(t.list_follow_ups))
 mcp.tool(annotations=WRITE, description="Record that the person has APPLIED: sets status Applied, saves which CV version they sent, and schedules a follow-up. Call only after the person confirms they actually submitted it. This never submits anything.")(_friendly(t.record_application))
+mcp.tool(annotations=WRITE, description="Set a job's location and kind: location_text, country, arrangement (remote/hybrid/onsite), sponsorship, relocation, employment_type, seniority. Use only what the posting says. Returns how the job fits what the person wants.")(_friendly(t.set_job_details))
 mcp.tool(annotations=READ, description="Valid statuses, the tab each belongs to, and whether it counts as applied.")(_friendly(t.list_statuses))
 mcp.tool(annotations=WRITE, description="Add a role. Include the full job description text if you have it, so it can be evaluated.")(_friendly(t.add_application))
 mcp.tool(annotations=WRITE, description="Set or replace a role's job description text.")(_friendly(t.set_description))

@@ -137,10 +137,12 @@ a{color:var(--accent)}
       {% elif a.live_state == "uncertain" %}<span class="pill" style="color:var(--warn)" title="{{ a.live_detail }}">Unclear</span>{% endif %}
       {% if a.decision %}<span class="pill muted" title="{{ a.decision }}">{{ a.decision|truncatechars:28 }}</span>{% endif %}
       {% if a.risk %}<span class="pill muted">Risk: {{ a.risk }}</span>{% endif %}
+      {% if c.fit_level == "warn" %}<a href="{% url 'job_edit' a.pk %}" class="pill" style="color:var(--warn)" title="{{ c.fit_text }}">Check fit</a>{% elif c.fit_level == "ok" %}<a href="{% url 'job_edit' a.pk %}" class="pill" style="color:var(--ok)" title="{{ c.fit_text }}">Fits</a>{% elif has_areas %}<a href="{% url 'job_edit' a.pk %}" class="pill muted" title="{{ c.fit_text }}">Fit unknown</a>{% endif %}
       <select data-status-for="{{ a.pk }}" aria-label="Change status">
         {% for s in statuses %}<option value="{{ s.pk }}" {% if s.pk == a.status_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
       </select>
       {% if a.url %}<a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">Job post</a>{% endif %}
+      <a href="{% url 'job_edit' a.pk %}">Details</a>
       {% if a.description or a.url %}<button data-eval="{{ a.pk }}" title="Provider: {{ config.get_ai_provider_display }}">{% if a.ai_evaluated_at %}Re-evaluate{% else %}Evaluate match{% endif %}</button>{% endif %}
       {% if a.description or a.url %}<form method="post" action="{% url 'tailor_cv' a.pk %}" style="display:inline">{% csrf_token %}<button type="submit" title="Make a CV tailored to this job from your own CV. Nothing is invented.">Tailor CV</button></form>{% endif %}
       {% if c.cv %}<a href="{% url 'cv_detail' c.cv.pk %}" class="pill" style="color:{% if c.cv.flagged and not c.cv.approved %}var(--warn){% else %}var(--ok){% endif %}">CV v{{ c.cv.pk }}{% if c.cv.flagged and not c.cv.approved %} · review{% endif %}</a>{% endif %}

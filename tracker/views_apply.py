@@ -9,6 +9,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .models import Application, CVVersion, SiteConfig
 from .services import apply as apply_service
+from .services import fit as fit_service
 from .services.apply import ApplyError
 from .views import owned_app
 
@@ -24,7 +25,7 @@ def apply_page(request, pk):
         "app": app,
         "versions": versions,
         "selected": versions[0].pk if versions else None,
-        "checks": apply_service.checklist(app, config, versions),
+        "checks": apply_service.checklist(app, config, versions) + fit_service.fit_flags(app),
         "draft": apply_service.email_draft(app),
         "channels": [(v, label) for v, label in Application.CHANNELS if v],
         "followup_days": config.apply_followup_days,

@@ -1,7 +1,11 @@
-from django import forms
+import re
 
-from .models import Application, KnowledgeSource, PersonalSettings, UserProfile
-from .services import knowledge
+from django import forms
+from django.contrib.auth import get_user_model
+from django.forms import inlineformset_factory
+
+from .models import Application, KnowledgeSource, PersonalSettings, SearchArea, UserProfile
+from .services import geo, knowledge
 from .services.netguard import FetchError, check_public_url
 
 RESTRICTED_PROVIDERS = {"claude_cli", "agent_sdk"}  # these run commands on the server: site admins only
@@ -107,18 +111,50 @@ class ProfileForm(forms.ModelForm):
         required=False, label="Upload your CV",
         help_text="PDF, .txt or .md, up to 2 MB. The text is read into the box below; the file itself is not kept.",
     )
+    home_country = forms.CharField(
+        required=False, max_length=60, label="The country you live in",
+        help_text="A name like Bangladesh or a code like BD. Remote jobs limited to one country only fit you if it is this one.",
+    )
+    employment_types = forms.MultipleChoiceField(
+        required=False, choices=UserProfile.EMPLOYMENT, widget=forms.CheckboxSelectMultiple,
+        label="Kinds of employment you want", help_text="Leave all unticked for no preference.",
+    )
+    seniority_levels = forms.MultipleChoiceField(
+        required=False, choices=UserProfile.SENIORITY, widget=forms.CheckboxSelectMultiple,
+        label="Seniority you want", help_text="Leave all unticked for no preference.",
+    )
 
     class Meta:
         model = UserProfile
-        fields = ["target_roles", "locations", "remote_preference", "salary_floor", "deal_breakers", "about", "profile_cv"]
+        fields = [
+            "target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages",
+            "notice_period", "salary_floor", "deal_breakers", "about", "profile_cv",
+        ]
         widgets = {
             "target_roles": forms.Textarea(attrs={"rows": 3, "placeholder": "Senior Backend Engineer\nSolutions Architect"}),
-            "locations": forms.Textarea(attrs={"rows": 2, "placeholder": "Dhaka\nRemote"}),
+            "industries": forms.Textarea(attrs={"rows": 2, "placeholder": "Fintech\nE-commerce"}),
+            "languages": forms.Textarea(attrs={"rows": 2, "placeholder": "English\nBangla"}),
             "deal_breakers": forms.Textarea(attrs={"rows": 2}),
             "about": forms.Textarea(attrs={"rows": 3}),
             "profile_cv": forms.Textarea(attrs={"rows": 14}),
         }
         labels = {"profile_cv": "Your CV (text)"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.home_country:
+            self.initial["home_country"] = geo.country_name(self.instance.home_country)
+
+    def clean_home_country(self):
+        value = (self.cleaned_data.get("home_country") or "").strip()
+        if not value:
+            return ""
+        if len(value) == 2 and value.upper() in geo.COUNTRIES:
+            return value.upper()
+        codes = geo.resolve_place(value)
+        if codes and len(codes) == 1 and "*" not in codes:
+            return next(iter(codes))
+        raise forms.ValidationError("Not recognised as one country. Use a name like Bangladesh or a code like BD.")
 
     def clean(self):
         cleaned = super().clean()
@@ -131,6 +167,84 @@ class ProfileForm(forms.ModelForm):
         if len(cleaned.get("profile_cv") or "") > knowledge.MAX_TEXT_CHARS:
             self.add_error("profile_cv", "That CV text is too long.")
         return cleaned
+
+
+MAX_AREAS = 20
+
+
+class SearchAreaForm(forms.ModelForm):
+    class Meta:
+        model = SearchArea
+        fields = [
+            "place", "city", "allow_remote", "allow_hybrid", "allow_onsite", "needs_visa_sponsorship",
+            "needs_relocation_support", "min_salary", "salary_currency", "salary_period",
+        ]
+        widgets = {"salary_currency": forms.TextInput(attrs={"size": 4, "maxlength": 3, "placeholder": "USD"})}
+
+    unrecognised = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["salary_period"].required = False
+
+    @property
+    def changed_data(self):
+        # The pay period always has a default, so a row nobody touched must not count as filled in.
+        return [name for name in super().changed_data if name != "salary_period"]
+
+    def clean_salary_period(self):
+        return self.cleaned_data.get("salary_period") or "month"
+
+    def clean_place(self):
+        place = (self.cleaned_data.get("place") or "").strip()
+        if place and geo.resolve_place(place) is None:
+            self.unrecognised = True  # allowed, but matched by name only; the page says so
+        return place
+
+    def clean_salary_currency(self):
+        return (self.cleaned_data.get("salary_currency") or "").strip().upper()
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get("place"):
+            return cleaned
+        if not (cleaned.get("allow_remote") or cleaned.get("allow_hybrid") or cleaned.get("allow_onsite")):
+            self.add_error(None, "Choose at least one of remote, hybrid or on-site for this place.")
+        if cleaned.get("min_salary") and not cleaned.get("salary_currency"):
+            self.add_error("salary_currency", "Add the currency for this minimum (e.g. USD).")
+        if cleaned.get("salary_currency") and not re.fullmatch(r"[A-Z]{3}", cleaned["salary_currency"]):
+            self.add_error("salary_currency", "Use a 3-letter code such as USD or BDT.")
+        return cleaned
+
+
+class BaseAreaFormSet(forms.BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        live = [f for f in self.forms if f.cleaned_data and not f.cleaned_data.get("DELETE") and f.cleaned_data.get("place")]
+        if len(live) > MAX_AREAS:
+            raise forms.ValidationError(f"You can have at most {MAX_AREAS} search areas.")
+
+    @property
+    def unrecognised_places(self) -> list[str]:
+        return [f.cleaned_data["place"] for f in self.forms if getattr(f, "unrecognised", False) and f.cleaned_data.get("place")]
+
+
+SearchAreaFormSet = inlineformset_factory(
+    get_user_model(), SearchArea, form=SearchAreaForm, formset=BaseAreaFormSet, fk_name="owner",
+    extra=2, can_delete=True, max_num=MAX_AREAS + 5,
+)
+
+
+def save_areas(formset, user) -> None:
+    """Save the rows in the order they appear on the page."""
+    formset.save(commit=False)
+    for obj in formset.deleted_objects:
+        obj.delete()
+    kept = [f.instance for f in formset.forms if f.cleaned_data and not f.cleaned_data.get("DELETE") and f.cleaned_data.get("place")]
+    for position, obj in enumerate(kept):
+        obj.owner = user
+        obj.order = position
+        obj.save()
 
 
 class JobForm(forms.ModelForm):
@@ -148,6 +262,58 @@ class JobForm(forms.ModelForm):
         if len(text) > 30000:
             raise forms.ValidationError("That description is longer than 30,000 characters.")
         return text
+
+
+class JobEditForm(forms.ModelForm):
+    """Everything about one job the person may correct, including where it is and what kind of role it is."""
+
+    country = forms.CharField(
+        required=False, max_length=60, label="Country (where you must be based)",
+        help_text="A name like Malaysia or a code like MY. Leave blank if the posting does not say, or for remote work open worldwide.",
+    )
+
+    class Meta:
+        model = Application
+        fields = [
+            "company", "role", "url", "deadline", "location_text", "country", "arrangement", "sponsorship", "relocation",
+            "employment_type", "seniority", "advertised_pay", "description", "notes",
+        ]
+        widgets = {
+            "deadline": forms.DateInput(attrs={"type": "date"}),
+            "description": forms.Textarea(attrs={"rows": 10}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.country:
+            self.initial["country"] = geo.country_name(self.instance.country)
+
+    def clean_country(self):
+        value = (self.cleaned_data.get("country") or "").strip()
+        if not value:
+            return ""
+        if len(value) == 2 and value.upper() in geo.COUNTRIES:
+            return value.upper()
+        codes = geo.resolve_place(value)
+        if codes and len(codes) == 1 and "*" not in codes:
+            return next(iter(codes))
+        raise forms.ValidationError("Not recognised as one country. Use a name like Malaysia or a code like MY.")
+
+    def clean_description(self):
+        text = self.cleaned_data.get("description", "")
+        if len(text) > 30000:
+            raise forms.ValidationError("That description is longer than 30,000 characters.")
+        return text
+
+    def save(self, commit=True):
+        job = super().save(commit=False)
+        detail_fields = {"location_text", "country", "arrangement", "sponsorship", "relocation", "employment_type", "seniority"}
+        if detail_fields & set(self.changed_data):
+            job.details_source = "manual"  # the person has spoken: detection will not overwrite these
+        if commit:
+            job.save()
+        return job
 
 
 class KnowledgeForm(forms.ModelForm):

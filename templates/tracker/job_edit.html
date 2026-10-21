@@ -1,0 +1,55 @@
+{% extends "tracker/base_app.html" %}
+{% block title %}{{ app.company }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'dashboard' %}">&larr; Dashboard</a></p>
+<h1>{{ app.company }} <span class="muted">— {{ app.role }}</span></h1>
+<p class="muted">Correct anything about this job. Where it is and what kind of role it is decides whether it fits what you are looking for.</p>
+
+<div class="card">
+  <strong>Fit with what you want</strong>
+  <ul style="list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px">
+    {% for f in fit %}
+    <li><strong style="color:{% if f.level == 'ok' %}var(--ok){% elif f.level == 'warn' %}var(--warn){% else %}var(--muted){% endif %}">{% if f.level == 'ok' %}&#10003;{% elif f.level == 'warn' %}!{% else %}i{% endif %}</strong> {{ f.text }}</li>
+    {% empty %}
+    <li class="muted">Nothing to check yet.</li>
+    {% endfor %}
+  </ul>
+  <p class="help" style="margin-bottom:0">Checked against your search areas in <a href="{% url 'profile' %}">Profile</a>. This only flags a job; it never hides one.</p>
+</div>
+
+<form method="post" class="card">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  <h2 style="margin-top:0">The job</h2>
+  {% for field in form %}
+    {% if field.name in "company role url deadline advertised_pay" %}
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
+    {% endif %}
+  {% endfor %}
+
+  <h2>Where it is and what kind of role</h2>
+  {% if app.details_source == "detected" %}<p class="help">These were suggested by reading the posting. Check them and correct what is wrong.</p>
+  {% elif app.details_source == "manual" %}<p class="help">You set these yourself.</p>{% endif %}
+  {% for field in form %}
+    {% if field.name in "location_text country arrangement sponsorship relocation employment_type seniority" %}
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+      {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}{{ field.errors }}
+    {% endif %}
+  {% endfor %}
+
+  <h2>Description and notes</h2>
+  {% for field in form %}
+    {% if field.name == "description" or field.name == "notes" %}
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
+    {% endif %}
+  {% endfor %}
+  <div class="row" style="margin-top:16px"><button class="primary" type="submit">Save</button></div>
+</form>
+
+<form method="post" action="{% url 'job_redetect' app.pk %}" class="card">
+  {% csrf_token %}
+  <strong>Read the posting again</strong>
+  <p class="muted" style="margin:4px 0 8px">Fills in the location, work arrangement, sponsorship, relocation, type and seniority from the description. Anything you set by hand is left alone.</p>
+  <button type="submit">Re-detect from the posting</button>
+</form>
+{% endblock %}

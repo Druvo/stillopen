@@ -28,6 +28,7 @@ ul.errorlist{margin:0;padding:0;list-style:none;color:var(--bad);font-size:13px}
 </head>
 <body>
 <div class="box">
+  {% if user.is_authenticated %}<a href="{% url 'profile' %}" style="font-size:13px">&larr; Back to your profile</a>{% endif %}
   {% for message in messages %}<div class="msg {{ message.tags }}">{{ message }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </div>

@@ -300,6 +300,14 @@ class SiteConfig(PersonalSettings):
 class UserProfile(PersonalSettings):
     """Everything personal to one user: who they are, what they want, their CV and their AI settings."""
 
+    EMPLOYMENT = [
+        ("full_time", "Full-time"), ("part_time", "Part-time"), ("contract", "Contract"),
+        ("freelance", "Freelance"), ("internship", "Internship"),
+    ]
+    SENIORITY = [
+        ("junior", "Junior"), ("mid", "Mid-level"), ("senior", "Senior"),
+        ("lead", "Lead or staff"), ("principal", "Principal or architect"), ("manager", "Manager"),
+    ]
     REMOTE = [
         ("any", "No preference"),
         ("remote", "Remote only"),
@@ -310,8 +318,15 @@ class UserProfile(PersonalSettings):
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
     target_roles = models.TextField(blank=True, help_text="The roles you want, one per line (e.g. Senior Backend Engineer).")
-    locations = models.TextField(blank=True, help_text="Where you can work, one per line (cities, countries, or 'Remote').")
-    remote_preference = models.CharField(max_length=10, choices=REMOTE, default="any")
+    # Legacy single-choice fields. Replaced by SearchArea rows; kept so old data can be migrated.
+    locations = models.TextField(blank=True, editable=False)
+    remote_preference = models.CharField(max_length=10, choices=REMOTE, default="any", editable=False)
+    home_country = models.CharField(max_length=2, blank=True, help_text="The country you live in. Remote jobs limited to one country only fit you if it is this one.")
+    employment_types = models.JSONField(default=list, blank=True)
+    seniority_levels = models.JSONField(default=list, blank=True)
+    industries = models.TextField(blank=True, help_text="Industries you want, one per line (or leave blank for any).")
+    languages = models.TextField(blank=True, help_text="Languages you can work in, one per line.")
+    notice_period = models.CharField(max_length=60, blank=True, help_text="e.g. 30 days, or available now.")
     salary_floor = models.CharField(max_length=60, blank=True, help_text="Your minimum, with currency and period (e.g. 100,000 BDT/month).")
     deal_breakers = models.TextField(blank=True, help_text="Things you will not accept, one per line.")
     about = models.TextField(blank=True, help_text="Anything else the AI should know when judging fit.")
@@ -331,16 +346,38 @@ class UserProfile(PersonalSettings):
         return profile
 
     def preferences_text(self) -> str:
+        """Everything the person wants, as text for the AI. Search areas are described one per line."""
+
         def lines(text):
             return "; ".join(l.strip() for l in text.splitlines() if l.strip())
 
         parts = []
         if self.target_roles.strip():
             parts.append("Target roles: " + lines(self.target_roles))
-        if self.locations.strip():
-            parts.append("Locations: " + lines(self.locations))
-        if self.remote_preference != "any":
-            parts.append("Work arrangement: " + self.get_remote_preference_display())
+        if self.home_country:
+            from .services import geo
+
+            parts.append("Lives in: " + geo.country_name(self.home_country))
+        areas = list(self.user.search_areas.all()) if self.pk else []
+        if areas:
+            parts.append("Where I can work:\n" + "\n".join(f"- {a.describe()}" for a in areas))
+        else:  # profiles saved before search areas existed
+            if self.locations.strip():
+                parts.append("Locations: " + lines(self.locations))
+            if self.remote_preference != "any":
+                parts.append("Work arrangement: " + self.get_remote_preference_display())
+        labels = dict(self.EMPLOYMENT)
+        if self.employment_types:
+            parts.append("Employment types: " + ", ".join(labels.get(k, k) for k in self.employment_types))
+        labels = dict(self.SENIORITY)
+        if self.seniority_levels:
+            parts.append("Seniority: " + ", ".join(labels.get(k, k) for k in self.seniority_levels))
+        if self.industries.strip():
+            parts.append("Industries: " + lines(self.industries))
+        if self.languages.strip():
+            parts.append("Languages: " + lines(self.languages))
+        if self.notice_period.strip():
+            parts.append("Notice period: " + self.notice_period.strip())
         if self.salary_floor.strip():
             parts.append("Salary floor: " + self.salary_floor.strip())
         if self.deal_breakers.strip():
@@ -352,6 +389,50 @@ class UserProfile(PersonalSettings):
     @property
     def is_complete(self) -> bool:
         return bool(self.profile_cv.strip() and self.target_roles.strip())
+
+
+class SearchArea(models.Model):
+    """One place a person is willing to work, and on what terms. A job is checked against these rows."""
+
+    CURRENCIES_HELP = "3-letter code, e.g. USD, BDT, MYR, AED."
+    PERIODS = [("month", "per month"), ("year", "per year"), ("hour", "per hour")]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="search_areas")
+    order = models.PositiveIntegerField(default=0)
+    place = models.CharField(
+        max_length=80,
+        help_text="A country (Malaysia), a region (Gulf, Europe, Southeast Asia), or Anywhere for remote work worldwide.",
+    )
+    city = models.CharField(max_length=80, blank=True, help_text="Optional. Only matters for on-site and hybrid work.")
+    allow_remote = models.BooleanField(default=False)
+    allow_hybrid = models.BooleanField(default=False)
+    allow_onsite = models.BooleanField(default=False)
+    needs_visa_sponsorship = models.BooleanField(default=False, help_text="Only if the employer sponsors your visa.")
+    needs_relocation_support = models.BooleanField(default=False, help_text="Only if the employer helps with relocation.")
+    min_salary = models.PositiveIntegerField(null=True, blank=True)
+    salary_currency = models.CharField(max_length=3, blank=True, help_text=CURRENCIES_HELP)
+    salary_period = models.CharField(max_length=5, choices=PERIODS, default="month")
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.describe()
+
+    @property
+    def arrangements(self) -> list[str]:
+        return [name for name, on in (("remote", self.allow_remote), ("hybrid", self.allow_hybrid), ("on-site", self.allow_onsite)) if on]
+
+    def describe(self) -> str:
+        where = f"{self.city}, {self.place}" if self.city else self.place
+        bits = ["/".join(self.arrangements) or "no arrangement chosen"]
+        if self.needs_visa_sponsorship:
+            bits.append("only with visa sponsorship")
+        if self.needs_relocation_support:
+            bits.append("only with relocation support")
+        if self.min_salary:
+            bits.append(f"at least {self.min_salary:,} {self.salary_currency.upper()} {self.get_salary_period_display()}".replace("  ", " "))
+        return f"{where}: " + ", ".join(bits)
 
 
 class Bucket(models.Model):
@@ -491,6 +572,17 @@ class Application(models.Model):
     deadline = models.DateField(null=True, blank=True)
     report_path = models.CharField(max_length=500, blank=True, help_text="Path to the career-ops report (relative to the career-ops folder).")
     description = models.TextField(blank=True, help_text="Job description text. Paste it, or leave blank to fetch it from the URL.")
+    ARRANGEMENTS = [("", "Unknown"), ("remote", "Remote"), ("hybrid", "Hybrid"), ("onsite", "On-site")]
+    YES_NO = [("", "Not stated"), ("yes", "Yes"), ("no", "No")]
+    SOURCES_OF_DETAILS = [("", ""), ("detected", "Detected from the posting"), ("manual", "Set by you")]
+    location_text = models.CharField(max_length=160, blank=True, help_text="As the posting says it, e.g. Kuala Lumpur, Malaysia or Remote.")
+    country = models.CharField(max_length=2, blank=True, help_text="Two-letter country code where you must be based, if known (MY, BD, AE). Blank = not stated.")
+    arrangement = models.CharField(max_length=10, choices=ARRANGEMENTS, blank=True)
+    sponsorship = models.CharField(max_length=3, choices=YES_NO, blank=True, help_text="Does the employer offer visa sponsorship?")
+    relocation = models.CharField(max_length=3, choices=YES_NO, blank=True, help_text="Does the employer offer relocation support?")
+    employment_type = models.CharField(max_length=12, choices=[("", "Unknown")] + UserProfile.EMPLOYMENT, blank=True)
+    seniority = models.CharField(max_length=10, choices=[("", "Unknown")] + UserProfile.SENIORITY, blank=True)
+    details_source = models.CharField(max_length=10, choices=SOURCES_OF_DETAILS, blank=True)
     applied_cv = models.ForeignKey(
         "CVVersion", null=True, blank=True, on_delete=models.RESTRICT, related_name="sent_for",
         help_text="The exact CV version that was sent. It cannot be deleted while it is recorded here.",

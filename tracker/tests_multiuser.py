@@ -244,14 +244,16 @@ class ProfilePages(TestCase):
 
     def test_profile_saves_roles_and_cv(self):
         r = self.client.post(reverse("profile"), {
-            "target_roles": "Backend Engineer\nSolutions Architect", "locations": "Remote", "remote_preference": "remote",
+            "target_roles": "Backend Engineer\nSolutions Architect",
             "salary_floor": "100,000 BDT/month", "deal_breakers": "On-call", "about": "8 years", "profile_cv": CV,
+            "areas-TOTAL_FORMS": 1, "areas-INITIAL_FORMS": 0, "areas-MIN_NUM_FORMS": 0, "areas-MAX_NUM_FORMS": 25,
+            "areas-0-place": "Anywhere", "areas-0-allow_remote": "on", "areas-0-salary_period": "month",
         })
         self.assertEqual(r.status_code, 302)
         p = UserProfile.objects.get(user=self.u)
         self.assertEqual(p.target_roles, "Backend Engineer\nSolutions Architect")
         text = p.preferences_text()
-        for expected in ["Backend Engineer; Solutions Architect", "Remote only", "100,000 BDT/month", "On-call", "8 years"]:
+        for expected in ["Backend Engineer; Solutions Architect", "Anywhere: remote", "100,000 BDT/month", "On-call", "8 years"]:
             self.assertIn(expected, text)
         self.assertTrue(p.is_complete)
         self.assertContains(self.client.get(reverse("profile")), "Backend Engineer")

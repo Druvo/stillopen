@@ -21,6 +21,7 @@ StillOpen is a self-hosted tracker for one person's job search. The `stillopen` 
 | `save_tailored_cv` | Store a CV you tailored for an application. It is fact-checked; you cannot approve it |
 | `list_follow_ups` | Applications whose follow-up reminder is due or overdue |
 | `record_application` | Record that the person applied (status, CV version sent, channel, follow-up). Only after they confirm they submitted |
+| `set_job_details` | Record a job's location, country, remote/hybrid/on-site, sponsorship, relocation, type and seniority from the posting; returns the fit with what the person wants |
 | `list_statuses` | Valid status names and what they mean |
 | `add_application` | Add a role (pass the full posting text as `description` when you have it) |
 | `set_description` | Attach or replace a role's posting text |
@@ -58,6 +59,7 @@ There are no delete tools and no way to read settings, keys or file contents. Th
 
 **Add a job the user found**
 1. Get the posting text (they paste it, or you read the page). `add_application` with company, role, URL and the text.
+   Then `set_job_details` with only what the posting actually says (where, remote/hybrid/on-site, whether it offers visa sponsorship or relocation). The result lists how the job fits the person's search areas; report any warning plainly.
 2. Offer to evaluate it straight away.
 
 **After the user applies**

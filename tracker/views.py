@@ -17,6 +17,7 @@ from .models import (
 )
 from .services import ai, careerops, cvversions, knowledge, liveness
 from .services import apply as apply_service
+from .services import fit as fit_service, geo
 from .services.cvversions import CVError
 from .services.files import resolve_document_path
 from .services.paperless import PaperlessClient, PaperlessError, push_document
@@ -94,8 +95,9 @@ def band_for(percent, bands):
     return None
 
 
-def card_for(app, config, bands):
+def card_for(app, config, bands, areas=None, profile=None):
     percent = app.match_percent(config.score_scale)
+    fit = fit_service.fit_flags(app, areas if areas is not None else [], profile)
     band = band_for(percent, bands)
     days = app.days_left()
     return {
@@ -109,6 +111,9 @@ def card_for(app, config, bands):
         "gaps": [i for i in app.insights.all() if i.kind == "gap"],
         "documents": list(app.documents.all()),
         "cv": next(iter(app.cv_versions.all()), None),
+        "fit": fit,
+        "fit_level": fit_service.summary_level(fit),
+        "fit_text": " ".join(f["text"] for f in fit if f["level"] != "ok") or " ".join(f["text"] for f in fit),
     }
 
 
@@ -120,12 +125,13 @@ def dashboard(request):
     bands = list(ScoreBand.objects.all())
     buckets = list(Bucket.objects.all())
     statuses = list(Status.objects.all())
+    areas = list(request.user.search_areas.all())
     apps = mine(request).select_related("status", "status__bucket", "source").prefetch_related("insights", "documents__kind", "cv_versions").select_related("applied_cv")
 
     tabs = {b.pk: [] for b in buckets}
     for app in apps:
         bucket = app.effective_bucket(config)
-        tabs.setdefault(bucket.pk, []).append(card_for(app, config, bands))
+        tabs.setdefault(bucket.pk, []).append(card_for(app, config, bands, areas, profile))
 
     def sort_key(card):
         urgent_first = 0 if card["urgent"] else 1
@@ -149,6 +155,7 @@ def dashboard(request):
         "paperless_on": paperless_on,
         "paperless_url": config.effective_paperless_url if paperless_on else "",
         "followups": list(apply_service.due_followups(request.user)),
+        "has_areas": bool(areas),
         "can_import": request.user.is_staff and bool(config.careerops_path),
         "run": liveness.current_run(request.user),
         "checked_at": apps.exclude(live_checked_at=None).order_by("-live_checked_at").values_list("live_checked_at", flat=True).first(),
@@ -269,6 +276,7 @@ def add_job(request):
         app.owner = request.user
         app.status = Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first()
         app.save()
+        geo.fill_details(app)  # suggest location, arrangement, sponsorship and type from the posting
         Event.objects.create(application=app, kind="note", text="Added")
         messages.success(request, f"Added {app.company} - {app.role}.")
         return redirect("dashboard")
@@ -280,8 +288,14 @@ def add_job(request):
 def profile(request):
     obj = UserProfile.for_user(request.user)
     form = forms.ProfileForm(request.POST or None, request.FILES or None, instance=obj)
-    if request.method == "POST" and form.is_valid():
+    with_areas = request.method == "POST" and "areas-TOTAL_FORMS" in request.POST  # a post without the rows leaves them as they are
+    areas = forms.SearchAreaFormSet(request.POST if with_areas else None, instance=request.user, prefix="areas")
+    if request.method == "POST" and form.is_valid() and (areas.is_valid() if with_areas else True):
         form.save()
+        if with_areas:
+            forms.save_areas(areas, request.user)
+            for place in areas.unrecognised_places:
+                messages.warning(request, f'"{place}" is not a place we recognise, so jobs are matched to it by name only.')
         knowledge.sync_cv(SiteConfig.for_user(request.user), request.user)
         if "profile_cv" in form.changed_data and obj.profile_cv.strip():
             try:
@@ -291,8 +305,15 @@ def profile(request):
         messages.success(request, "Profile saved.")
         return redirect("profile")
     return render(request, "tracker/profile.html", {
-        "form": form, "profile": obj, "config": SiteConfig.load(), "welcome": request.GET.get("welcome"),
+        "form": form, "areas": areas, "profile": obj, "config": SiteConfig.load(), "welcome": request.GET.get("welcome"),
         "sources": KnowledgeSource.objects.filter(owner=request.user).exclude(key__in=["profile-cv", "careerops:cv.md"]).count(),
+        "account": {
+            "email": request.user.email,
+            "jobs": mine(request).count(),
+            "cv_versions": request.user.cv_versions.count(),
+            "documents": KnowledgeSource.objects.filter(owner=request.user).exclude(key__in=["profile-cv", "careerops:cv.md"]).count(),
+            "google": request.user.socialaccount_set.filter(provider="google").exists(),
+        },
     })
 
 
@@ -357,8 +378,10 @@ def export_data(request):
         "exported_at": timezone.now().isoformat(),
         "account": {"username": user.get_username(), "email": user.email},
         "profile": {
-            "target_roles": profile.target_roles, "locations": profile.locations,
-            "remote_preference": profile.remote_preference, "salary_floor": profile.salary_floor,
+            "target_roles": profile.target_roles, "employment_types": profile.employment_types,
+            "seniority_levels": profile.seniority_levels, "industries": profile.industries, "languages": profile.languages,
+            "notice_period": profile.notice_period, "salary_floor": profile.salary_floor,
+            "search_areas": [a.describe() for a in user.search_areas.all()],
             "deal_breakers": profile.deal_breakers, "about": profile.about, "cv": profile.profile_cv,
         },
         "knowledge": [
@@ -376,6 +399,8 @@ def export_data(request):
                 "score": a.score, "verdict": a.decision, "summary": a.summary, "notes": a.notes,
                 "applied_channel": a.applied_channel, "applied_note": a.applied_note, "applied_cv_label": a.applied_cv.label if a.applied_cv else None,
                 "follow_up_date": a.follow_up_date.isoformat() if a.follow_up_date else None, "description_at_apply": a.jd_at_apply,
+                "location": a.location_text, "country": a.country, "arrangement": a.arrangement,
+                "sponsorship": a.sponsorship, "relocation": a.relocation, "employment_type": a.employment_type, "seniority": a.seniority,
                 "found": a.found_date.isoformat(), "applied": a.applied_date.isoformat() if a.applied_date else None,
                 "deadline": a.deadline.isoformat() if a.deadline else None, "description": a.description,
                 "strengths": [i.text for i in a.insights.all() if i.kind == "strength"],
@@ -409,3 +434,28 @@ def delete_account(request):
     logout(request)
     user.delete()  # cascades to profile, applications, knowledge, events, runs
     return redirect("landing")
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def job_edit(request, pk):
+    app = owned_app(request, pk)
+    form = forms.JobEditForm(request.POST or None, instance=app)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Saved.")
+        return redirect("job_edit", pk=app.pk)
+    return render(request, "tracker/job_edit.html", {"form": form, "app": app, "config": SiteConfig.load(),
+                                                    "fit": fit_service.fit_flags(app)})
+
+
+@login_required
+@require_POST
+def job_redetect(request, pk):
+    app = owned_app(request, pk)
+    if app.details_source == "manual":
+        messages.error(request, "You set these details yourself, so they are left alone. Clear a field and save to let detection fill it.")
+    else:
+        changed = geo.fill_details(app, overwrite=True)
+        messages.success(request, "Re-read the posting." + (f" Updated: {', '.join(changed)}." if changed else " Nothing to change."))
+    return redirect("job_edit", pk=app.pk)

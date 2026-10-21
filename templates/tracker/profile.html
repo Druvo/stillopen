@@ -2,32 +2,91 @@
 {% block title %}Your profile{% endblock %}
 {% block content %}
 <h1>Your profile</h1>
-<p class="muted">This is what the match percentages are based on. Only you can see it.</p>
-{% if welcome %}<div class="banner"><strong>Welcome.</strong> Tell us the roles you want and upload your CV. Then add a job and press Evaluate.</div>{% endif %}
+<p class="muted">This is what your matches are based on. Only you can see it. Change anything here and it applies to your next evaluation.</p>
+{% if welcome %}<div class="banner"><strong>Welcome.</strong> Tell us the roles you want, where you would work, and upload your CV. Then add a job and press Evaluate.</div>{% endif %}
 
-<form method="post" enctype="multipart/form-data" class="card">
+<form method="post" enctype="multipart/form-data" id="profile-form">
   {% csrf_token %}
   {{ form.non_field_errors }}
-  <h2 style="margin-top:0">What you are looking for</h2>
-  {% for field in form %}
-    {% if field.name in "target_roles,locations,remote_preference,salary_floor,deal_breakers,about" %}
-      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-      {{ field }}
-      {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
-      {{ field.errors }}
-    {% endif %}
-  {% endfor %}
 
-  <h2>Your CV</h2>
-  {% for field in form %}
-    {% if field.name == "cv_file" or field.name == "profile_cv" %}
-      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-      {{ field }}
-      {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
-      {{ field.errors }}
-    {% endif %}
-  {% endfor %}
-  <div class="row" style="margin-top:16px"><button class="primary" type="submit">Save profile</button></div>
+  <div class="card">
+    <h2 style="margin-top:0">What you are looking for</h2>
+    {% for field in form %}
+      {% if field.name in "target_roles home_country employment_types seniority_levels industries languages notice_period salary_floor deal_breakers about" %}
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+        {{ field.errors }}
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Where you would work</h2>
+    <p class="muted" style="margin-top:0">One row per place. Say which kinds of work you accept there and what you need from the employer. Jobs are checked against these rows; a job outside them is flagged, never hidden.</p>
+    <p class="help">Examples: <em>Bangladesh, city Dhaka: on-site, hybrid</em> &middot; <em>Anywhere: remote</em> &middot; <em>Malaysia: on-site, hybrid, only with visa sponsorship</em> &middot; <em>Gulf: on-site, sponsorship and relocation support, minimum 8,000 USD per month</em>. A place can be a country, a region (Gulf, Europe, Southeast Asia) or <em>Anywhere</em>.</p>
+    {{ areas.management_form }}
+    {{ areas.non_form_errors }}
+    <div id="areas">
+      {% for f in areas %}
+      <div class="area card" style="margin:10px 0">
+        {{ f.id }}{{ f.owner }}
+        {{ f.non_field_errors }}
+        <div class="row">
+          <div style="flex:2;min-width:160px"><label for="{{ f.place.id_for_label }}">Place</label>{{ f.place }}{{ f.place.errors }}</div>
+          <div style="flex:1;min-width:120px"><label for="{{ f.city.id_for_label }}">City (optional)</label>{{ f.city }}{{ f.city.errors }}</div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label style="margin:0;font-weight:400">{{ f.allow_remote }} Remote</label>
+          <label style="margin:0;font-weight:400">{{ f.allow_hybrid }} Hybrid</label>
+          <label style="margin:0;font-weight:400">{{ f.allow_onsite }} On-site</label>
+          <label style="margin:0;font-weight:400">{{ f.needs_visa_sponsorship }} Only with visa sponsorship</label>
+          <label style="margin:0;font-weight:400">{{ f.needs_relocation_support }} Only with relocation support</label>
+        </div>
+        <div class="row" style="margin-top:8px;align-items:flex-end">
+          <div style="width:140px"><label for="{{ f.min_salary.id_for_label }}">Minimum pay</label>{{ f.min_salary }}{{ f.min_salary.errors }}</div>
+          <div style="width:90px"><label for="{{ f.salary_currency.id_for_label }}">Currency</label>{{ f.salary_currency }}{{ f.salary_currency.errors }}</div>
+          <div style="width:140px"><label for="{{ f.salary_period.id_for_label }}">Per</label>{{ f.salary_period }}</div>
+          {% if f.instance.pk %}<label style="margin:0 0 6px;font-weight:400;color:var(--bad)">{{ f.DELETE }} Remove this place</label>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <template id="area-template">
+      <div class="area card" style="margin:10px 0">
+        <div class="row">
+          <div style="flex:2;min-width:160px"><label>Place</label>{{ areas.empty_form.place }}</div>
+          <div style="flex:1;min-width:120px"><label>City (optional)</label>{{ areas.empty_form.city }}</div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label style="margin:0;font-weight:400">{{ areas.empty_form.allow_remote }} Remote</label>
+          <label style="margin:0;font-weight:400">{{ areas.empty_form.allow_hybrid }} Hybrid</label>
+          <label style="margin:0;font-weight:400">{{ areas.empty_form.allow_onsite }} On-site</label>
+          <label style="margin:0;font-weight:400">{{ areas.empty_form.needs_visa_sponsorship }} Only with visa sponsorship</label>
+          <label style="margin:0;font-weight:400">{{ areas.empty_form.needs_relocation_support }} Only with relocation support</label>
+        </div>
+        <div class="row" style="margin-top:8px;align-items:flex-end">
+          <div style="width:140px"><label>Minimum pay</label>{{ areas.empty_form.min_salary }}</div>
+          <div style="width:90px"><label>Currency</label>{{ areas.empty_form.salary_currency }}</div>
+          <div style="width:140px"><label>Per</label>{{ areas.empty_form.salary_period }}</div>
+        </div>
+      </div>
+    </template>
+    <button type="button" id="add-area">Add another place</button>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Your CV</h2>
+    {% for field in form %}
+      {% if field.name == "cv_file" or field.name == "profile_cv" %}
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+        {{ field.errors }}
+      {% endif %}
+    {% endfor %}
+  </div>
+  <div class="row" style="margin:12px 0"><button class="primary" type="submit">Save profile</button></div>
 </form>
 
 <div class="card">
@@ -36,9 +95,20 @@
   <a class="btn" href="{% url 'knowledge' %}">Manage documents</a>
 </div>
 
+<h2>Your account</h2>
+<div class="card">
+  <p style="margin-top:0">Signed in as <strong>{{ user.get_username }}</strong>{% if account.email %} ({{ account.email }}){% endif %}{% if account.google %}. Google sign-in is linked{% endif %}.</p>
+  <div class="row">
+    <a class="btn" href="{% url 'account_email' %}">Change or add email</a>
+    <a class="btn" href="{% url 'account_change_password' %}">Change password</a>
+    <a class="btn" href="{% url 'socialaccount_connections' %}">Connected accounts</a>
+  </div>
+  <p class="muted" style="margin-bottom:0">Stored about you: {{ account.jobs }} job{{ account.jobs|pluralize }}, {{ account.cv_versions }} CV version{{ account.cv_versions|pluralize }}, {{ account.documents }} document{{ account.documents|pluralize }}, {{ areas.initial_form_count }} search area{{ areas.initial_form_count|pluralize }}, and this profile. Everything is in the export below. See the <a href="{% url 'privacy' %}">privacy policy</a>.</p>
+</div>
+
 <h2>Your data</h2>
 <div class="card">
-  <p style="margin-top:0">Download everything stored about you, or delete your account and all of it. See the <a href="{% url 'privacy' %}">privacy policy</a>.</p>
+  <p style="margin-top:0">Download everything stored about you, or delete your account and all of it.</p>
   <div class="row">
     <a class="btn" href="{% url 'export_data' %}">Export my data (JSON)</a>
   </div>
@@ -51,4 +121,19 @@
   </form>
   {% endif %}
 </div>
+
+<script>
+(function () {
+  var total = document.getElementById('id_areas-TOTAL_FORMS');
+  var box = document.getElementById('areas');
+  var tpl = document.getElementById('area-template');
+  document.getElementById('add-area').addEventListener('click', function () {
+    var n = parseInt(total.value, 10);
+    var wrap = document.createElement('div');
+    wrap.innerHTML = tpl.innerHTML.replace(/__prefix__/g, n);
+    while (wrap.firstChild) box.appendChild(wrap.firstChild);
+    total.value = n + 1;
+  });
+})();
+</script>
 {% endblock %}
