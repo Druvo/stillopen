@@ -347,3 +347,40 @@ class GoogleLoginTests(TestCase):
         from tracker.auth import AccountAdapter
 
         self.assertFalse(AccountAdapter().is_open_for_signup(self._request()))
+
+
+class LandingTests(TestCase):
+    def test_public_and_uses_admin_text(self):
+        config = SiteConfig.load()
+        config.landing_headline = "Custom headline here"
+        config.landing_github_url = "https://github.com/example/stillopen"
+        config.save()
+        r = self.client.get(reverse("landing"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Custom headline here")
+        self.assertContains(r, "https://github.com/example/stillopen")
+        self.assertContains(r, reverse("account_login"))
+        self.assertNotContains(r, "Open dashboard")
+
+    def test_does_not_leak_tracked_jobs(self):
+        Application.objects.create(company="SecretCorp", role="Hidden", status=Status.objects.get(name="Evaluated"))
+        self.assertNotContains(self.client.get(reverse("landing")), "SecretCorp")
+
+    def test_logged_in_visitor_sees_dashboard_link(self):
+        self.client.force_login(get_user_model().objects.create_user("u", password="x" * 20))
+        self.assertContains(self.client.get(reverse("landing")), "Open dashboard")
+
+    def test_can_be_switched_off(self):
+        config = SiteConfig.load()
+        config.landing_enabled = False
+        config.save()
+        r = self.client.get(reverse("landing"))
+        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)
+        follow = self.client.get(reverse("dashboard"))  # anonymous visitors then land on sign-in
+        self.assertIn("/accounts/login/", follow["Location"])
+
+    def test_dashboard_moved_and_still_protected(self):
+        self.assertEqual(reverse("dashboard"), "/dashboard/")
+        r = self.client.get(reverse("dashboard"))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/accounts/login/", r["Location"])

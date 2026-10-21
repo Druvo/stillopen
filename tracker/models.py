@@ -66,6 +66,19 @@ class SiteConfig(models.Model):
         ),
     )
 
+    landing_enabled = models.BooleanField(
+        default=True, help_text="Show the public landing page at the site root. Off sends visitors straight to sign-in."
+    )
+    landing_headline = models.CharField(max_length=140, default="Stop applying to jobs that are already closed.")
+    landing_subheadline = models.CharField(
+        max_length=300,
+        default=(
+            "StillOpen tracks every role you are chasing, scores how well it fits you, "
+            "and checks whether each posting is still open."
+        ),
+    )
+    landing_github_url = models.URLField(blank=True, help_text="Optional. Adds a GitHub link to the landing page.")
+
     class Meta:
         verbose_name = "Site configuration"
         verbose_name_plural = "Site configuration"

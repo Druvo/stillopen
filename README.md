@@ -13,13 +13,13 @@ cd stillopen
 .venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 ```
 
-Open http://127.0.0.1:8000 (dashboard) and http://127.0.0.1:8000/admin/ (configuration). Copy `.env.example` to `.env` first if you want to change the career-ops path or Paperless URL before the first `migrate`.
+Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboard/ (the dashboard, login required) and http://127.0.0.1:8000/admin/ (configuration). Copy `.env.example` to `.env` first if you want to change the career-ops path or Paperless URL before the first `migrate`.
 
 ## What you can change in the admin
 
 | Admin section | Controls |
 | --- | --- |
-| Site configuration | Dashboard title, score scale (match % = score / scale), urgent-deadline window, auto-close of expired postings, career-ops folder, Node command, open/closed check mode and timeout, Paperless URL/token/TLS/auto-upload |
+| Site configuration | Dashboard title, landing page on/off, headline, sub-headline and GitHub link, score scale (match % = score / scale), urgent-deadline window, auto-close of expired postings, career-ops folder, Node command, open/closed check mode and timeout, Paperless URL/token/TLS/auto-upload |
 | Buckets | The dashboard tabs: label, order, which one is the "closed" tab |
 | Statuses | Names, colour, tab, whether a status counts as "CV submitted" (stamps the applied date), whether it is terminal (skipped by the open/closed check) |
 | Score bands | Labels and colours per match % threshold |

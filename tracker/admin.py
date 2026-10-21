@@ -43,6 +43,7 @@ class SiteConfigAdmin(admin.ModelAdmin):
     form = SiteConfigForm
     fieldsets = (
         ("Dashboard", {"fields": ("site_title", "score_scale", "urgent_days", "auto_close_expired")}),
+        ("Landing page", {"fields": ("landing_enabled", "landing_headline", "landing_subheadline", "landing_github_url")}),
         ("career-ops import", {"fields": ("careerops_path", "node_command")}),
         ("Open / closed check", {"fields": ("liveness_mode", "liveness_timeout")}),
         (

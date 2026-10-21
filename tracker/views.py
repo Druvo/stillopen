@@ -2,7 +2,7 @@ import mimetypes
 
 from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
@@ -10,6 +10,14 @@ from .models import Application, Bucket, Document, Event, ScoreBand, SiteConfig,
 from .services import careerops, liveness
 from .services.files import resolve_document_path
 from .services.paperless import PaperlessClient, PaperlessError, push_document
+
+
+@require_GET
+def landing(request):
+    config = SiteConfig.load()
+    if not config.landing_enabled:
+        return redirect("dashboard")
+    return render(request, "tracker/landing.html", {"config": config})
 
 
 def band_for(percent, bands):
