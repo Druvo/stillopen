@@ -71,14 +71,39 @@ class SiteConfig(models.Model):
     AI_PROVIDERS = [
         ("none", "Off (free keyword match only)"),
         ("anthropic", "Anthropic API key"),
-        ("openai", "OpenAI-compatible API (OpenAI, Ollama, LM Studio...)"),
+        ("openai", "OpenAI-compatible API (OpenAI, OpenRouter, Groq, Mistral, Gemini, DeepSeek, Ollama, LM Studio...)"),
+        ("custom_http", "Custom HTTP API (any provider: you describe the request and where the answer is)"),
         ("claude_cli", "Claude Code CLI installed on this machine"),
         ("agent_sdk", "Claude Agent SDK (pip install -r requirements-ai.txt)"),
     ]
     ai_provider = models.CharField(max_length=12, choices=AI_PROVIDERS, default="none")
     ai_model = models.CharField(max_length=100, blank=True, help_text="Leave blank for the provider's default.")
     ai_base_url = models.CharField(
-        max_length=300, blank=True, help_text="OpenAI-compatible only, e.g. http://127.0.0.1:11434/v1 for Ollama."
+        max_length=300,
+        blank=True,
+        help_text=(
+            "OpenAI-compatible: the API base, e.g. http://127.0.0.1:11434/v1 (Ollama), https://openrouter.ai/api/v1, "
+            "https://api.groq.com/openai/v1, https://api.mistral.ai/v1, "
+            "https://generativelanguage.googleapis.com/v1beta/openai (Gemini). "
+            "Custom HTTP: the full endpoint URL."
+        ),
+    )
+    ai_custom_headers = models.TextField(
+        blank=True,
+        help_text="Custom HTTP only. One header per line, e.g. 'Authorization: Bearer {{api_key}}' or 'x-api-key: {{api_key}}'.",
+    )
+    ai_custom_body = models.TextField(
+        blank=True,
+        help_text=(
+            "Custom HTTP only. JSON request body. Use {{system}}, {{prompt}} and {{model}} where the text goes, "
+            'e.g. {"model": "{{model}}", "messages": [{"role": "system", "content": "{{system}}"}, '
+            '{"role": "user", "content": "{{prompt}}"}]}'
+        ),
+    )
+    ai_custom_response_path = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Custom HTTP only. Where the reply text is in the JSON response, e.g. choices.0.message.content or content.0.text",
     )
     ai_claude_command = models.CharField(max_length=200, default="claude", help_text="Claude Code CLI command or full path.")
     ai_timeout = models.PositiveIntegerField(default=120, help_text="Seconds to wait for one evaluation.")

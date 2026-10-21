@@ -72,6 +72,11 @@ def parse_result(text: str) -> dict:
         raw = json.loads(text[start : end + 1])
     except json.JSONDecodeError as exc:
         raise AIError("The AI returned malformed JSON.") from exc
+    return validate_result(raw)
+
+
+def validate_result(raw) -> dict:
+    """Clamp and clean an evaluation dict, whether it came from a model reply or an MCP client."""
     if not isinstance(raw, dict):
         raise AIError("The AI returned an unexpected shape.")
     try:
@@ -143,6 +148,68 @@ def _openai(system: str, user: str, config: SiteConfig) -> str:
         return r.json()["choices"][0]["message"]["content"] or ""
     except (KeyError, IndexError, ValueError) as exc:
         raise AIError("The API reply had no message.") from exc
+
+
+_PLACEHOLDER = re.compile(r"\{\{\s*(system|prompt|model|api_key)\s*\}\}")
+
+
+def fill_template(value, mapping: dict):
+    """Substitute {{system}}, {{prompt}}, {{model}}, {{api_key}} inside a parsed JSON value.
+
+    Substitution happens on Python strings, in one pass, before serialisation: prompt text can neither break the
+    JSON structure nor smuggle in another placeholder."""
+    if isinstance(value, str):
+        return _PLACEHOLDER.sub(lambda m: mapping[m.group(1)], value)
+    if isinstance(value, list):
+        return [fill_template(v, mapping) for v in value]
+    if isinstance(value, dict):
+        return {k: fill_template(v, mapping) for k, v in value.items()}
+    return value
+
+
+def extract_path(data, path: str):
+    """Follow a dotted path such as choices.0.message.content through dicts and lists."""
+    current = data
+    for part in [p for p in path.strip().split(".") if p]:
+        try:
+            current = current[int(part)] if isinstance(current, list) else current[part]
+        except (KeyError, IndexError, ValueError, TypeError) as exc:
+            keys = ", ".join(list(current)[:8]) if isinstance(current, dict) else type(current).__name__
+            raise AIError(f'"{part}" was not found in the reply while following "{path}". Available here: {keys}') from exc
+    if isinstance(current, (dict, list)):
+        return json.dumps(current)
+    return "" if current is None else str(current)
+
+
+def _custom_http(system: str, user: str, config: SiteConfig) -> str:
+    url = config.ai_base_url.strip()
+    if not url.startswith(("http://", "https://")):
+        raise AIError("Set the full endpoint URL (starting with http:// or https://) in 'AI base URL'.")
+    if not config.ai_custom_body.strip() or not config.ai_custom_response_path.strip():
+        raise AIError("Custom HTTP needs a request body template and a response path.")
+    try:
+        body_template = json.loads(config.ai_custom_body)
+    except ValueError as exc:
+        raise AIError("The request body template is not valid JSON.") from exc
+    mapping = {"system": system, "prompt": user, "model": config.ai_model, "api_key": config.effective_ai_key}
+    headers = {"Content-Type": "application/json"}
+    for line in config.ai_custom_headers.splitlines():
+        if ":" in line and line.strip():
+            name, _, value = line.partition(":")
+            headers[name.strip()] = fill_template(value.strip(), mapping)
+    if "{{api_key}}" in config.ai_custom_headers.replace(" ", "") and not mapping["api_key"]:
+        raise AIError("The headers use {{api_key}} but no AI key is saved.")
+    try:
+        r = requests.post(url, headers=headers, json=fill_template(body_template, mapping), timeout=config.ai_timeout)
+    except requests.RequestException as exc:
+        raise AIError(f"Cannot reach the API: {exc.__class__.__name__}") from exc
+    if r.status_code >= 400:
+        raise AIError(f"The API returned HTTP {r.status_code}: {_api_error(r)}")
+    try:
+        data = r.json()
+    except ValueError as exc:
+        raise AIError("The API did not return JSON.") from exc
+    return extract_path(data, config.ai_custom_response_path)
 
 
 def _api_error(response) -> str:
@@ -233,7 +300,13 @@ def _agent_sdk(system: str, user: str, config: SiteConfig) -> str:
             raise AIError(f"Claude Agent SDK failed: {exc.__class__.__name__}: {str(exc)[:160]}") from exc
 
 
-BACKENDS = {"anthropic": _anthropic, "openai": _openai, "claude_cli": _claude_cli, "agent_sdk": _agent_sdk}
+BACKENDS = {
+    "anthropic": _anthropic,
+    "openai": _openai,
+    "custom_http": _custom_http,
+    "claude_cli": _claude_cli,
+    "agent_sdk": _agent_sdk,
+}
 
 
 # --- free fallback ------------------------------------------------------------------------------

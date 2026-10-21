@@ -333,3 +333,73 @@ class ReportJdTests(TestCase):
         md = "# R\n\n## Block A\nx\n\n## Job Description (archived verbatim)\nWe need C#.\nSecond line.\n\n## Next\nignored\n"
         self.assertEqual(parse_jd(md), "We need C#.\nSecond line.")
         self.assertEqual(parse_jd("# no jd here"), "")
+
+
+class CustomHttpTests(TestCase):
+    BODY = '{"model": "{{model}}", "input": {"system": "{{system}}", "text": "{{prompt}}"}}'
+
+    def setUp(self):
+        self.config = isolated_config(profile_cv=CV)
+        self.config.ai_provider = "custom_http"
+        self.config.ai_base_url = "https://api.example.test/v1/generate"
+        self.config.ai_model = "m-1"
+        self.config.ai_custom_headers = "X-Api-Key: {{api_key}}\nX-Client: stillopen"
+        self.config.ai_custom_body = self.BODY
+        self.config.ai_custom_response_path = "result.0.text"
+        self.config.set_ai_key("sk-custom-key")
+        self.app = make_app(description=JD)
+
+    def test_template_substitution_is_structural_and_single_pass(self):
+        out = ai.fill_template(
+            {"a": "{{prompt}}", "b": ["{{model}}", 3], "c": {"d": "x {{ system }} y"}},
+            {"system": 'quote " and \ and {{model}}', "prompt": "line1\nline2 {{api_key}}", "model": "m", "api_key": "K"},
+        )
+        self.assertEqual(out["a"], "line1\nline2 {{api_key}}")  # a placeholder inside the prompt is not expanded
+        self.assertEqual(out["b"], ["m", 3])
+        self.assertEqual(out["c"]["d"], 'x quote " and \ and {{model}} y')
+
+    def test_extract_path(self):
+        data = {"result": [{"text": "hello"}], "n": None, "obj": {"k": 1}}
+        self.assertEqual(ai.extract_path(data, "result.0.text"), "hello")
+        self.assertEqual(ai.extract_path(data, "n"), "")
+        self.assertEqual(ai.extract_path(data, "obj"), '{"k": 1}')
+        with self.assertRaisesMessage(ai.AIError, "Available here: result, n, obj"):
+            ai.extract_path(data, "missing.path")
+
+    @mock.patch("tracker.services.ai.requests.post")
+    def test_full_round_trip(self, post):
+        post.return_value = mock.Mock(status_code=200, json=lambda: {"result": [{"text": GOOD_JSON}]})
+        result = ai.evaluate_application(self.app, self.config)
+        self.assertEqual(result["match_percent"], 82)
+        args, kwargs = post.call_args
+        self.assertEqual(args[0], "https://api.example.test/v1/generate")
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], "sk-custom-key")
+        self.assertEqual(kwargs["headers"]["X-Client"], "stillopen")
+        self.assertEqual(kwargs["json"]["model"], "m-1")
+        self.assertIn("<job_posting>", kwargs["json"]["input"]["text"])
+        self.app.refresh_from_db()
+        self.assertEqual(self.app.ai_method, "ai:custom_http")
+
+    def test_configuration_errors_are_specific(self):
+        for field, value, message in [
+            ("ai_base_url", "ftp://x", "endpoint URL"),
+            ("ai_custom_body", "", "request body template"),
+            ("ai_custom_body", "{not json", "not valid JSON"),
+            ("ai_custom_response_path", "", "response path"),
+        ]:
+            original = getattr(self.config, field)
+            setattr(self.config, field, value)
+            with self.assertRaisesMessage(ai.AIError, message):
+                ai.evaluate_application(self.app, self.config)
+            setattr(self.config, field, original)
+        self.config.ai_key_encrypted = ""
+        with self.assertRaisesMessage(ai.AIError, "no AI key is saved"):
+            ai.evaluate_application(self.app, self.config)
+
+    @mock.patch("tracker.services.ai.requests.post")
+    def test_http_error_does_not_leak_headers(self, post):
+        post.return_value = mock.Mock(status_code=403, json=lambda: {"error": "forbidden"})
+        with self.assertRaises(ai.AIError) as ctx:
+            ai.evaluate_application(self.app, self.config)
+        self.assertNotIn("sk-custom-key", str(ctx.exception))
+        self.assertIn("403", str(ctx.exception))

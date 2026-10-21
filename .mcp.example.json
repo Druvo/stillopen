@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "stillopen": {
+      "command": "D:\path\to\stillopen\.venv\Scripts\python.exe",
+      "args": ["D:\path\to\stillopen\mcp_server.py"]
+    }
+  }
+}

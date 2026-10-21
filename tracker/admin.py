@@ -78,8 +78,9 @@ class SiteConfigAdmin(admin.ModelAdmin):
             "AI evaluation",
             {
                 "fields": (
-                    "ai_provider", "ai_model", "ai_base_url", "ai_claude_command",
-                    "ai_api_key", "clear_ai_key", "ai_timeout", "ai_max_input_chars",
+                    "ai_provider", "ai_model", "ai_base_url",
+                    "ai_custom_headers", "ai_custom_body", "ai_custom_response_path",
+                    "ai_claude_command", "ai_api_key", "clear_ai_key", "ai_timeout", "ai_max_input_chars",
                 ),
                 "description": (
                     "Pick how jobs are scored. <strong>Off</strong> uses a free keyword match against your CV. "
