@@ -265,3 +265,85 @@ class LivenessTests(TestCase):
         self.assertEqual(liveness.check_http("https://x.test", SiteConfig.load())[0], "active")
         get.return_value = mock.Mock(status_code=404, text="")
         self.assertEqual(liveness.check_http("https://x.test", SiteConfig.load())[0], "expired")
+
+
+class GoogleLoginTests(TestCase):
+    def setUp(self):
+        from django.contrib.sites.models import Site
+        from allauth.socialaccount.models import SocialApp
+
+        self.config = SiteConfig.load()
+        app = SocialApp.objects.create(provider="google", name="Google", client_id="test-id", secret="test-secret")
+        app.sites.add(Site.objects.get_current())
+
+    def _request(self):
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.test import RequestFactory
+
+        request = RequestFactory().get("/accounts/google/login/callback/")
+        request.session = {}
+        request._messages = FallbackStorage(request)
+        return request
+
+    def _login(self, email, verified=True, existing=False):
+        from allauth.account.models import EmailAddress
+        from allauth.socialaccount.models import SocialLogin
+
+        user = get_user_model().objects.create_user("existing", email=email) if existing else get_user_model()(email=email)
+        return SocialLogin(user=user, email_addresses=[EmailAddress(email=email, verified=verified)])
+
+    def test_allowlist_rules(self):
+        self.config.google_allowed_emails = "Me@Gmail.com\n@acme.com\n"
+        self.assertTrue(self.config.google_email_allowed("me@gmail.com"))
+        self.assertTrue(self.config.google_email_allowed("anyone@ACME.com"))
+        self.assertFalse(self.config.google_email_allowed("other@gmail.com"))
+        self.assertFalse(self.config.google_email_allowed("me@gmail.com.evil.test"))
+        self.assertFalse(self.config.google_email_allowed(""))
+        self.config.google_allowed_emails = ""
+        self.assertFalse(self.config.google_email_allowed("me@gmail.com"))
+
+    def test_login_page_button_follows_the_admin_switch(self):
+        self.assertNotContains(self.client.get(reverse("account_login")), "Continue with Google")
+        self.config.google_login_enabled = True
+        self.config.save()
+        r = self.client.get(reverse("account_login"))
+        self.assertContains(r, "Continue with Google")
+        self.assertContains(r, "/accounts/google/login/")
+
+    def test_signup_gated_by_allowlist_and_verified_email(self):
+        from tracker.auth import SocialAdapter
+
+        adapter = SocialAdapter()
+        self.config.google_login_enabled = True
+        self.config.google_allowed_emails = "me@gmail.com"
+        self.config.save()
+        self.assertTrue(adapter.is_open_for_signup(self._request(), self._login("me@gmail.com")))
+        self.assertFalse(adapter.is_open_for_signup(self._request(), self._login("stranger@gmail.com")))
+        self.assertFalse(adapter.is_open_for_signup(self._request(), self._login("me@gmail.com", verified=False)))
+        self.config.google_login_enabled = False
+        self.config.save()
+        self.assertFalse(adapter.is_open_for_signup(self._request(), self._login("me@gmail.com")))
+
+    def test_pre_login_blocks_disabled_and_unlisted_but_lets_existing_users_in(self):
+        from allauth.core.exceptions import ImmediateHttpResponse
+        from tracker.auth import SocialAdapter
+
+        adapter = SocialAdapter()
+        with self.assertRaises(ImmediateHttpResponse):  # switched off
+            adapter.pre_social_login(self._request(), self._login("me@gmail.com"))
+        self.config.google_login_enabled = True
+        self.config.save()
+        with self.assertRaises(ImmediateHttpResponse):  # new, not listed
+            adapter.pre_social_login(self._request(), self._login("stranger@gmail.com"))
+        adapter.pre_social_login(self._request(), self._login("owner@gmail.com", existing=True))  # no exception
+
+    def test_google_users_never_get_admin_access(self):
+        from tracker.auth import SocialAdapter
+
+        user = SocialAdapter().populate_user(self._request(), self._login("me@gmail.com"), {"email": "me@gmail.com"})
+        self.assertFalse(user.is_staff or user.is_superuser)
+
+    def test_local_signup_is_closed(self):
+        from tracker.auth import AccountAdapter
+
+        self.assertFalse(AccountAdapter().is_open_for_signup(self._request()))

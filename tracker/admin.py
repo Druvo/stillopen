@@ -46,6 +46,17 @@ class SiteConfigAdmin(admin.ModelAdmin):
         ("career-ops import", {"fields": ("careerops_path", "node_command")}),
         ("Open / closed check", {"fields": ("liveness_mode", "liveness_timeout")}),
         (
+            "Google sign-in",
+            {
+                "fields": ("google_login_enabled", "google_allowed_emails"),
+                "description": (
+                    "Create an OAuth client in Google Cloud Console (Web application). Authorized redirect URI: "
+                    "<code>&lt;your site&gt;/accounts/google/login/callback/</code>. Then add it under "
+                    "<strong>Social applications</strong> (provider Google, choose your Site) and tick the box below."
+                ),
+            },
+        ),
+        (
             "Paperless-ngx",
             {"fields": ("paperless_enabled", "paperless_url", "paperless_token", "paperless_verify_tls", "paperless_auto_upload")},
         ),

@@ -1,0 +1,33 @@
+{% extends "account/base_entrance.html" %}
+{% load socialaccount %}
+{% block head_title %}Sign in{% endblock %}
+{% block content %}
+<h1>{{ site_config.site_title|default:"StillOpen" }}</h1>
+<p class="muted" style="margin:0">Sign in to see your job search.</p>
+
+{% get_providers as providers %}
+{% if google_login_on and providers %}
+  <form method="post" action="{% provider_login_url 'google' process='login' %}">
+    {% csrf_token %}
+    {{ redirect_field }}
+    <button type="submit">Continue with Google</button>
+  </form>
+  <div class="or">or</div>
+{% endif %}
+
+<form method="post" action="{% url 'account_login' %}">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for field in form.visible_fields %}
+    {% if field.name != "remember" %}
+    <div>
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {{ field.errors }}
+    </div>
+    {% endif %}
+  {% endfor %}
+  {{ redirect_field }}
+  <button type="submit" class="alt">Sign in with username</button>
+</form>
+{% endblock %}

@@ -53,6 +53,19 @@ class SiteConfig(models.Model):
         default=False, help_text="Upload documents to Paperless automatically when they are imported."
     )
 
+    google_login_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow signing in with Google. Also needs a Google app under Social applications.",
+    )
+    google_allowed_emails = models.TextField(
+        blank=True,
+        help_text=(
+            "Who may sign in with Google, one per line: a full address (you@gmail.com) or a whole domain (@company.com). "
+            "Everyone listed can see all jobs and documents. Empty means nobody new can sign in. "
+            "An existing user with the same verified email can always sign in."
+        ),
+    )
+
     class Meta:
         verbose_name = "Site configuration"
         verbose_name_plural = "Site configuration"
@@ -71,6 +84,17 @@ class SiteConfig(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+    def google_email_allowed(self, email: str) -> bool:
+        email = (email or "").strip().lower()
+        if not email or "@" not in email:
+            return False
+        domain = "@" + email.rsplit("@", 1)[1]
+        for line in self.google_allowed_emails.splitlines():
+            rule = line.strip().lower()
+            if rule and rule in (email, domain):
+                return True
+        return False
 
     @property
     def effective_paperless_token(self):
