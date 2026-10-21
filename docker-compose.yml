@@ -1,0 +1,71 @@
+# Paperless-ngx for document management. The jobtrack app itself runs on the host (python manage.py runserver)
+# so it can reach career-ops and Node; Paperless needs no access to either.
+#
+#   1. cp .env.example .env   and fill PAPERLESS_ADMIN_USER / PAPERLESS_ADMIN_PASSWORD / PAPERLESS_SECRET_KEY
+#   2. docker compose up -d
+#   3. open http://127.0.0.1:8010, create an API token (profile menu > My Profile), paste it in the Django admin
+#      under Site configuration (or set PAPERLESS_TOKEN in .env)
+#
+# Optional profile "web" also runs jobtrack in a container behind nginx on http://127.0.0.1:8080
+#   docker compose --profile web up -d --build
+services:
+  broker:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - paperless_redis:/data
+
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    restart: unless-stopped
+    depends_on:
+      - broker
+    ports:
+      - "127.0.0.1:8010:8000"
+    volumes:
+      - paperless_data:/usr/src/paperless/data
+      - paperless_media:/usr/src/paperless/media
+      - ./paperless/export:/usr/src/paperless/export
+      - ./paperless/consume:/usr/src/paperless/consume
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_URL: http://127.0.0.1:8010
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY:?set PAPERLESS_SECRET_KEY in .env}
+      PAPERLESS_ADMIN_USER: ${PAPERLESS_ADMIN_USER:?set PAPERLESS_ADMIN_USER in .env}
+      PAPERLESS_ADMIN_PASSWORD: ${PAPERLESS_ADMIN_PASSWORD:?set PAPERLESS_ADMIN_PASSWORD in .env}
+      PAPERLESS_TIME_ZONE: Asia/Dhaka
+      PAPERLESS_OCR_LANGUAGE: eng
+
+  web:
+    profiles: ["web"]
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DJANGO_DEBUG: "0"
+      JOBTRACK_DB: /data/db.sqlite3
+      JOBTRACK_MEDIA: /data/media
+      DJANGO_ALLOWED_HOSTS: web,127.0.0.1,localhost
+      PAPERLESS_URL: http://paperless:8000
+      # In a container the host's career-ops folder must be mounted and the path set in Site configuration.
+      CAREEROPS_PATH: /careerops
+    volumes:
+      - jobtrack_data:/data
+      - ${CAREEROPS_HOST_PATH:-./careerops-empty}:/careerops:ro
+
+  nginx:
+    profiles: ["web"]
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  paperless_data:
+  paperless_media:
+  paperless_redis:
+  jobtrack_data:
