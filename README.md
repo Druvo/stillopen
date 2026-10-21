@@ -32,7 +32,7 @@ Import is idempotent: new tracker rows are created, existing rows refresh only e
 
 ## Open/closed check
 
-- `node` mode runs career-ops `check-liveness.mjs` (Playwright). Use this: it renders JavaScript pages and caught the closed Falaq, Flyte and Pipeline postings.
+- `node` mode runs career-ops `check-liveness.mjs` (Playwright). Use this: it renders JavaScript pages, so it catches closed postings that a plain HTTP check misses.
 - `http` mode is a plain request plus your expiry phrases. It cannot see closed postings on JavaScript sites and will report them as open.
 
 Run it from the dashboard button, the admin action, or `python manage.py check_liveness` (suitable for Task Scheduler).

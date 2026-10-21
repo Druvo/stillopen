@@ -77,7 +77,7 @@ class ImportTests(TestCase):
         (root / "output").mkdir()
         (root / "data" / "applications.md").write_text(TRACKER, encoding="utf-8")
         (root / "reports" / "001-acme-2026-10-01.md").write_text(REPORT, encoding="utf-8")
-        (root / "output" / "cv-zahid-acme-2026-10-01.pdf").write_bytes(b"%PDF-1.4")
+        (root / "output" / "cv-jane-acme-2026-10-01.pdf").write_bytes(b"%PDF-1.4")
         (root / "output" / "acme-cover.pdf").write_bytes(b"%PDF-1.4")
         config = SiteConfig.load()
         config.careerops_path = str(root)
