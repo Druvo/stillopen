@@ -155,8 +155,8 @@ def _parse_date(s: str) -> date:
         return date.today()
 
 
-def import_all(config, sync_status: bool = False) -> dict:
-    """Idempotent import. New applications are created; existing ones refresh evaluation data only.
+def import_all(config, owner, sync_status: bool = False) -> dict:
+    """Idempotent import into one owner's tracker. New applications are created; existing ones refresh evaluation data only.
 
     Status, notes, URL, company and role of an existing application are never overwritten
     unless sync_status is set (status only)."""
@@ -186,11 +186,12 @@ def import_all(config, sync_status: bool = False) -> dict:
             summary = parse_machine_summary(report_md)
             tldr = parse_tldr(report_md)
 
-        app = Application.objects.filter(careerops_num=num).first()
+        app = Application.objects.filter(owner=owner, careerops_num=num).first()
         created = app is None
         if created:
             status = _status(row["status"] or "Evaluated")
             app = Application(
+                owner=owner,
                 careerops_num=num,
                 company=row["company"],
                 role=row["role"],

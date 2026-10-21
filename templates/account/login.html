@@ -28,6 +28,7 @@
     {% endif %}
   {% endfor %}
   {{ redirect_field }}
-  <button type="submit" class="alt">Sign in with username</button>
+  <button type="submit" class="alt">Sign in</button>
 </form>
+{% if site_config.signup_open %}<p class="muted" style="margin:0">New here? <a href="{% url 'account_signup' %}">Create an account</a></p>{% endif %}
 {% endblock %}

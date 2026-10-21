@@ -23,6 +23,11 @@ python mcp_server.py                       # MCP server over stdio
 
 ## Rules
 
+- **Multi-user, strict isolation.** Every Application, KnowledgeSource, Document, Event, LivenessRun and UserProfile belongs to one user. Every view, command and MCP tool must filter by owner (`owner=request.user`, `who.resolve_user`, `mcp_tools._owner()`); cross-account access must 404. New data model or endpoint = owner field/filter + a test in `tracker/tests_multiuser.py`.
+- Per-person settings come from `SiteConfig.for_user(user)` (read-only overlay of `UserProfile`, never saved). Server-touching features (career-ops folder, Paperless, `claude_cli`/`agent_sdk`, local model URLs, node checker) are admin-only: `config.restricted` is True for ordinary users.
+- Any URL a user can supply (job links, AI base URLs, embedding URLs) must go through `services/netguard.py` (`check_public_url` / `safe_get`) for restricted users; AI POSTs use `allow_redirects=False`.
+- Self-registered accounts must confirm their email (`AccountAdapter.pre_login`); accounts made by admins or `createsuperuser` must never be locked out.
+
 - Behaviour must stay configurable in the admin, not hard-coded. New setting = SiteConfig field + migration + admin fieldset + test.
 - Job descriptions are untrusted text. Never put them where they could act as instructions: keep them in data tags, validate model output, never give a model tools while it reads one.
 - Never log or display secrets. The AI key is stored encrypted (`tracker/crypto.py`); Paperless token and keys never appear in MCP output.

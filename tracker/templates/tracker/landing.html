@@ -54,7 +54,7 @@ footer{padding:28px 0 40px;color:var(--muted);font-size:14px;border-top:1px soli
     <div class="row">
       {% if config.landing_github_url %}<a href="{{ config.landing_github_url }}" rel="noopener">GitHub</a>{% endif %}
       {% if user.is_authenticated %}<a class="btn" href="{% url 'dashboard' %}">Open dashboard</a>
-      {% else %}<a class="btn ghost" href="{% url 'account_login' %}">Sign in</a>{% endif %}
+      {% else %}<a class="btn ghost" href="{% url 'account_login' %}">Sign in</a>{% if config.signup_open %}<a class="btn" href="{% url 'account_signup' %}">Create account</a>{% endif %}{% endif %}
     </div>
   </nav>
 
@@ -64,6 +64,8 @@ footer{padding:28px 0 40px;color:var(--muted);font-size:14px;border-top:1px soli
       <p class="lead">{{ config.landing_subheadline }}</p>
       <div class="cta">
         {% if user.is_authenticated %}<a class="btn" href="{% url 'dashboard' %}">Open dashboard</a>
+        {% elif config.signup_open %}<a class="btn" href="{% url 'account_signup' %}">Create a free account</a>
+        <a class="btn ghost" href="{% url 'account_login' %}">Sign in</a>
         {% else %}<a class="btn" href="{% url 'account_login' %}">Sign in</a>{% endif %}
         <a class="btn ghost" href="#features">See what it does</a>
       </div>
@@ -125,7 +127,7 @@ footer{padding:28px 0 40px;color:var(--muted);font-size:14px;border-top:1px soli
 
   <footer>
     <span>{{ config.site_title }}</span>
-    <span>{% if user.is_authenticated %}<a href="{% url 'dashboard' %}">Dashboard</a>{% else %}<a href="{% url 'account_login' %}">Sign in</a>{% endif %}</span>
+    <span><a href="{% url 'privacy' %}">Privacy</a> · <a href="{% url 'terms' %}">Terms</a> · {% if user.is_authenticated %}<a href="{% url 'dashboard' %}">Dashboard</a>{% else %}<a href="{% url 'account_login' %}">Sign in</a>{% endif %}</span>
   </footer>
 </div>
 </body>

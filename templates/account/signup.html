@@ -1,0 +1,34 @@
+{% extends "account/base_entrance.html" %}
+{% block head_title %}Create account{% endblock %}
+{% block content %}
+<h1>Create your account</h1>
+<p class="muted" style="margin:0">Track your job search, see what is still open, and get a match score for every role.</p>
+
+{% if google_login_on %}
+  {% load socialaccount %}
+  {% get_providers as providers %}
+  {% if providers %}
+  <form method="post" action="{% provider_login_url 'google' process='login' %}">
+    {% csrf_token %}
+    <button type="submit">Continue with Google</button>
+  </form>
+  <div class="or">or</div>
+  {% endif %}
+{% endif %}
+
+<form method="post" action="{% url 'account_signup' %}">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for field in form.visible_fields %}
+  <div>
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {{ field.errors }}
+  </div>
+  {% endfor %}
+  {{ redirect_field }}
+  <p class="muted" style="margin:0;font-size:12.5px">By creating an account you agree to the <a href="{% url 'terms' %}">terms</a> and <a href="{% url 'privacy' %}">privacy policy</a>. We email you a link to confirm your address.</p>
+  <button type="submit" class="alt">Create account</button>
+</form>
+<p class="muted" style="margin:0">Already registered? <a href="{% url 'account_login' %}">Sign in</a></p>
+{% endblock %}

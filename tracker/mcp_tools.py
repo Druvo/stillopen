@@ -2,6 +2,8 @@
 
 Deliberately absent: deleting anything, and any access to settings, API keys, tokens or file contents.
 Job descriptions are returned under a key that says they are untrusted text.
+
+Every tool acts for exactly one user (set_user), and only ever sees that user's data.
 """
 from django.utils import timezone
 
@@ -9,6 +11,23 @@ from .models import Application, Bucket, Event, KnowledgeSource, SiteConfig, Sta
 from .services import ai, knowledge, liveness
 
 MAX_TEXT = 30000
+_user = None
+
+
+def set_user(user) -> None:
+    """The account this server acts for. Must be called before any tool runs."""
+    global _user
+    _user = user
+
+
+def _owner():
+    if _user is None:
+        raise ValueError("No user is selected. Set STILLOPEN_USER or create exactly one superuser.")
+    return _user
+
+
+def _config() -> SiteConfig:
+    return SiteConfig.for_user(_owner())
 
 
 def _clip(text, limit):
@@ -24,7 +43,7 @@ def _status(name: str) -> Status:
 
 
 def _app(app_id: int) -> Application:
-    app = Application.objects.select_related("status", "status__bucket", "source").filter(pk=app_id).first()
+    app = Application.objects.select_related("status", "status__bucket", "source").filter(owner=_owner(), pk=app_id).first()
     if not app:
         raise ValueError(f"No application with id {app_id}.")
     return app
@@ -48,8 +67,8 @@ def _row(app: Application, config: SiteConfig) -> dict:
 
 
 def summary() -> dict:
-    config = SiteConfig.load()
-    apps = list(Application.objects.select_related("status", "status__bucket"))
+    config = _config()
+    apps = list(Application.objects.filter(owner=_owner()).select_related("status", "status__bucket"))
     tabs = {b.label: 0 for b in Bucket.objects.all()}
     for app in apps:
         tabs[app.effective_bucket(config).label] = tabs.get(app.effective_bucket(config).label, 0) + 1
@@ -72,8 +91,8 @@ def summary() -> dict:
 
 def list_applications(tab: str = "", status: str = "", query: str = "", limit: int = 30) -> list[dict]:
     """tab = a dashboard tab label (e.g. 'To apply'); status = exact status name; query matches company/role/notes."""
-    config = SiteConfig.load()
-    qs = Application.objects.select_related("status", "status__bucket", "source")
+    config = _config()
+    qs = Application.objects.filter(owner=_owner()).select_related("status", "status__bucket", "source")
     if status:
         qs = qs.filter(status__name__iexact=status)
     if query:
@@ -88,7 +107,7 @@ def list_applications(tab: str = "", status: str = "", query: str = "", limit: i
 
 
 def get_application(app_id: int) -> dict:
-    config = SiteConfig.load()
+    config = _config()
     app = _app(app_id)
     data = _row(app, config)
     data.update(
@@ -112,7 +131,7 @@ def get_application(app_id: int) -> dict:
 
 def get_profile() -> dict:
     """The candidate's CV and preferences, for judging fit. Personal data: use it only for this user's job search."""
-    config = SiteConfig.load()
+    config = _config()
     return {
         "cv": config.effective_profile_cv[:12000],
         "preferences": config.profile_preferences,
@@ -124,7 +143,7 @@ def list_knowledge() -> list[dict]:
     """Documents the user has added about themselves (projects, work history, notes). Titles and sizes only."""
     return [
         {"title": s.title, "kind": s.get_kind_display(), "characters": len(s.text), "passages": s.chunks.count()}
-        for s in KnowledgeSource.objects.filter(enabled=True)
+        for s in KnowledgeSource.objects.filter(owner=_owner(), enabled=True)
     ]
 
 
@@ -133,7 +152,7 @@ def search_profile(query: str, limit: int = 6) -> list[dict]:
     query = _clip(query, 2500)
     if not query:
         raise ValueError("query is required.")
-    hits, info = knowledge.retrieve(query, SiteConfig.load(), k=max(1, min(int(limit), 12)))
+    hits, info = knowledge.retrieve(query, _config(), _owner(), k=max(1, min(int(limit), 12)))
     return [{"source": c.source.title, "kind": c.source.get_kind_display(), "text": c.text} for c in hits]
 
 
@@ -151,7 +170,7 @@ def add_application(company: str, role: str, url: str = "", description: str = "
     if url and not url.startswith(("http://", "https://")):
         raise ValueError("url must start with http:// or https://")
     app = Application.objects.create(
-        company=company, role=role, url=url.strip(), description=_clip(description, MAX_TEXT),
+        owner=_owner(), company=company, role=role, url=url.strip(), description=_clip(description, MAX_TEXT),
         notes=_clip(notes, 2000), status=_status(status),
     )
     Event.objects.create(application=app, kind="note", text="Added through MCP")
@@ -178,7 +197,7 @@ def save_evaluation(
     except ai.AIError as exc:
         raise ValueError(str(exc)) from exc
     app = _app(app_id)
-    ai.store_result(app, result, SiteConfig.load(), "ai:mcp")
+    ai.store_result(app, result, _config(), "ai:mcp")
     return {"id": app.pk, "match_percent": result["match_percent"], "verdict": result["verdict"]}
 
 
@@ -210,6 +229,6 @@ def check_open(app_id: int) -> dict:
     app = _app(app_id)
     if not app.url:
         raise ValueError("This application has no URL to check.")
-    state, detail = liveness.check_url(app.url, SiteConfig.load())
+    state, detail = liveness.check_url(app.url, _config())
     Application.objects.filter(pk=app.pk).update(live_state=state, live_detail=detail[:300], live_checked_at=timezone.now())
     return {"id": app.pk, "state": state, "detail": detail}

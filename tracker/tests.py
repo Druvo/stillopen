@@ -82,11 +82,12 @@ class ImportTests(TestCase):
         config = SiteConfig.load()
         config.careerops_path = str(root)
         config.save()
+        self.user = get_user_model().objects.create_user("importer", password="x" * 20, is_staff=True)
 
     def test_import_is_idempotent_and_keeps_local_status(self):
         config = SiteConfig.load()
-        careerops.import_all(config)
-        app = Application.objects.get(careerops_num=1)
+        careerops.import_all(config, self.user)
+        app = Application.objects.get(owner=self.user, careerops_num=1)
         self.assertEqual(app.status.name, "Applied")
         self.assertEqual(app.summary, "Great fit for backend work")
         self.assertEqual(app.deadline, date(2026, 10, 24))
@@ -96,13 +97,13 @@ class ImportTests(TestCase):
 
         app.status = Status.objects.get(name="Interview")
         app.save()
-        careerops.import_all(config)
+        careerops.import_all(config, self.user)
         app.refresh_from_db()
         self.assertEqual(app.status.name, "Interview")
-        self.assertEqual(Application.objects.count(), 2)
+        self.assertEqual(Application.objects.filter(owner=self.user).count(), 2)
         self.assertEqual(Document.objects.filter(application=app).count(), 3)
 
-        careerops.import_all(config, sync_status=True)
+        careerops.import_all(config, self.user, sync_status=True)
         app.refresh_from_db()
         self.assertEqual(app.status.name, "Applied")
 
@@ -110,7 +111,15 @@ class ImportTests(TestCase):
         config = SiteConfig.load()
         config.careerops_path = ""
         with self.assertRaises(careerops.ImportErrorMessage):
-            careerops.import_all(config)
+            careerops.import_all(config, self.user)
+
+    def test_two_people_can_import_the_same_tracker_without_clashing(self):
+        other = get_user_model().objects.create_user("other", password="x" * 20, is_staff=True)
+        config = SiteConfig.load()
+        careerops.import_all(config, self.user)
+        careerops.import_all(config, other)  # same row numbers, different owner: must not collide
+        self.assertEqual(Application.objects.filter(owner=self.user).count(), 2)
+        self.assertEqual(Application.objects.filter(owner=other).count(), 2)
 
 
 class ModelTests(TestCase):
@@ -144,7 +153,7 @@ class ViewTests(TestCase):
         self.client.force_login(self.user)
         self.evaluated = Status.objects.get(name="Evaluated")
         self.app = Application.objects.create(
-            company="Acme", role="Dev", status=self.evaluated, score=4.5, summary="Short summary",
+            owner=self.user, company="Acme", role="Dev", status=self.evaluated, score=4.5, summary="Short summary",
             deadline=date.today() + timedelta(days=2),
         )
 
@@ -189,7 +198,10 @@ class ViewTests(TestCase):
         r = strict.post(reverse("set_status", args=[self.app.pk]), {"status": self.evaluated.pk})
         self.assertEqual(r.status_code, 403)
 
-    def test_document_file_served_only_inside_allowed_folders(self):
+    def test_admin_documents_are_served_only_from_allowed_folders(self):
+        boss = get_user_model().objects.create_user("boss", password="x" * 20, is_staff=True)
+        boss_app = Application.objects.create(owner=boss, company="S", role="R", status=self.evaluated)
+        self.client.force_login(boss)
         with tempfile.TemporaryDirectory() as allowed, tempfile.TemporaryDirectory() as other:
             good = Path(allowed) / "cv.pdf"
             good.write_bytes(b"%PDF-1.4")
@@ -199,13 +211,36 @@ class ViewTests(TestCase):
             config.careerops_path = allowed
             config.save()
             kind = DocumentKind.objects.get(name="CV")
-            ok = Document.objects.create(application=self.app, kind=kind, title="cv", source_path=str(good))
-            nope = Document.objects.create(application=self.app, kind=kind, title="s", source_path=str(bad))
+            ok = Document.objects.create(application=boss_app, kind=kind, title="cv", source_path=str(good))
+            nope = Document.objects.create(application=boss_app, kind=kind, title="s", source_path=str(bad))
             r = self.client.get(reverse("document_file", args=[ok.pk]))
             self.assertEqual(r.status_code, 200)
             self.assertEqual(r["Content-Type"], "application/pdf")
             r.close()
             self.assertEqual(self.client.get(reverse("document_file", args=[nope.pk])).status_code, 404)
+
+    def test_ordinary_users_cannot_read_server_paths_through_documents(self):
+        with tempfile.TemporaryDirectory() as folder:
+            secret = Path(folder) / "cv.pdf"
+            secret.write_bytes(b"%PDF-1.4")
+            config = SiteConfig.load()
+            config.careerops_path = folder  # a server-side folder, set by an admin
+            config.save()
+            doc = Document.objects.create(application=self.app, kind=DocumentKind.objects.get(name="CV"), title="cv", source_path=str(secret))
+            self.assertEqual(self.client.get(reverse("document_file", args=[doc.pk])).status_code, 404)
+
+    def test_uploaded_documents_are_served_to_their_owner_only(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            from django.core.files.base import ContentFile
+
+            doc = Document(application=self.app, kind=DocumentKind.objects.get(name="CV"), title="cv")
+            doc.file.save("cv.pdf", ContentFile(b"%PDF-1.4"), save=True)
+            r = self.client.get(reverse("document_file", args=[doc.pk]))
+            self.assertEqual(r.status_code, 200)
+            r.close()
+            intruder = get_user_model().objects.create_user("intruder", password="x" * 20)
+            self.client.force_login(intruder)
+            self.assertEqual(self.client.get(reverse("document_file", args=[doc.pk])).status_code, 404)
 
 
 class PaperlessTests(TestCase):
@@ -251,7 +286,7 @@ class PaperlessTests(TestCase):
 
 
 class LivenessTests(TestCase):
-    @mock.patch("tracker.services.liveness.requests.get")
+    @mock.patch("tracker.services.liveness.safe_get")
     def test_http_check_uses_admin_phrases(self, get):
         from tracker.models import ExpiredPhrase
         ExpiredPhrase.objects.create(phrase="custom closed text")
@@ -259,12 +294,35 @@ class LivenessTests(TestCase):
         state, _ = liveness.check_http("https://x.test", SiteConfig.load())
         self.assertEqual(state, "expired")
 
-    @mock.patch("tracker.services.liveness.requests.get")
+    @mock.patch("tracker.services.liveness.safe_get")
     def test_http_active_and_404(self, get):
         get.return_value = mock.Mock(status_code=200, text="<button>Apply now</button>")
         self.assertEqual(liveness.check_http("https://x.test", SiteConfig.load())[0], "active")
         get.return_value = mock.Mock(status_code=404, text="")
         self.assertEqual(liveness.check_http("https://x.test", SiteConfig.load())[0], "expired")
+
+    def test_private_and_non_http_links_are_not_fetched(self):
+        config = SiteConfig.load()
+        config.liveness_mode = "http"  # the seeded default may be the local browser checker
+        state, detail = liveness.check_url("http://127.0.0.1:8000/admin/", config)
+        self.assertEqual(state, "uncertain")
+        self.assertIn("not checked", detail)
+        self.assertEqual(liveness.check_url("file:///etc/passwd", config)[0], "uncertain")
+        self.assertEqual(liveness.check_url("http://169.254.169.254/latest/meta-data/", config)[0], "uncertain")
+
+    def test_a_run_only_touches_its_owners_applications(self):
+        a = get_user_model().objects.create_user("a", password="x" * 20)
+        b = get_user_model().objects.create_user("b", password="x" * 20)
+        evaluated = Status.objects.get(name="Evaluated")
+        mine = Application.objects.create(owner=a, company="Mine", role="R", status=evaluated, url="https://a.example.com/1")
+        theirs = Application.objects.create(owner=b, company="Theirs", role="R", status=evaluated, url="https://b.example.com/1")
+        with mock.patch("tracker.services.liveness.check_url", return_value=("expired", "gone")):
+            run = liveness.start_run(a, background=False)
+        self.assertEqual((run.total, run.done), (1, 1))
+        mine.refresh_from_db()
+        theirs.refresh_from_db()
+        self.assertEqual(mine.live_state, "expired")
+        self.assertEqual(theirs.live_state, "unknown")
 
 
 class GoogleLoginTests(TestCase):

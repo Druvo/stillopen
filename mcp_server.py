@@ -23,6 +23,13 @@ from mcp.server.mcpserver.exceptions import ToolError  # noqa: E402
 from mcp.types import ToolAnnotations  # noqa: E402
 
 from tracker import mcp_tools as t  # noqa: E402
+from tracker.services import who  # noqa: E402
+
+# This process acts for exactly one account: STILLOPEN_USER, else the only superuser. It never sees anyone else's data.
+try:
+    t.set_user(who.resolve_user(os.environ.get("STILLOPEN_USER") or None))
+except who.WhoError as exc:
+    sys.exit(f"stillopen MCP: {exc}")
 
 INSTRUCTIONS = """StillOpen tracks one person's job search: roles, match %, summaries, deadlines, whether postings are still open, and documents.
 

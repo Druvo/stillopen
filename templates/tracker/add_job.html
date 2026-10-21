@@ -1,0 +1,20 @@
+{% extends "tracker/base_app.html" %}
+{% block title %}Add job{% endblock %}
+{% block content %}
+<h1>Add a job</h1>
+<p class="muted">Paste a role you are considering. With the description in place you can evaluate how well it fits you.</p>
+<form method="post" class="card">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for field in form %}
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+    {{ field.errors }}
+  {% endfor %}
+  <div class="row" style="margin-top:16px">
+    <button class="primary" type="submit">Add job</button>
+    <a class="btn" href="{% url 'dashboard' %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

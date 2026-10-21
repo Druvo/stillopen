@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from tracker import crypto
-from tracker.models import Application, SiteConfig, Status
+from tracker.models import Application, SiteConfig, Status, UserProfile
 from tracker.services import ai
 from tracker.services.jobtext import FetchError, check_public_url, fetch_description, html_to_text
 
@@ -25,6 +25,16 @@ def make_app(**kw):
     fields = {"company": "Acme", "role": "Dev", "status": Status.objects.get(name="Evaluated")}
     fields.update(kw)
     return Application.objects.create(**fields)
+
+
+def make_user(name="jane", staff=False, **profile_fields):
+    user = get_user_model().objects.create_user(name, password="x" * 20, is_staff=staff)
+    if profile_fields:
+        profile = UserProfile.for_user(user)
+        for key, value in profile_fields.items():
+            setattr(profile, key, value)
+        profile.save()
+    return user
 
 
 def isolated_config(**kw):
@@ -50,18 +60,19 @@ class CryptoTests(TestCase):
         with override_settings(SECRET_KEY="another-key"):
             self.assertEqual(crypto.decrypt(token), "")
 
-    def test_admin_form_stores_key_encrypted_keeps_it_when_blank_and_clears(self):
-        from tracker.admin import SiteConfigForm
+    def test_settings_form_stores_key_encrypted_keeps_it_when_blank_and_clears(self):
+        from tracker.forms import AISettingsForm
 
-        config = SiteConfig.load()
+        user = make_user()
 
         def submit(**extra):
-            data = {f.name: getattr(config, f.name) for f in SiteConfig._meta.fields if f.editable and f.name != "id"}
+            profile = UserProfile.for_user(user)
+            data = {name: getattr(profile, name) for name in AISettingsForm.Meta.fields}
             data.update(extra)
-            form = SiteConfigForm(data, instance=SiteConfig.load())
+            form = AISettingsForm(data, instance=profile, restricted=True)
             self.assertTrue(form.is_valid(), form.errors)
             form.save()
-            return SiteConfig.load()
+            return UserProfile.for_user(user)
 
         saved = submit(ai_api_key="sk-new-key")
         self.assertEqual(saved.effective_ai_key, "sk-new-key")
@@ -134,10 +145,13 @@ class KeywordFallbackTests(TestCase):
         ai.evaluate_application(self.app, self.config)  # its own earlier keyword result: allowed again
 
     def test_command_skips_scored_roles_by_default(self):
-        make_app(company="Scored", description=JD, score=4.2)
+        self.app.delete()
+        user = make_user("cmd2", profile_cv=CV)
+        make_app(owner=user, company="Scored", description=JD, score=4.2)
+        make_app(owner=user, company="Fresh", description=JD)
         out = StringIO()
-        call_command("evaluate_jobs", stdout=out)
-        self.assertIn("Evaluated 1 job", out.getvalue())  # only the unscored one
+        call_command("evaluate_jobs", "--user", "cmd2", stdout=out)
+        self.assertIn("evaluated 1 job", out.getvalue())  # only the unscored one
 
     def test_needs_a_cv_and_a_description(self):
         self.config.profile_cv = ""
@@ -148,9 +162,12 @@ class KeywordFallbackTests(TestCase):
             ai.evaluate_application(make_app(company="B"), self.config)
 
     def test_management_command(self):
+        self.app.delete()  # an ownerless row would be claimed by the first account (single-user upgrade path)
+        user = make_user("cmd", profile_cv=CV)
+        make_app(owner=user, company="Cmd Co", description=JD)
         out = StringIO()
-        call_command("evaluate_jobs", stdout=out)
-        self.assertIn("Evaluated 1 job", out.getvalue())
+        call_command("evaluate_jobs", "--user", "cmd", stdout=out)
+        self.assertIn("evaluated 1 job", out.getvalue())
 
 
 class BackendTests(TestCase):
@@ -274,8 +291,8 @@ class JobTextTests(TestCase):
         self.assertIn("Write C#", text)
         self.assertNotIn("steal", text)
 
-    @mock.patch("tracker.services.jobtext.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))])
-    @mock.patch("tracker.services.jobtext.requests.get")
+    @mock.patch("tracker.services.netguard.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))])
+    @mock.patch("tracker.services.netguard.requests.get")
     def test_fetch_and_thin_page(self, get, _dns):
         config = SiteConfig.load()
         config.careerops_path = ""
@@ -285,8 +302,8 @@ class JobTextTests(TestCase):
         with self.assertRaises(FetchError):
             fetch_description("https://jobs.example.com/1", config)
 
-    @mock.patch("tracker.services.jobtext.socket.getaddrinfo")
-    @mock.patch("tracker.services.jobtext.requests.get")
+    @mock.patch("tracker.services.netguard.socket.getaddrinfo")
+    @mock.patch("tracker.services.netguard.requests.get")
     def test_redirect_to_private_address_is_refused(self, get, dns):
         dns.side_effect = lambda host, port: [(2, 1, 6, "", ("127.0.0.1" if host == "internal.test" else "93.184.216.34", port))]
         get.return_value = mock.Mock(status_code=302, is_redirect=True, headers={"location": "http://internal.test/admin"}, text="")
@@ -298,9 +315,8 @@ class JobTextTests(TestCase):
 
 class EvaluateViewTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user("t", password="x" * 20)
-        isolated_config(profile_cv=CV)
-        self.app = make_app(description=JD)
+        self.user = make_user("t", profile_cv=CV)
+        self.app = make_app(owner=self.user, description=JD)
 
     def test_requires_login_and_post(self):
         url = reverse("evaluate", args=[self.app.pk])
@@ -313,7 +329,7 @@ class EvaluateViewTests(TestCase):
         r = self.client.post(reverse("evaluate", args=[self.app.pk]))
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["ok"])
-        r = self.client.post(reverse("evaluate", args=[make_app(company="B").pk]))
+        r = self.client.post(reverse("evaluate", args=[make_app(owner=self.user, company="B").pk]))
         self.assertEqual(r.status_code, 400)
         self.assertFalse(r.json()["ok"])
 

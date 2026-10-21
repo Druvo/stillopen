@@ -93,6 +93,11 @@ DATABASES = {
         "NAME": os.environ.get("STILLOPEN_DB", str(BASE_DIR / "db.sqlite3")),
     }
 }
+# Shared hosting: set DATABASE_URL (e.g. postgres://user:pass@host:5432/stillopen). Needs requirements-hosting.txt.
+if os.environ.get("DATABASE_URL"):
+    import dj_database_url
+
+    DATABASES["default"] = dj_database_url.parse(os.environ["DATABASE_URL"], conn_max_age=60)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -127,11 +132,33 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/dashboard/"
 LOGOUT_REDIRECT_URL = "/"
 
-# Local username/password login stays; accounts are never self-registered.
-# Google sign-in is controlled from the admin (Site configuration + Social applications).
-ACCOUNT_LOGIN_METHODS = {"username"}
-ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = "none"
+# Registration is controlled from the admin (Site configuration > Sign-up: closed or open).
+# Open sign-up needs a verified email, so configure SMTP (EMAIL_HOST...) before opening it; without SMTP the
+# verification link is printed to the server console.
+ACCOUNT_LOGIN_METHODS = {"username", "email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+# "optional" globally so accounts made in the admin or by createsuperuser (no confirmed email) are never locked out;
+# tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
+ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional")
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_PASSWORD_MIN_LENGTH = 10
+if os.environ.get("EMAIL_HOST"):
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.environ["EMAIL_HOST"]
+    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+    EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "StillOpen <noreply@localhost>")
+
+# Per-person limits on a shared server.
+STILLOPEN_MAX_APPLICATIONS = int(os.environ.get("STILLOPEN_MAX_APPLICATIONS", "500"))
+STILLOPEN_MAX_KNOWLEDGE = int(os.environ.get("STILLOPEN_MAX_KNOWLEDGE", "40"))
+STILLOPEN_EVALS_PER_HOUR = int(os.environ.get("STILLOPEN_EVALS_PER_HOUR", "30"))
+STILLOPEN_CHECKS_PER_HOUR = int(os.environ.get("STILLOPEN_CHECKS_PER_HOUR", "12"))
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 ACCOUNT_ADAPTER = "tracker.auth.AccountAdapter"
 SOCIALACCOUNT_ADAPTER = "tracker.auth.SocialAdapter"
 SOCIALACCOUNT_AUTO_SIGNUP = True
@@ -165,3 +192,11 @@ if not DEBUG:
     SESSION_COOKIE_HTTPONLY = True
     CSRF_COOKIE_HTTPONLY = False  # the dashboard JS reads the CSRF cookie
     SECURE_CONTENT_TYPE_NOSNIFF = True
+    if os.environ.get("DJANGO_HTTPS", "1") == "1":  # set DJANGO_HTTPS=0 only for plain-http testing
+        SESSION_COOKIE_SECURE = True
+        CSRF_COOKIE_SECURE = True
+        ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https"
+        SECURE_HSTS_SECONDS = 31536000
+        SECURE_REFERRER_POLICY = "same-origin"
+    if os.environ.get("DJANGO_BEHIND_PROXY") == "1":  # nginx/Caddy terminates TLS and sets X-Forwarded-Proto
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

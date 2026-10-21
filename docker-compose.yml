@@ -36,22 +36,35 @@ services:
       PAPERLESS_TIME_ZONE: Asia/Dhaka
       PAPERLESS_OCR_LANGUAGE: eng
 
+  db:
+    profiles: ["web"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: stillopen
+      POSTGRES_USER: stillopen
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - stillopen_pg:/var/lib/postgresql/data
+
   web:
     profiles: ["web"]
     build: .
     restart: unless-stopped
+    depends_on:
+      - db
     env_file: .env
     environment:
       DJANGO_DEBUG: "0"
-      STILLOPEN_DB: /data/db.sqlite3
+      DATABASE_URL: postgres://stillopen:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/stillopen
       STILLOPEN_MEDIA: /data/media
-      DJANGO_ALLOWED_HOSTS: web,127.0.0.1,localhost
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_BEHIND_PROXY: "1"
+      # Set DJANGO_HTTPS=1 once a TLS-terminating proxy is in front (required for secure cookies on the public internet).
+      DJANGO_HTTPS: ${DJANGO_HTTPS:-0}
       PAPERLESS_URL: http://paperless:8000
-      # In a container the host's career-ops folder must be mounted and the path set in Site configuration.
-      CAREEROPS_PATH: /careerops
     volumes:
       - stillopen_data:/data
-      - ${CAREEROPS_HOST_PATH:-./careerops-empty}:/careerops:ro
 
   nginx:
     profiles: ["web"]
@@ -69,3 +82,4 @@ volumes:
   paperless_media:
   paperless_redis:
   stillopen_data:
+  stillopen_pg:

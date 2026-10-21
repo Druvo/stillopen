@@ -51,14 +51,24 @@ a{color:var(--accent)}
     </div>
   </div>
   <div class="actions">
+    <a class="btn" href="{% url 'add_job' %}" style="background:var(--accent);border-color:var(--accent);color:#fff">Add job</a>
     <button id="btn-check">Check open/closed</button>
-    <button id="btn-import">Import from career-ops</button>
+    {% if can_import %}<button id="btn-import">Import from career-ops</button>{% endif %}
     {% if paperless_on %}<a class="btn" href="{{ paperless_url }}" target="_blank" rel="noopener">Paperless</a>{% endif %}
-    {% if user.is_staff %}<a class="btn" href="{% url 'admin:tracker_knowledgesource_changelist' %}">Profile &amp; knowledge</a>
-    <a class="btn" href="{% url 'admin:index' %}">Admin</a>{% endif %}
+    <a class="btn" href="{% url 'profile' %}">Profile</a>
+    <a class="btn" href="{% url 'knowledge' %}">Documents</a>
+    <a class="btn" href="{% url 'profile_ai' %}">AI</a>
+    {% if user.is_staff %}<a class="btn" href="{% url 'admin:index' %}">Admin</a>{% endif %}
     <form method="post" action="{% url 'account_logout' %}" style="display:inline">{% csrf_token %}<button type="submit">Sign out</button></form>
   </div>
 </header>
+{% for message in messages %}<div class="card" style="margin:12px 20px;border-color:{% if message.tags == 'error' %}var(--bad){% else %}var(--ok){% endif %}">{{ message }}</div>{% endfor %}
+{% if not profile.is_complete %}
+<div class="card" style="margin:12px 20px;border-color:var(--warn)">
+  <strong>Finish your profile.</strong> Add the roles you want and your CV so matches mean something.
+  <a href="{% url 'profile' %}?welcome=1">Open profile</a>
+</div>
+{% endif %}
 
 <div class="stats">
   <div class="stat"><b>{{ stats.total }}</b><span class="muted">Tracked roles</span></div>
@@ -188,7 +198,8 @@ document.querySelectorAll('[data-eval]').forEach(btn => btn.addEventListener('cl
   if (r.data.ok) location.reload(); else { toast(r.data.error || 'Evaluation failed'); btn.disabled = false; btn.textContent = label; }
 }));
 
-document.getElementById('btn-import').addEventListener('click', async (e) => {
+const importBtn = document.getElementById('btn-import');
+if (importBtn) importBtn.addEventListener('click', async (e) => {
   e.target.disabled = true;
   const r = await post('/api/import/');
   if (r.data.ok) { toast(`Imported: ${r.data.created} new, ${r.data.updated} refreshed`); setTimeout(() => location.reload(), 800); }

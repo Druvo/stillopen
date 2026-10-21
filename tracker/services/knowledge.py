@@ -1,4 +1,4 @@
-"""Candidate knowledge base and retrieval (RAG).
+"""Candidate knowledge base and retrieval (RAG). Everything here is scoped to one owner.
 
 Documents about the candidate are split into passages. For each job, the most relevant passages are retrieved and
 sent to the AI instead of the whole CV. Two rankers:
@@ -15,6 +15,7 @@ import requests
 from django.db.models import Q
 
 from tracker.models import KnowledgeChunk, KnowledgeSource, SiteConfig
+from tracker.services.netguard import FetchError, check_public_url
 from tracker.services.text import terms
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -32,6 +33,10 @@ class KnowledgeError(Exception):
     pass
 
 
+def _config(owner) -> SiteConfig:
+    return SiteConfig.for_user(owner) if owner else SiteConfig.load()
+
+
 # --- text in ------------------------------------------------------------------------------------
 
 def extract_text(uploaded) -> str:
@@ -41,14 +46,19 @@ def extract_text(uploaded) -> str:
         raise KnowledgeError("That file is larger than 2 MB.")
     uploaded.seek(0)
     if name.endswith((".txt", ".md", ".markdown")):
-        text = uploaded.read().decode("utf-8", errors="replace")
+        text = uploaded.read(MAX_FILE_BYTES + 1).decode("utf-8", errors="replace")
     elif name.endswith(".pdf"):
         try:
             from pypdf import PdfReader
         except ImportError as exc:
             raise KnowledgeError("Reading PDFs needs pypdf: pip install pypdf") from exc
         try:
-            text = "\n\n".join((page.extract_text() or "") for page in PdfReader(uploaded).pages)
+            reader = PdfReader(uploaded)
+            if len(reader.pages) > 60:
+                raise KnowledgeError("That PDF has more than 60 pages.")
+            text = "\n\n".join((page.extract_text() or "") for page in reader.pages)
+        except KnowledgeError:
+            raise
         except Exception as exc:  # noqa: BLE001 - pypdf raises many types for damaged files
             raise KnowledgeError(f"Could not read that PDF ({exc.__class__.__name__}).") from exc
     else:
@@ -85,7 +95,7 @@ def chunk_text(text: str, size: int = 900, overlap: int = 100) -> list[str]:
 
 def reindex_source(source: KnowledgeSource, config: SiteConfig | None = None) -> int:
     """Rebuild the passages of one source (embeddings are computed later, on demand)."""
-    config = config or SiteConfig.load()
+    config = config or _config(source.owner)
     source.chunks.all().delete()
     if not source.enabled or not source.text.strip():
         return 0
@@ -94,15 +104,15 @@ def reindex_source(source: KnowledgeSource, config: SiteConfig | None = None) ->
     return len(pieces)
 
 
-def _sync(key: str, title: str, kind: str, text: str, config: SiteConfig) -> KnowledgeSource | None:
+def _sync(owner, key: str, title: str, kind: str, text: str, config: SiteConfig) -> KnowledgeSource | None:
     """Keep an automatically managed source equal to `text` (created, updated or removed as needed)."""
-    source = KnowledgeSource.objects.filter(key=key).first()
+    source = KnowledgeSource.objects.filter(owner=owner, key=key).first()
     if not text.strip():
         if source:
             source.delete()
         return None
     if source is None:
-        source = KnowledgeSource.objects.create(key=key, title=title, kind=kind, text=text)
+        source = KnowledgeSource.objects.create(owner=owner, key=key, title=title, kind=kind, text=text)
         reindex_source(source, config)
     elif source.text != text:
         source.text = text
@@ -111,13 +121,11 @@ def _sync(key: str, title: str, kind: str, text: str, config: SiteConfig) -> Kno
     return source
 
 
-def sync_cv(config: SiteConfig) -> None:
-    """The pasted CV (or, if blank, career-ops cv.md) is always part of the knowledge base."""
-    _sync("profile-cv", "CV (pasted in Site configuration)", "cv", config.profile_cv, config)
-    if not config.profile_cv.strip():
-        _sync("careerops:cv.md", CAREEROPS_FILES[0][2], "cv", _read(config, "cv.md"), config)
-    else:
-        _sync("careerops:cv.md", CAREEROPS_FILES[0][2], "cv", "", config)
+def sync_cv(config: SiteConfig, owner) -> None:
+    """The pasted CV (or, for admins with a career-ops folder, its cv.md) is always part of the knowledge base."""
+    _sync(owner, "profile-cv", "CV (from your profile)", "cv", config.profile_cv, config)
+    fallback = "" if config.profile_cv.strip() else _read(config, "cv.md")
+    _sync(owner, "careerops:cv.md", CAREEROPS_FILES[0][2], "cv", fallback, config)
 
 
 def _read(config: SiteConfig, rel: str) -> str:
@@ -130,21 +138,21 @@ def _read(config: SiteConfig, rel: str) -> str:
         return ""
 
 
-def import_careerops(config: SiteConfig) -> list[str]:
+def import_careerops(config: SiteConfig, owner) -> list[str]:
     """Add or refresh sources from career-ops' user-authored files. Returns the titles imported."""
     done = []
     for rel, kind, title in CAREEROPS_FILES:
         text = _read(config, rel)
         if text.strip():
-            _sync(f"careerops:{rel}", title, kind, text, config)
+            _sync(owner, f"careerops:{rel}", title, kind, text, config)
             done.append(title)
     return done
 
 
 # --- retrieval ----------------------------------------------------------------------------------
 
-def _active_chunks() -> list[KnowledgeChunk]:
-    return list(KnowledgeChunk.objects.filter(source__enabled=True).select_related("source"))
+def _active_chunks(owner) -> list[KnowledgeChunk]:
+    return list(KnowledgeChunk.objects.filter(source__owner=owner, source__enabled=True).select_related("source"))
 
 
 def bm25_rank(query: str, chunks: list[KnowledgeChunk], k1: float = 1.5, b: float = 0.75) -> list[tuple[float, KnowledgeChunk]]:
@@ -176,7 +184,12 @@ def _cosine(a: list[float], b: list[float]) -> float:
 def embed_texts(texts: list[str], config: SiteConfig) -> list[list[float]]:
     base = (config.rag_embedding_base_url or config.ai_base_url or "https://api.openai.com/v1").rstrip("/")
     if not config.rag_embedding_model:
-        raise KnowledgeError("Set the embedding model in Site configuration.")
+        raise KnowledgeError("Set the embedding model in your profile.")
+    if getattr(config, "restricted", False):  # shared server: never call private or internal addresses
+        try:
+            check_public_url(base)
+        except FetchError as exc:
+            raise KnowledgeError(str(exc)) from exc
     key = config.effective_rag_key
     local = "127.0.0.1" in base or "localhost" in base
     if not key and not local:
@@ -193,6 +206,7 @@ def embed_texts(texts: list[str], config: SiteConfig) -> list[list[float]]:
                 headers=headers,
                 json={"model": config.rag_embedding_model, "input": batch},
                 timeout=config.ai_timeout,
+                allow_redirects=False,
             )
         except requests.RequestException as exc:
             raise KnowledgeError(f"Cannot reach the embeddings API: {exc.__class__.__name__}") from exc
@@ -208,9 +222,9 @@ def embed_texts(texts: list[str], config: SiteConfig) -> list[list[float]]:
     return vectors
 
 
-def embed_pending(config: SiteConfig) -> int:
-    """Compute vectors for passages that have none (or were made with another model)."""
-    todo = [c for c in _active_chunks() if not c.embedding or c.embedding_model != config.rag_embedding_model]
+def embed_pending(config: SiteConfig, owner) -> int:
+    """Compute vectors for this owner's passages that have none (or were made with another model)."""
+    todo = [c for c in _active_chunks(owner) if not c.embedding or c.embedding_model != config.rag_embedding_model]
     if not todo:
         return 0
     for chunk, vector in zip(todo, embed_texts([c.text for c in todo], config)):
@@ -219,18 +233,18 @@ def embed_pending(config: SiteConfig) -> int:
     return len(todo)
 
 
-def retrieve(query: str, config: SiteConfig, k: int | None = None) -> tuple[list[KnowledgeChunk], dict]:
-    """Most relevant passages for `query`. info says how they were ranked, and why a fallback happened."""
-    sync_cv(config)
-    chunks = _active_chunks()
+def retrieve(query: str, config: SiteConfig, owner, k: int | None = None) -> tuple[list[KnowledgeChunk], dict]:
+    """Most relevant passages of one owner's knowledge for `query`; info says how they were ranked and why a fallback happened."""
+    sync_cv(config, owner)
+    chunks = _active_chunks(owner)
     k = k or config.rag_top_k
     info = {"mode": config.rag_mode, "candidates": len(chunks), "fallback": ""}
     if not chunks:
         return [], info
     if config.rag_mode == "embeddings":
         try:
-            embed_pending(config)
-            fresh = _active_chunks()
+            embed_pending(config, owner)
+            fresh = _active_chunks(owner)
             qvec = embed_texts([query[:QUERY_CHARS]], config)[0]
             ranked = sorted(((_cosine(qvec, c.embedding), c) for c in fresh if c.embedding), key=lambda s: -s[0])
             return [c for _, c in ranked[:k]], info
@@ -241,12 +255,12 @@ def retrieve(query: str, config: SiteConfig, k: int | None = None) -> tuple[list
     return hits, info
 
 
-def all_candidate_text(config: SiteConfig) -> str:
-    """Everything the candidate has written down, for the free keyword match."""
-    sync_cv(config)
+def all_candidate_text(config: SiteConfig, owner) -> str:
+    """Everything this candidate has written down, for the free keyword match."""
+    sync_cv(config, owner)
     # key is NULL for hand-added sources, and NOT IN would drop NULL rows, so test for them explicitly.
     synced_cv = Q(key__in=["profile-cv", "careerops:cv.md"])
     parts = [config.effective_profile_cv] + list(
-        KnowledgeSource.objects.filter(enabled=True).exclude(synced_cv).values_list("text", flat=True)
+        KnowledgeSource.objects.filter(owner=owner, enabled=True).exclude(synced_cv).values_list("text", flat=True)
     )
     return "\n\n".join(p for p in parts if p)

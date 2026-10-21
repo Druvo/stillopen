@@ -5,13 +5,11 @@ import threading
 from datetime import timedelta
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-import requests
 from django.db import connections
 from django.utils import timezone
 
 from tracker.models import Application, ExpiredPhrase, LivenessRun, SiteConfig
-
-USER_AGENT = "Mozilla/5.0 (compatible; stillopen-liveness/1.0)"
+from tracker.services.netguard import FetchError, safe_get
 STALE_AFTER = timedelta(minutes=20)
 
 
@@ -58,14 +56,14 @@ def check_node(url: str, config: SiteConfig) -> tuple[str, str]:
 
 def check_http(url: str, config: SiteConfig) -> tuple[str, str]:
     try:
-        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=config.liveness_timeout, allow_redirects=True)
-    except requests.RequestException as exc:
-        return "uncertain", f"request failed: {exc.__class__.__name__}"
+        resp = safe_get(url, timeout=config.liveness_timeout)  # refuses private addresses, checks every redirect
+    except FetchError as exc:
+        return "uncertain", f"not checked: {exc}"[:300]
     if resp.status_code in (404, 410):
         return "expired", f"HTTP {resp.status_code}"
     if resp.status_code >= 400:
         return "uncertain", f"HTTP {resp.status_code}"
-    text = resp.text.lower()
+    text = resp.text[:2_000_000].lower()
     for ph in ExpiredPhrase.objects.all():
         if ph.phrase.lower() in text:
             return "expired", f'page says "{ph.phrase}"'
@@ -76,18 +74,20 @@ def check_http(url: str, config: SiteConfig) -> tuple[str, str]:
 
 def check_url(url: str, config: SiteConfig) -> tuple[str, str]:
     url = normalize_url(url)
+    if not url.startswith(("http://", "https://")):
+        return "uncertain", "not checked: only http(s) links can be checked"
     return check_node(url, config) if config.liveness_mode == "node" else check_http(url, config)
 
 
-def _targets():
-    return Application.objects.filter(status__is_terminal=False).exclude(url="")
+def _targets(owner):
+    return Application.objects.filter(owner=owner, status__is_terminal=False).exclude(url="")
 
 
 def _worker(run_id: int):
     try:
-        config = SiteConfig.load()
-        run = LivenessRun.objects.get(pk=run_id)
-        for app in _targets():
+        run = LivenessRun.objects.select_related("owner").get(pk=run_id)
+        config = SiteConfig.for_user(run.owner) if run.owner else SiteConfig.load()
+        for app in _targets(run.owner):
             state, detail = check_url(app.url, config)
             Application.objects.filter(pk=app.pk).update(
                 live_state=state, live_detail=detail[:300], live_checked_at=timezone.now()
@@ -101,8 +101,8 @@ def _worker(run_id: int):
         connections.close_all()
 
 
-def current_run() -> LivenessRun | None:
-    run = LivenessRun.objects.first()
+def current_run(owner) -> LivenessRun | None:
+    run = LivenessRun.objects.filter(owner=owner).first()
     if run and run.running and timezone.now() - run.started_at > STALE_AFTER:
         run.running = False
         run.error = run.error or "timed out"
@@ -111,11 +111,12 @@ def current_run() -> LivenessRun | None:
     return run
 
 
-def start_run(background: bool = True) -> LivenessRun:
-    existing = current_run()
+def start_run(owner, background: bool = True) -> LivenessRun:
+    """One check at a time per person; it only ever touches that person's applications."""
+    existing = current_run(owner)
     if existing and existing.running:
         return existing
-    run = LivenessRun.objects.create(total=_targets().count())
+    run = LivenessRun.objects.create(owner=owner, total=_targets(owner).count())
     if background:
         threading.Thread(target=_worker, args=(run.pk,), daemon=True).start()
     else:

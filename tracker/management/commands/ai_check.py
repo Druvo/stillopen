@@ -1,16 +1,23 @@
 from django.core.management.base import BaseCommand, CommandError
 
 from tracker.models import SiteConfig
-from tracker.services import ai
+from tracker.services import ai, who
 
 
 class Command(BaseCommand):
-    help = "Send one tiny request to the configured AI provider and report whether it answered usably."
+    help = "Send one tiny request to a user's configured AI provider and report whether it answered usably."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--user", help="Username (default: the only superuser).")
 
     def handle(self, *args, **opts):
-        config = SiteConfig.load()
+        try:
+            owner = who.resolve_user(opts["user"])
+        except who.WhoError as exc:
+            raise CommandError(str(exc)) from exc
+        config = SiteConfig.for_user(owner)
         if config.ai_provider == "none":
-            raise CommandError("AI provider is 'Off'. Choose one in Site configuration first.")
+            raise CommandError(f"{owner}: AI provider is 'Off'. Choose one in AI settings first.")
         backend = ai.BACKENDS[config.ai_provider]
         system = 'Reply with exactly this JSON and nothing else: {"ok": true}'
         try:

@@ -64,4 +64,4 @@ pip install -r requirements-mcp.txt
 claude mcp add stillopen -- <path-to-python> <path-to-stillopen>/mcp_server.py
 ```
 
-Use the project's virtualenv Python so Django and the database settings resolve. The server runs locally over stdio and uses the same database as the web app; nothing is exposed on the network.
+Use the project's virtualenv Python so Django and the database settings resolve. The server acts for one account: set `STILLOPEN_USER=<username>` in the MCP server's environment (omit it only when there is a single superuser). It can only see and change that person's data. The server runs locally over stdio and uses the same database as the web app; nothing is exposed on the network.

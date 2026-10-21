@@ -18,7 +18,8 @@ from django.utils import timezone
 
 from tracker.models import Application, Event, Insight, SiteConfig
 from tracker.services import knowledge
-from tracker.services.jobtext import FetchError, fetch_description
+from tracker.services.jobtext import fetch_description
+from tracker.services.netguard import FetchError, check_public_url
 from tracker.services.text import terms as _terms
 
 DEFAULT_MODELS = {"anthropic": "claude-sonnet-5-5", "openai": "gpt-4o-mini"}
@@ -58,7 +59,7 @@ def candidate_material(app: Application, config: SiteConfig) -> tuple[str, str]:
     if not config.rag_enabled:
         return _neutralise(full_cv)[:CV_LIMIT], "RAG off, full CV"
     query = f"{app.role} {app.company}\n{app.description[: knowledge.QUERY_CHARS]}"
-    hits, info = knowledge.retrieve(query, config)
+    hits, info = knowledge.retrieve(query, config, app.owner)
     if not hits:
         return _neutralise(full_cv)[:CV_LIMIT], "no knowledge sources, full CV"
     header = full_cv[: config.rag_always_chars].strip()
@@ -131,6 +132,15 @@ def validate_result(raw) -> dict:
 
 # --- backends -----------------------------------------------------------------------------------
 
+def _guard(url: str, config: SiteConfig) -> None:
+    """On a shared server, ordinary users may only call public addresses (never localhost, LAN or cloud metadata)."""
+    if getattr(config, "restricted", False):
+        try:
+            check_public_url(url)
+        except FetchError as exc:
+            raise AIError(f"Blocked: {exc}") from exc
+
+
 def _anthropic(system: str, user: str, config: SiteConfig) -> str:
     key = config.effective_ai_key
     if not key:
@@ -146,6 +156,7 @@ def _anthropic(system: str, user: str, config: SiteConfig) -> str:
                 "messages": [{"role": "user", "content": user}],
             },
             timeout=config.ai_timeout,
+            allow_redirects=False,
         )
     except requests.RequestException as exc:
         raise AIError(f"Cannot reach Anthropic: {exc.__class__.__name__}") from exc
@@ -156,6 +167,7 @@ def _anthropic(system: str, user: str, config: SiteConfig) -> str:
 
 def _openai(system: str, user: str, config: SiteConfig) -> str:
     base = (config.ai_base_url or "https://api.openai.com/v1").rstrip("/")
+    _guard(base, config)
     key = config.effective_ai_key
     if not key and not config.ai_base_url:
         raise AIError("Add an API key, or set a base URL for a local server.")
@@ -172,6 +184,7 @@ def _openai(system: str, user: str, config: SiteConfig) -> str:
                 "temperature": 0.2,
             },
             timeout=config.ai_timeout,
+            allow_redirects=False,
         )
     except requests.RequestException as exc:
         raise AIError(f"Cannot reach the API: {exc.__class__.__name__}") from exc
@@ -224,6 +237,7 @@ def _custom_http(system: str, user: str, config: SiteConfig) -> str:
         body_template = json.loads(config.ai_custom_body)
     except ValueError as exc:
         raise AIError("The request body template is not valid JSON.") from exc
+    _guard(url, config)
     mapping = {"system": system, "prompt": user, "model": config.ai_model, "api_key": config.effective_ai_key}
     headers = {"Content-Type": "application/json"}
     for line in config.ai_custom_headers.splitlines():
@@ -233,7 +247,10 @@ def _custom_http(system: str, user: str, config: SiteConfig) -> str:
     if "{{api_key}}" in config.ai_custom_headers.replace(" ", "") and not mapping["api_key"]:
         raise AIError("The headers use {{api_key}} but no AI key is saved.")
     try:
-        r = requests.post(url, headers=headers, json=fill_template(body_template, mapping), timeout=config.ai_timeout)
+        r = requests.post(
+            url, headers=headers, json=fill_template(body_template, mapping),
+            timeout=config.ai_timeout, allow_redirects=False,
+        )
     except requests.RequestException as exc:
         raise AIError(f"Cannot reach the API: {exc.__class__.__name__}") from exc
     if r.status_code >= 400:
@@ -400,7 +417,7 @@ def store_result(app: Application, result: dict, config: SiteConfig, method: str
 
 
 def evaluate_application(app: Application, config: SiteConfig | None = None) -> dict:
-    config = config or SiteConfig.load()
+    config = config or (SiteConfig.for_user(app.owner) if app.owner else SiteConfig.load())
     ensure_description(app, config)
     if config.ai_provider == "none":
         if app.score is not None and app.ai_method != "keywords":
@@ -408,7 +425,7 @@ def evaluate_application(app: Application, config: SiteConfig | None = None) -> 
                 "Already scored (career-ops, AI or by hand). The free keyword match won't overwrite that: "
                 "turn on an AI provider to re-evaluate, or clear the score first."
             )
-        result, method, note = keyword_match(app.description, knowledge.all_candidate_text(config)), "keywords", ""
+        result, method, note = keyword_match(app.description, knowledge.all_candidate_text(config, app.owner)), "keywords", ""
     else:
         backend = BACKENDS.get(config.ai_provider)
         if backend is None:

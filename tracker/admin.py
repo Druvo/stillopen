@@ -18,7 +18,9 @@ from .models import (
     SiteConfig,
     Source,
     Status,
+    UserProfile,
 )
+from .forms import SecretKeysMixin
 from .services import ai, knowledge, liveness
 from .services.paperless import PaperlessClient, PaperlessError, push_document
 
@@ -30,28 +32,6 @@ class SiteConfigForm(forms.ModelForm):
         help_text="Leave blank to keep the saved token. The PAPERLESS_TOKEN environment variable takes precedence.",
     )
 
-    ai_api_key = forms.CharField(
-        required=False,
-        widget=forms.PasswordInput(render_value=False),
-        label="AI API key",
-        help_text=(
-            "Stored encrypted, never shown again. Leave blank to keep the saved key. "
-            "The STILLOPEN_AI_API_KEY environment variable takes precedence. "
-            "Not needed for Claude Code CLI or the Agent SDK if they are already logged in."
-        ),
-    )
-    clear_ai_key = forms.BooleanField(required=False, label="Delete the saved AI key")
-    rag_embedding_key = forms.CharField(
-        required=False,
-        widget=forms.PasswordInput(render_value=False),
-        label="Embeddings API key",
-        help_text=(
-            "Stored encrypted, never shown again. Blank keeps the saved key; if none is saved the AI key is used. "
-            "STILLOPEN_EMBEDDING_API_KEY takes precedence."
-        ),
-    )
-    clear_rag_key = forms.BooleanField(required=False, label="Delete the saved embeddings key")
-
     class Meta:
         model = SiteConfig
         fields = "__all__"
@@ -60,68 +40,25 @@ class SiteConfigForm(forms.ModelForm):
         token = self.cleaned_data.get("paperless_token", "")
         return token or (self.instance.paperless_token if self.instance else "")
 
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        if self.cleaned_data.get("clear_ai_key"):
-            instance.ai_key_encrypted = ""
-        elif self.cleaned_data.get("ai_api_key"):
-            instance.set_ai_key(self.cleaned_data["ai_api_key"])
-        if self.cleaned_data.get("clear_rag_key"):
-            instance.rag_embedding_key_encrypted = ""
-        elif self.cleaned_data.get("rag_embedding_key"):
-            instance.set_rag_key(self.cleaned_data["rag_embedding_key"])
-        if commit:
-            instance.save()
-        return instance
-
 
 @admin.register(SiteConfig)
 class SiteConfigAdmin(admin.ModelAdmin):
     form = SiteConfigForm
     fieldsets = (
         ("Dashboard", {"fields": ("site_title", "score_scale", "urgent_days", "auto_close_expired")}),
+        (
+            "Registration",
+            {
+                "fields": ("signup_mode",),
+                "description": (
+                    "<strong>Open</strong> lets anyone register. New users must confirm their email, so configure SMTP "
+                    "(EMAIL_HOST in the environment) first. Everyone only ever sees their own data."
+                ),
+            },
+        ),
         ("Landing page", {"fields": ("landing_enabled", "landing_headline", "landing_subheadline", "landing_github_url")}),
-        ("career-ops import", {"fields": ("careerops_path", "node_command")}),
-        (
-            "Your profile (used for matching)",
-            {
-                "fields": ("profile_cv", "profile_preferences"),
-                "description": (
-                    "Your CV and what you are looking for. Put longer material (projects, work history details, cover letters, "
-                    "certificates, PDFs) under <strong>Knowledge sources</strong>. Sent to the AI provider you choose, "
-                    "and only when you evaluate a job."
-                ),
-            },
-        ),
-        (
-            "Retrieval (RAG)",
-            {
-                "fields": (
-                    "rag_enabled", "rag_mode", "rag_top_k", "rag_chunk_chars", "rag_always_chars",
-                    "rag_embedding_base_url", "rag_embedding_model", "rag_embedding_key", "clear_rag_key",
-                ),
-                "description": (
-                    "Instead of sending the whole CV, send the passages of your CV and knowledge sources that best match each job. "
-                    "<strong>Keyword ranking</strong> is free and offline. <strong>Embeddings</strong> understand meaning but send your "
-                    "text passages to the embeddings service you configure."
-                ),
-            },
-        ),
-        (
-            "AI evaluation",
-            {
-                "fields": (
-                    "ai_provider", "ai_model", "ai_base_url",
-                    "ai_custom_headers", "ai_custom_body", "ai_custom_response_path",
-                    "ai_claude_command", "ai_api_key", "clear_ai_key", "ai_timeout", "ai_max_input_chars",
-                ),
-                "description": (
-                    "Pick how jobs are scored. <strong>Off</strong> uses a free keyword match against your CV. "
-                    "The other options send the job text, your CV and your preferences to that provider. "
-                    "Claude Code CLI and the Agent SDK run with all tools disabled."
-                ),
-            },
-        ),
+        ("Legal", {"fields": ("privacy_text", "terms_text"), "description": "Shown at /privacy/ and /terms/. Replace the defaults."}),
+        ("career-ops import (site admins only)", {"fields": ("careerops_path", "node_command")}),
         ("Open / closed check", {"fields": ("liveness_mode", "liveness_timeout")}),
         (
             "Google sign-in",
@@ -135,7 +72,7 @@ class SiteConfigAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Paperless-ngx",
+            "Paperless-ngx (site admins only)",
             {"fields": ("paperless_enabled", "paperless_url", "paperless_token", "paperless_verify_tls", "paperless_auto_upload")},
         ),
     )
@@ -153,6 +90,53 @@ class SiteConfigAdmin(admin.ModelAdmin):
 
     def response_post_save_change(self, request, obj):
         return HttpResponseRedirect(reverse("admin:tracker_siteconfig_change", args=[1]))
+
+
+class UserProfileAdminForm(SecretKeysMixin, forms.ModelForm):
+    class Meta:
+        model = UserProfile
+        fields = "__all__"
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        self.apply_secrets(instance)
+        if commit:
+            instance.save()
+        return instance
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    form = UserProfileAdminForm
+    list_display = ("user", "ai_provider", "rag_mode", "complete", "updated_at")
+    search_fields = ("user__username", "user__email")
+    fieldsets = (
+        (None, {"fields": ("user",)}),
+        ("What they want", {"fields": ("target_roles", "locations", "remote_preference", "salary_floor", "deal_breakers", "about")}),
+        ("CV", {"fields": ("profile_cv",)}),
+        (
+            "AI evaluation",
+            {
+                "fields": (
+                    "ai_provider", "ai_model", "ai_base_url", "ai_custom_headers", "ai_custom_body", "ai_custom_response_path",
+                    "ai_claude_command", "ai_api_key", "clear_ai_key", "ai_timeout", "ai_max_input_chars",
+                ),
+            },
+        ),
+        (
+            "Retrieval (RAG)",
+            {
+                "fields": (
+                    "rag_enabled", "rag_mode", "rag_top_k", "rag_chunk_chars", "rag_always_chars",
+                    "rag_embedding_base_url", "rag_embedding_model", "rag_embedding_key", "clear_rag_key",
+                ),
+            },
+        ),
+    )
+
+    @admin.display(description="Complete", boolean=True)
+    def complete(self, obj):
+        return obj.is_complete
 
 
 @admin.register(Bucket)
@@ -193,10 +177,10 @@ class DocumentKindAdmin(admin.ModelAdmin):
 
 @admin.register(KnowledgeSource)
 class KnowledgeSourceAdmin(admin.ModelAdmin):
-    list_display = ("title", "kind", "enabled", "characters", "passages", "embedded", "updated_at")
+    list_display = ("title", "owner", "kind", "enabled", "characters", "passages", "embedded", "updated_at")
     list_filter = ("kind", "enabled")
-    search_fields = ("title", "text")
-    fields = ("title", "kind", "enabled", "text", "file")
+    search_fields = ("title", "text", "owner__username")
+    fields = ("owner", "title", "kind", "enabled", "text", "file")
     actions = ["reindex", "compute_embeddings"]
     change_list_template = "admin/tracker/knowledgesource/change_list.html"
 
@@ -223,7 +207,7 @@ class KnowledgeSourceAdmin(admin.ModelAdmin):
     def import_careerops_view(self, request):
         if request.method != "POST":
             return HttpResponseRedirect(reverse("admin:tracker_knowledgesource_changelist"))
-        done = knowledge.import_careerops(SiteConfig.load())
+        done = knowledge.import_careerops(SiteConfig.for_user(request.user), request.user)
         if done:
             self.message_user(request, "Imported from career-ops: " + ", ".join(done) + ".")
         else:
@@ -236,20 +220,23 @@ class KnowledgeSourceAdmin(admin.ModelAdmin):
                 obj.text = knowledge.extract_text(obj.file.file)
         except knowledge.KnowledgeError as exc:
             self.message_user(request, f"File not read: {exc}", messages.ERROR)
+        if not obj.owner_id:
+            obj.owner = request.user
         super().save_model(request, obj, form, change)
         count = knowledge.reindex_source(obj)
         self.message_user(request, f"Split into {count} passage(s).")
 
     @admin.action(description="Rebuild passages")
     def reindex(self, request, queryset):
-        config = SiteConfig.load()
-        total = sum(knowledge.reindex_source(s, config) for s in queryset)
+        total = sum(knowledge.reindex_source(s) for s in queryset)
         self.message_user(request, f"Rebuilt {total} passage(s).")
 
     @admin.action(description="Compute embeddings now (Embeddings mode)")
     def compute_embeddings(self, request, queryset):
+        done = 0
         try:
-            done = knowledge.embed_pending(SiteConfig.load())
+            for owner in {s.owner for s in queryset.select_related("owner")}:
+                done += knowledge.embed_pending(SiteConfig.for_user(owner) if owner else SiteConfig.load(), owner)
         except knowledge.KnowledgeError as exc:
             self.message_user(request, str(exc), messages.ERROR)
             return
@@ -283,31 +270,35 @@ def _paperless_client(request, config):
 
 @admin.register(Application)
 class ApplicationAdmin(admin.ModelAdmin):
-    list_display = ("careerops_num", "company", "role", "status", "match", "decision", "live_state", "deadline", "applied_date")
+    list_display = ("careerops_num", "owner", "company", "role", "status", "match", "decision", "live_state", "deadline", "applied_date")
     list_display_links = ("company", "role")
     list_editable = ("status",)
-    list_filter = ("status", "status__bucket", "live_state", "risk", "source")
-    search_fields = ("company", "role", "notes", "summary")
+    list_filter = ("owner", "status", "status__bucket", "live_state", "risk", "source")
+    search_fields = ("company", "role", "notes", "summary", "owner__username")
     date_hierarchy = "found_date"
     inlines = [InsightInline, DocumentInline, EventInline]
     readonly_fields = ("live_state", "live_detail", "live_checked_at", "ai_evaluated_at", "ai_method", "created_at", "updated_at")
     fieldsets = (
-        (None, {"fields": ("company", "role", "url", "source", "status", "careerops_num")}),
+        (None, {"fields": ("owner", "company", "role", "url", "source", "status", "careerops_num")}),
         ("Job description", {"fields": ("description", "ai_evaluated_at", "ai_method")}),
         ("Evaluation", {"fields": ("score", "decision", "legitimacy", "risk", "summary", "next_action", "advertised_pay", "report_path")}),
         ("Dates", {"fields": ("found_date", "applied_date", "deadline")}),
         ("Notes", {"fields": ("notes",)}),
         ("Open / closed check", {"fields": ("live_state", "live_detail", "live_checked_at")}),
     )
+    def save_model(self, request, obj, form, change):
+        if not obj.owner_id:
+            obj.owner = request.user
+        super().save_model(request, obj, form, change)
+
     actions = ["evaluate_match", "mark_applied", "mark_discarded", "check_open_status", "push_documents_to_paperless"]
 
     @admin.action(description="Evaluate match (AI provider, or keyword match if AI is off)")
     def evaluate_match(self, request, queryset):
-        config = SiteConfig.load()
         ok, failed = 0, []
-        for app in queryset:
+        for app in queryset.select_related("owner"):
             try:
-                ai.evaluate_application(app, config)
+                ai.evaluate_application(app)  # uses the application owner's own AI settings and profile
                 ok += 1
             except ai.AIError as exc:
                 failed.append(f"{app.company}: {exc}")

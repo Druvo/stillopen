@@ -8,7 +8,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from tracker import mcp_tools
-from tracker.models import Application, KnowledgeChunk, KnowledgeSource, SiteConfig, Status
+from tracker.models import Application, KnowledgeChunk, KnowledgeSource, SiteConfig, Status, UserProfile
 from tracker.services import ai, knowledge
 
 GOOD_JSON = '{"match_percent": 70, "verdict": "Consider", "summary": "ok", "strengths": [], "gaps": [], "risk": "Low", "next_action": ""}'
@@ -63,22 +63,22 @@ class RetrievalTests(TestCase):
         source("Library app", BOOKS)
 
     def test_lexical_ranks_the_relevant_source_first(self):
-        hits, info = knowledge.retrieve("kubernetes helm monitoring platform", self.config, k=1)
+        hits, info = knowledge.retrieve("kubernetes helm monitoring platform", self.config, None, k=1)
         self.assertEqual(hits[0].source.title, "Platform work")
         self.assertEqual(info["mode"], "lexical")
         self.assertEqual(info["fallback"], "")
 
     def test_disabled_sources_are_never_returned(self):
         KnowledgeSource.objects.filter(title="Platform work").update(enabled=False)
-        hits, _ = knowledge.retrieve("kubernetes helm", self.config, k=5)
+        hits, _ = knowledge.retrieve("kubernetes helm", self.config, None, k=5)
         self.assertNotIn("Platform work", [h.source.title for h in hits])
 
     def test_pasted_cv_is_indexed_and_follows_edits(self):
-        hits, _ = knowledge.retrieve("payment systems bank", self.config, k=1)
+        hits, _ = knowledge.retrieve("payment systems bank", self.config, None, k=1)
         self.assertEqual(hits[0].source.key, "profile-cv")
         self.config.profile_cv = "Totally new CV about embedded firmware."
         self.config.save()
-        knowledge.retrieve("firmware", self.config)
+        knowledge.retrieve("firmware", self.config, None)
         self.assertIn("firmware", KnowledgeSource.objects.get(key="profile-cv").text)
         self.assertFalse(KnowledgeChunk.objects.filter(text__icontains="payment").exists())
 
@@ -87,17 +87,17 @@ class RetrievalTests(TestCase):
             (Path(root) / "cv.md").write_text("Fallback CV about Rust.", encoding="utf-8")
             (Path(root) / "article-digest.md").write_text("Proof point: shipped a compiler.", encoding="utf-8")
             config = cfg(profile_cv="", careerops_path=root)
-            knowledge.retrieve("rust", config)
+            knowledge.retrieve("rust", config, None)
             self.assertTrue(KnowledgeSource.objects.filter(key="careerops:cv.md").exists())
-            done = knowledge.import_careerops(config)
+            done = knowledge.import_careerops(config, None)
             self.assertEqual(len(done), 2)  # _profile.md is absent
             self.assertTrue(KnowledgeSource.objects.filter(key="careerops:article-digest.md").exists())
-            knowledge.import_careerops(config)  # idempotent
+            knowledge.import_careerops(config, None)  # idempotent
             self.assertEqual(KnowledgeSource.objects.filter(key__startswith="careerops:").count(), 2)
 
 
 def fake_embeddings(calls):
-    def post(url, headers=None, json=None, timeout=None):
+    def post(url, headers=None, json=None, timeout=None, allow_redirects=True):
         calls.append({"url": url, "headers": headers, "inputs": list(json["input"]), "model": json["model"]})
         vecs = [{"index": i, "embedding": [t.lower().count("kubernetes") + t.lower().count("helm"),
                                             t.lower().count("react") + t.lower().count("library"), 0.01]}
@@ -117,11 +117,11 @@ class EmbeddingTests(TestCase):
     def test_semantic_ranking_and_caching(self):
         calls = []
         with mock.patch("tracker.services.knowledge.requests.post", side_effect=fake_embeddings(calls)):
-            hits, info = knowledge.retrieve("we run kubernetes with helm", self.config, k=1)
+            hits, info = knowledge.retrieve("we run kubernetes with helm", self.config, None, k=1)
             self.assertEqual(hits[0].source.title, "Platform work")
             self.assertEqual(info["mode"], "embeddings")
             first = len(calls)
-            knowledge.retrieve("react library app", self.config, k=1)
+            knowledge.retrieve("react library app", self.config, None, k=1)
         self.assertEqual(len(calls), first + 1)  # passages were cached; only the new query was embedded
         self.assertEqual(calls[0]["url"], "https://emb.example.test/v1/embeddings")
         self.assertEqual(calls[0]["headers"]["authorization"], "Bearer emb-key")
@@ -130,16 +130,16 @@ class EmbeddingTests(TestCase):
     def test_changing_the_model_re_embeds(self):
         calls = []
         with mock.patch("tracker.services.knowledge.requests.post", side_effect=fake_embeddings(calls)):
-            knowledge.embed_pending(self.config)
+            knowledge.embed_pending(self.config, None)
             n = len(calls)
             self.config.rag_embedding_model = "embed-2"
-            knowledge.embed_pending(self.config)
+            knowledge.embed_pending(self.config, None)
         self.assertGreater(len(calls), n)
         self.assertEqual(set(KnowledgeChunk.objects.values_list("embedding_model", flat=True)), {"embed-2"})
 
     def test_falls_back_to_lexical_and_says_why(self):
         with mock.patch("tracker.services.knowledge.requests.post", return_value=mock.Mock(status_code=500)):
-            hits, info = knowledge.retrieve("kubernetes helm", self.config, k=1)
+            hits, info = knowledge.retrieve("kubernetes helm", self.config, None, k=1)
         self.assertEqual(info["mode"], "lexical")
         self.assertIn("HTTP 500", info["fallback"])
         self.assertEqual(hits[0].source.title, "Platform work")
@@ -287,16 +287,18 @@ class AdminTests(TestCase):
         self.assertContains(self.client.get(reverse("admin:tracker_knowledgesource_changelist")), "Import from career-ops")
 
     def test_rag_key_form_encrypts_keeps_and_clears(self):
-        from tracker.admin import SiteConfigForm
+        from tracker.forms import AISettingsForm
+
+        user = get_user_model().objects.create_user("keyholder", password="x" * 20)
 
         def submit(**extra):
-            config = SiteConfig.load()
-            data = {f.name: getattr(config, f.name) for f in SiteConfig._meta.fields if f.editable and f.name != "id"}
+            profile = UserProfile.for_user(user)
+            data = {name: getattr(profile, name) for name in AISettingsForm.Meta.fields}
             data.update(extra)
-            form = SiteConfigForm(data, instance=config)
+            form = AISettingsForm(data, instance=profile, restricted=True)
             self.assertTrue(form.is_valid(), form.errors)
             form.save()
-            return SiteConfig.load()
+            return UserProfile.for_user(user)
 
         saved = submit(rag_embedding_key="emb-secret")
         self.assertNotIn("emb-secret", saved.rag_embedding_key_encrypted)
@@ -307,8 +309,12 @@ class AdminTests(TestCase):
 
 class McpKnowledgeTests(TestCase):
     def setUp(self):
-        cfg()
-        source("Platform work", K8S)
+        self.user = get_user_model().objects.create_user("kn", password="x" * 20)
+        UserProfile.objects.filter(user=self.user).update(profile_cv=CV)
+        src = KnowledgeSource.objects.create(owner=self.user, title="Platform work", text=K8S, kind="project")
+        knowledge.reindex_source(src)
+        mcp_tools.set_user(self.user)
+        self.addCleanup(mcp_tools.set_user, None)
 
     def test_search_profile_and_list(self):
         hits = mcp_tools.search_profile("kubernetes helm")

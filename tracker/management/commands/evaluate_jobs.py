@@ -1,19 +1,24 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from tracker.models import Application, SiteConfig
-from tracker.services import ai
+from tracker.services import ai, who
 
 
 class Command(BaseCommand):
-    help = "Evaluate match for applications with the configured AI provider (or keyword match when AI is off)."
+    help = "Evaluate match for one user's applications with their AI provider (or keyword match when AI is off)."
 
     def add_arguments(self, parser):
+        parser.add_argument("--user", help="Username (default: the only superuser).")
         parser.add_argument("--all", action="store_true", help="Also re-evaluate roles that already have a score.")
         parser.add_argument("--limit", type=int, default=20, help="Maximum number of jobs to evaluate in one run.")
 
     def handle(self, *args, **opts):
-        config = SiteConfig.load()
-        qs = Application.objects.filter(status__is_terminal=False)
+        try:
+            owner = who.resolve_user(opts["user"])
+        except who.WhoError as exc:
+            raise CommandError(str(exc)) from exc
+        config = SiteConfig.for_user(owner)
+        qs = Application.objects.filter(owner=owner, status__is_terminal=False)
         if not opts["all"]:
             qs = qs.filter(score__isnull=True)  # never replace scores that career-ops or you already set
         done = 0
@@ -25,4 +30,4 @@ class Command(BaseCommand):
                 continue
             done += 1
             self.stdout.write(f"{app.company} - {app.role}: {result['match_percent']}% ({app.ai_method})")
-        self.stdout.write(f"Evaluated {done} job(s) using '{config.ai_provider}'.")
+        self.stdout.write(f"{owner}: evaluated {done} job(s) using '{config.ai_provider}'.")

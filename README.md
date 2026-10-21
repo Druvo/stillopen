@@ -1,7 +1,16 @@
 # StillOpen
 
-Job-search dashboard on Django, fed by your career-ops folder, with Paperless-ngx for documents.
-Everything that changes behaviour is a row in the admin, not code.
+Job-search dashboard on Django. Each person registers, adds the roles they want and their CV, tracks the jobs they are chasing, and sees a match percentage and whether each posting is still open. Optional AI scoring with your own key, retrieval over your own documents, an MCP server for Claude Code, Paperless-ngx for documents, and a career-ops import for admins. Everything that changes behaviour is a row in the admin, not code.
+
+It runs two ways: on your own machine for one person, or as a shared service for many people (each only ever sees their own data). Hosting guide: [docs/HOSTING.md](docs/HOSTING.md).
+
+## For people using it
+
+1. Register (or sign in), then open **Profile**: the roles you want, where, remote preference, salary floor, deal-breakers, and your CV (upload a PDF, .txt or .md, or paste it).
+2. **Add job**: paste the company, role, link and the job description.
+3. Press **Evaluate match** on a job. With no AI configured you get a free keyword match; under **AI settings** you can use your own API key (Anthropic, OpenAI-compatible, Gemini, Groq, OpenRouter, a custom API...) for a real evaluation.
+4. **Documents**: add projects, work history, certificates and cover letters. For each job only the relevant passages are sent to the AI.
+5. **Profile > Your data**: export everything as JSON, or delete your account and all data.
 
 ## Run it
 
@@ -9,24 +18,28 @@ Everything that changes behaviour is a row in the admin, not code.
 cd stillopen
 .venv\Scripts\python.exe manage.py migrate
 .venv\Scripts\python.exe manage.py createsuperuser
-.venv\Scripts\python.exe manage.py import_careerops
 .venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 ```
 
-Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboard/ (the dashboard, login required) and http://127.0.0.1:8000/admin/ (configuration). Copy `.env.example` to `.env` first if you want to change the career-ops path or Paperless URL before the first `migrate`.
+Optional, admins only: `.venv\Scripts\python.exe manage.py import_careerops` loads a career-ops folder into your account. Jobs and settings created before accounts existed are given to the first account you create (or run `manage.py claim_data <username>`).
+
+Management commands act for one person: pass `--user NAME`, or leave it out when there is exactly one superuser. `check_liveness --all-users` suits a scheduled job.
+
+Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboard/ (the dashboard, login required) and http://127.0.0.1:8000/admin/ (site configuration). Copy `.env.example` to `.env` first if you want to change the career-ops path or Paperless URL before the first `migrate`.
 
 ## What you can change in the admin
 
 | Admin section | Controls |
 | --- | --- |
-| Site configuration | Dashboard title, landing page on/off, headline, sub-headline and GitHub link, score scale (match % = score / scale), urgent-deadline window, auto-close of expired postings, career-ops folder, Node command, open/closed check mode and timeout, Paperless URL/token/TLS/auto-upload |
+| Site configuration | Dashboard title, registration open/closed, privacy and terms text, landing page on/off, headline, sub-headline and GitHub link, score scale (match % = score / scale), urgent-deadline window, auto-close of expired postings, career-ops folder, Node command, open/closed check mode and timeout, Paperless URL/token/TLS/auto-upload |
 | Buckets | The dashboard tabs: label, order, which one is the "closed" tab |
 | Statuses | Names, colour, tab, whether a status counts as "CV submitted" (stamps the applied date), whether it is terminal (skipped by the open/closed check) |
 | Score bands | Labels and colours per match % threshold |
 | Document kinds | File-name keywords that classify PDFs (CV, cover letter...), plus the Paperless tag and document type for each |
 | Sources | Job-site names matched against the posting URL |
 | Expired phrases | Text that marks a posting as closed (built-in HTTP check) |
-| Applications | Edit any role, add notes/insights/documents/timeline events; bulk actions: mark applied, mark discarded, check open/closed, push to Paperless |
+| User profiles | Each person's roles, CV, AI provider, retrieval settings and keys (keys are write-only) |
+| Applications | Edit any role (admins see everyone's), add notes/insights/documents/timeline events; bulk actions: mark applied, mark discarded, check open/closed, push to Paperless |
 
 Import is idempotent: new tracker rows are created, existing rows refresh only evaluation data (score, summary, strengths, gaps, deadline, PDFs). Your local status, notes and URL are never overwritten unless you run `import_careerops --sync-status`.
 
@@ -60,14 +73,13 @@ Username/password login always works. Google sign-in is optional and off until y
 
 Rules: a Google account must have a verified email. A user already in the database with that email (for example you, the superuser, once your user has an email address set) is signed in as that user. New people are created only if they are on the allowed list, never as staff, so they get the dashboard but not the admin. Remember that everyone on the list sees all jobs and documents. Nobody can self-register with a password.
 
-## Your candidate information (CV, projects, notes)
+## Candidate information (CV, projects, notes)
 
-Everything about you lives in the admin, in two places:
+Each person keeps their own, in the web app (not the admin):
 
-- **Site configuration > Your profile**: your CV as plain text, and your preferences (target roles, locations, remote, salary floor, deal-breakers). If you leave the CV blank and set the career-ops folder, `cv.md` from that folder is used.
-- **Knowledge sources**: any number of extra documents, such as project write-ups, work-history details, certificates, cover letters or notes. Paste text or upload `.txt`, `.md` or `.pdf` (up to 2 MB). The **Import from career-ops** button adds `cv.md`, `article-digest.md` and `modes/_profile.md`. Untick "enabled" to hide a source from the AI without deleting it.
-
-`python manage.py index_knowledge --import-careerops` does the import and indexing from the command line.
+- **Profile**: target roles, locations, remote preference, salary floor, deal-breakers, an "about" note, and the CV. Upload a PDF, .txt or .md (up to 2 MB, PDFs up to 60 pages); the text is read in and the file itself is not kept.
+- **Documents**: any number of extra documents (up to 40): project write-ups, work-history details, certificates, cover letters. Hide one from the AI without deleting it.
+- Admins can also use **Import from career-ops** (cv.md, article-digest.md, modes/_profile.md) in the admin, or `python manage.py index_knowledge --import-careerops --user NAME`.
 
 ## Retrieval (RAG)
 
@@ -78,11 +90,11 @@ A long CV and many documents do not need to be sent for every job. With **Retrie
 | Keyword ranking (default) | BM25 over your passages | Free, offline. Only the final prompt goes to your AI provider. |
 | Embeddings | Cosine similarity of vectors from an OpenAI-compatible `/embeddings` API (OpenAI, Ollama `nomic-embed-text`, ...) | Better at meaning. Your passages are sent to the embeddings service once and cached; each job description is sent to embed the query. |
 
-If embeddings fail, retrieval falls back to keyword ranking and the timeline says why. Tune passage size and count in **Retrieval (RAG)**. The same retrieval is available to Claude Code through the `search_profile` MCP tool.
+If embeddings fail, retrieval falls back to keyword ranking and the timeline says why. Tune passage size and count under **AI settings > Retrieval**. The same retrieval is available to Claude Code through the `search_profile` MCP tool.
 
 ## AI evaluation: connect any AI
 
-In **Site configuration > AI evaluation** choose how a job is scored:
+Each person chooses under **AI settings** how their jobs are scored (admins can also edit a user's profile in the admin):
 
 | Provider | What it needs |
 | --- | --- |
@@ -90,16 +102,16 @@ In **Site configuration > AI evaluation** choose how a job is scored:
 | Anthropic API key | A key |
 | OpenAI-compatible | A key and base URL. Covers OpenAI, OpenRouter, Groq, Mistral, Gemini (`https://generativelanguage.googleapis.com/v1beta/openai`), DeepSeek, Ollama (`http://127.0.0.1:11434/v1`, no key), LM Studio and vLLM |
 | Custom HTTP | Any other JSON API. You give the endpoint, header lines (`Authorization: Bearer {{api_key}}`), a JSON body using `{{system}}`, `{{prompt}}`, `{{model}}`, and the dotted path to the reply text (e.g. `candidates.0.content.parts.0.text`) |
-| Claude Code CLI | `claude` installed and logged in on the same machine (not available inside Docker) |
-| Claude Agent SDK | `pip install -r requirements-ai.txt` |
+| Claude Code CLI | Site admins only. `claude` installed and logged in on the same machine (not available inside Docker) |
+| Claude Agent SDK | Site admins only. `pip install -r requirements-ai.txt` |
 
-`python manage.py ai_check` sends one tiny request to confirm a provider works. `python manage.py evaluate_jobs` scores unscored roles. Keys are stored encrypted and never shown again; `STILLOPEN_AI_API_KEY` in the environment overrides the saved one.
+On a shared server, ordinary users can only point at public https addresses (no localhost or private networks). `python manage.py ai_check --user NAME` sends one tiny request to confirm a provider works. `python manage.py evaluate_jobs` scores unscored roles. Keys are stored encrypted and never shown again; `STILLOPEN_AI_API_KEY` in the environment overrides the saved one.
 
 How job text is handled: descriptions are untrusted, so they are wrapped in tags with an instruction to treat them as data, the reply must be one JSON object that is validated and clamped, and Claude Code and the Agent SDK run with every tool disabled in an empty folder.
 
 ## Claude Code and other AI clients (MCP)
 
-StillOpen ships an MCP server so Claude Code, or any MCP client, can read and update your job search.
+StillOpen ships an MCP server so Claude Code, or any MCP client, can read and update your job search. It acts for exactly one account: set `STILLOPEN_USER=yourname` (or leave it out when there is a single superuser), and it never sees anyone else's data.
 
 ```bash
 pip install -r requirements-mcp.txt

@@ -2,90 +2,48 @@ import os
 from datetime import date
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
 from . import crypto
 
+# Settings that belong to one person. SiteConfig holds legacy values (used to seed the first user);
+# every request works with SiteConfig.for_user(user), which overlays the person's own profile.
+PER_USER_FIELDS = [
+    "ai_provider", "ai_model", "ai_base_url", "ai_custom_headers", "ai_custom_body", "ai_custom_response_path",
+    "ai_claude_command", "ai_timeout", "ai_max_input_chars", "ai_key_encrypted", "profile_cv",
+    "rag_enabled", "rag_mode", "rag_top_k", "rag_chunk_chars", "rag_always_chars",
+    "rag_embedding_base_url", "rag_embedding_model", "rag_embedding_key_encrypted",
+]
 
-class SiteConfig(models.Model):
-    """Single-row configuration, edited in the admin."""
 
-    LIVENESS_MODES = [
-        ("http", "Built-in HTTP check (looks for the expiry phrases below)"),
-        ("node", "career-ops checker (Playwright, handles JavaScript sites)"),
-    ]
-
-    site_title = models.CharField(max_length=80, default="StillOpen")
-    score_scale = models.FloatField(
-        default=5.0,
-        validators=[MinValueValidator(1.0)],
-        help_text="Top of the score range used by evaluations. Match % = score / this x 100.",
-    )
-    urgent_days = models.PositiveIntegerField(
-        default=7, help_text="Deadlines within this many days are highlighted and sorted first."
-    )
-    auto_close_expired = models.BooleanField(
-        default=True,
-        help_text="Show applications whose posting is confirmed expired under the closed tab (unless already applied).",
-    )
-
-    careerops_path = models.CharField(
-        max_length=500,
-        blank=True,
-        help_text="Folder of your career-ops project (reads data/applications.md, reports/, output/).",
-    )
-    node_command = models.CharField(max_length=200, default="node", help_text="Command used to run career-ops scripts.")
-
-    liveness_mode = models.CharField(max_length=10, choices=LIVENESS_MODES, default="http")
-    liveness_timeout = models.PositiveIntegerField(default=60, help_text="Seconds allowed per posting check.")
-
-    paperless_enabled = models.BooleanField(default=False)
-    paperless_url = models.CharField(
-        max_length=300, blank=True, help_text="Base URL of Paperless-ngx, e.g. http://127.0.0.1:8010"
-    )
-    paperless_token = models.CharField(
-        max_length=200,
-        blank=True,
-        help_text="API token. The PAPERLESS_TOKEN environment variable takes precedence if set.",
-    )
-    paperless_verify_tls = models.BooleanField(default=True)
-    paperless_auto_upload = models.BooleanField(
-        default=False, help_text="Upload documents to Paperless automatically when they are imported."
-    )
-
-    google_login_enabled = models.BooleanField(
-        default=False,
-        help_text="Allow signing in with Google. Also needs a Google app under Social applications.",
-    )
-    google_allowed_emails = models.TextField(
-        blank=True,
-        help_text=(
-            "Who may sign in with Google, one per line: a full address (you@gmail.com) or a whole domain (@company.com). "
-            "Everyone listed can see all jobs and documents. Empty means nobody new can sign in. "
-            "An existing user with the same verified email can always sign in."
-        ),
-    )
+class PersonalSettings(models.Model):
+    """Fields and helpers shared by SiteConfig (legacy/default) and UserProfile (per person)."""
 
     AI_PROVIDERS = [
         ("none", "Off (free keyword match only)"),
         ("anthropic", "Anthropic API key"),
         ("openai", "OpenAI-compatible API (OpenAI, OpenRouter, Groq, Mistral, Gemini, DeepSeek, Ollama, LM Studio...)"),
         ("custom_http", "Custom HTTP API (any provider: you describe the request and where the answer is)"),
-        ("claude_cli", "Claude Code CLI installed on this machine"),
-        ("agent_sdk", "Claude Agent SDK (pip install -r requirements-ai.txt)"),
+        ("claude_cli", "Claude Code CLI installed on this machine (site admins only)"),
+        ("agent_sdk", "Claude Agent SDK (site admins only; pip install -r requirements-ai.txt)"),
     ]
+    RAG_MODES = [
+        ("lexical", "Keyword ranking (BM25): free, works offline, nothing extra leaves your machine"),
+        ("embeddings", "Embeddings: better at meaning, sends your text chunks to an embeddings API"),
+    ]
+
     ai_provider = models.CharField(max_length=12, choices=AI_PROVIDERS, default="none")
     ai_model = models.CharField(max_length=100, blank=True, help_text="Leave blank for the provider's default.")
     ai_base_url = models.CharField(
         max_length=300,
         blank=True,
         help_text=(
-            "OpenAI-compatible: the API base, e.g. http://127.0.0.1:11434/v1 (Ollama), https://openrouter.ai/api/v1, "
-            "https://api.groq.com/openai/v1, https://api.mistral.ai/v1, "
-            "https://generativelanguage.googleapis.com/v1beta/openai (Gemini). "
-            "Custom HTTP: the full endpoint URL."
+            "OpenAI-compatible: the API base, e.g. https://openrouter.ai/api/v1, https://api.groq.com/openai/v1, "
+            "https://api.mistral.ai/v1, https://generativelanguage.googleapis.com/v1beta/openai (Gemini), "
+            "http://127.0.0.1:11434/v1 (Ollama, site admins only). Custom HTTP: the full endpoint URL."
         ),
     )
     ai_custom_headers = models.TextField(
@@ -113,16 +71,9 @@ class SiteConfig(models.Model):
     ai_key_encrypted = models.TextField(blank=True, editable=False)
     profile_cv = models.TextField(
         blank=True,
-        help_text="Your CV as plain text. Sent to the AI provider you choose. Blank = read cv.md from the career-ops folder.",
-    )
-    profile_preferences = models.TextField(
-        blank=True, help_text="What you want: target roles, locations, remote, salary floor, deal-breakers."
+        help_text="Your CV as plain text. Sent to the AI provider you choose.",
     )
 
-    RAG_MODES = [
-        ("lexical", "Keyword ranking (BM25): free, works offline, nothing extra leaves your machine"),
-        ("embeddings", "Embeddings: better at meaning, sends your text chunks to an embeddings API"),
-    ]
     rag_enabled = models.BooleanField(
         default=True,
         help_text="Send the AI only the parts of your CV and knowledge sources that are relevant to each job, instead of the whole CV.",
@@ -136,55 +87,19 @@ class SiteConfig(models.Model):
     rag_embedding_base_url = models.CharField(
         max_length=300,
         blank=True,
-        help_text="Embeddings mode: OpenAI-compatible base URL, e.g. https://api.openai.com/v1 or http://127.0.0.1:11434/v1 (Ollama). Blank = the AI base URL, then OpenAI.",
+        help_text="Embeddings mode: OpenAI-compatible base URL, e.g. https://api.openai.com/v1. Blank = the AI base URL, then OpenAI.",
     )
     rag_embedding_model = models.CharField(
         max_length=100, blank=True, help_text="e.g. text-embedding-3-small, or nomic-embed-text for Ollama."
     )
     rag_embedding_key_encrypted = models.TextField(blank=True, editable=False)
 
-    landing_enabled = models.BooleanField(
-        default=True, help_text="Show the public landing page at the site root. Off sends visitors straight to sign-in."
-    )
-    landing_headline = models.CharField(max_length=140, default="Stop applying to jobs that are already closed.")
-    landing_subheadline = models.CharField(
-        max_length=300,
-        default=(
-            "StillOpen tracks every role you are chasing, scores how well it fits you, "
-            "and checks whether each posting is still open."
-        ),
-    )
-    landing_github_url = models.URLField(blank=True, help_text="Optional. Adds a GitHub link to the landing page.")
+    # True when these settings belong to an ordinary (non-staff) user on a shared server.
+    # Such users may not point the server at private addresses or run local commands.
+    restricted = False
 
     class Meta:
-        verbose_name = "Site configuration"
-        verbose_name_plural = "Site configuration"
-
-    def __str__(self):
-        return "Site configuration"
-
-    def save(self, *args, **kwargs):
-        self.pk = 1
-        super().save(*args, **kwargs)
-
-    def delete(self, *args, **kwargs):  # singleton
-        pass
-
-    @classmethod
-    def load(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
-        return obj
-
-    def google_email_allowed(self, email: str) -> bool:
-        email = (email or "").strip().lower()
-        if not email or "@" not in email:
-            return False
-        domain = "@" + email.rsplit("@", 1)[1]
-        for line in self.google_allowed_emails.splitlines():
-            rule = line.strip().lower()
-            if rule and rule in (email, domain):
-                return True
-        return False
+        abstract = True
 
     def set_rag_key(self, plain: str) -> None:
         self.rag_embedding_key_encrypted = crypto.encrypt(plain.strip())
@@ -209,12 +124,166 @@ class SiteConfig(models.Model):
     def effective_profile_cv(self) -> str:
         if self.profile_cv.strip():
             return self.profile_cv
-        if self.careerops_path:
-            cv = os.path.join(self.careerops_path, "cv.md")
+        folder = getattr(self, "careerops_path", "")
+        if folder:
+            cv = os.path.join(folder, "cv.md")
             if os.path.isfile(cv):
                 with open(cv, encoding="utf-8") as fh:
                     return fh.read()
         return ""
+
+
+DEFAULT_PRIVACY = """What we store: your account (email, username), the CV text and documents you add, your job preferences, and the jobs you track with their notes and evaluations. API keys you add are stored encrypted.
+
+Who sees it: only you. Site administrators can access the database for maintenance.
+
+AI features: only when you press Evaluate, the job description, your preferences and the relevant parts of your CV are sent to the AI provider you configured, using your own key. We do not send your data to any AI provider you have not chosen.
+
+Your control: you can export all of your data and delete your account, with everything attached to it, from the Profile page at any time.
+
+(Site owner: replace this text in the admin under Site configuration > Legal with your own policy, including who operates the service and how to contact you.)"""
+
+DEFAULT_TERMS = """This service is provided as is. You are responsible for the content you add and for checking any job posting yourself before applying. The match percentages and summaries are automated estimates, not advice, and can be wrong.
+
+(Site owner: replace this text in the admin under Site configuration > Legal.)"""
+
+
+class SiteConfig(PersonalSettings):
+    """Single-row site configuration, edited in the admin."""
+
+    LIVENESS_MODES = [
+        ("http", "Built-in HTTP check (looks for the expiry phrases below)"),
+        ("node", "career-ops checker (Playwright, handles JavaScript sites)"),
+    ]
+    SIGNUP_MODES = [
+        ("closed", "Closed: only users you create in the admin (and Google accounts on the allowed list)"),
+        ("open", "Open: anyone can register with a verified email, or sign in with Google"),
+    ]
+
+    site_title = models.CharField(max_length=80, default="StillOpen")
+    signup_mode = models.CharField(max_length=10, choices=SIGNUP_MODES, default="closed")
+    score_scale = models.FloatField(
+        default=5.0,
+        validators=[MinValueValidator(1.0)],
+        help_text="Top of the score range used by evaluations. Match % = score / this x 100.",
+    )
+    urgent_days = models.PositiveIntegerField(
+        default=7, help_text="Deadlines within this many days are highlighted and sorted first."
+    )
+    auto_close_expired = models.BooleanField(
+        default=True,
+        help_text="Show applications whose posting is confirmed expired under the closed tab (unless already applied).",
+    )
+
+    careerops_path = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Site admins only: folder of a career-ops project on this server (reads data/applications.md, reports/, output/).",
+    )
+    node_command = models.CharField(max_length=200, default="node", help_text="Command used to run career-ops scripts.")
+
+    liveness_mode = models.CharField(max_length=10, choices=LIVENESS_MODES, default="http")
+    liveness_timeout = models.PositiveIntegerField(default=60, help_text="Seconds allowed per posting check.")
+
+    paperless_enabled = models.BooleanField(default=False, help_text="Site admins only. One Paperless for the whole server.")
+    paperless_url = models.CharField(
+        max_length=300, blank=True, help_text="Base URL of Paperless-ngx, e.g. http://127.0.0.1:8010"
+    )
+    paperless_token = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="API token. The PAPERLESS_TOKEN environment variable takes precedence if set.",
+    )
+    paperless_verify_tls = models.BooleanField(default=True)
+    paperless_auto_upload = models.BooleanField(
+        default=False, help_text="Upload documents to Paperless automatically when they are imported."
+    )
+
+    google_login_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow signing in with Google. Also needs a Google app under Social applications.",
+    )
+    google_allowed_emails = models.TextField(
+        blank=True,
+        help_text=(
+            "Who may sign in with Google while sign-up is Closed, one per line: a full address (you@gmail.com) or a whole "
+            "domain (@company.com). With sign-up Open, any Google account with a verified email may register. "
+            "An existing user with the same verified email can always sign in."
+        ),
+    )
+
+    profile_preferences = models.TextField(
+        blank=True, help_text="Legacy single-user field. Per-person preferences now live on each user's profile."
+    )
+
+    landing_enabled = models.BooleanField(
+        default=True, help_text="Show the public landing page at the site root. Off sends visitors straight to sign-in."
+    )
+    landing_headline = models.CharField(max_length=140, default="Stop applying to jobs that are already closed.")
+    landing_subheadline = models.CharField(
+        max_length=300,
+        default=(
+            "StillOpen tracks every role you are chasing, scores how well it fits you, "
+            "and checks whether each posting is still open."
+        ),
+    )
+    landing_github_url = models.URLField(blank=True, help_text="Optional. Adds a GitHub link to the landing page.")
+
+    privacy_text = models.TextField(default=DEFAULT_PRIVACY, help_text="Shown at /privacy/. Replace with your own policy.")
+    terms_text = models.TextField(default=DEFAULT_TERMS, help_text="Shown at /terms/. Replace with your own terms.")
+
+    class Meta:
+        verbose_name = "Site configuration"
+        verbose_name_plural = "Site configuration"
+
+    def __str__(self):
+        return "Site configuration"
+
+    def save(self, *args, **kwargs):
+        if getattr(self, "_readonly", False):
+            raise RuntimeError("A per-user configuration view cannot be saved; edit the user's profile instead.")
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):  # singleton
+        pass
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    @classmethod
+    def for_user(cls, user):
+        """Site settings overlaid with this person's own AI, RAG and CV settings. Read-only; never saved."""
+        config = cls.load()
+        profile = UserProfile.for_user(user)
+        for name in PER_USER_FIELDS:
+            setattr(config, name, getattr(profile, name))
+        config.profile_preferences = profile.preferences_text()
+        config._readonly = True
+        config.restricted = not user.is_staff
+        if config.restricted:
+            config.careerops_path = ""
+            config.liveness_mode = "http"
+            if config.ai_provider in ("claude_cli", "agent_sdk"):
+                config.ai_provider = "none"
+        return config
+
+    def google_email_allowed(self, email: str) -> bool:
+        email = (email or "").strip().lower()
+        if not email or "@" not in email:
+            return False
+        domain = "@" + email.rsplit("@", 1)[1]
+        for line in self.google_allowed_emails.splitlines():
+            rule = line.strip().lower()
+            if rule and rule in (email, domain):
+                return True
+        return False
+
+    @property
+    def signup_open(self) -> bool:
+        return self.signup_mode == "open"
 
     @property
     def effective_paperless_token(self):
@@ -223,6 +292,63 @@ class SiteConfig(models.Model):
     @property
     def effective_paperless_url(self):
         return (os.environ.get("PAPERLESS_URL", "").strip() or self.paperless_url.strip()).rstrip("/")
+
+
+class UserProfile(PersonalSettings):
+    """Everything personal to one user: who they are, what they want, their CV and their AI settings."""
+
+    REMOTE = [
+        ("any", "No preference"),
+        ("remote", "Remote only"),
+        ("hybrid", "Hybrid"),
+        ("onsite", "On-site"),
+        ("relocate", "Open to relocating"),
+    ]
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
+    target_roles = models.TextField(blank=True, help_text="The roles you want, one per line (e.g. Senior Backend Engineer).")
+    locations = models.TextField(blank=True, help_text="Where you can work, one per line (cities, countries, or 'Remote').")
+    remote_preference = models.CharField(max_length=10, choices=REMOTE, default="any")
+    salary_floor = models.CharField(max_length=60, blank=True, help_text="Your minimum, with currency and period (e.g. 100,000 BDT/month).")
+    deal_breakers = models.TextField(blank=True, help_text="Things you will not accept, one per line.")
+    about = models.TextField(blank=True, help_text="Anything else the AI should know when judging fit.")
+    self_registered = models.BooleanField(
+        default=False, editable=False,
+        help_text="Created through the public sign-up form. These accounts must confirm their email before they can sign in.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Profile of {self.user}"
+
+    @classmethod
+    def for_user(cls, user):
+        profile, _ = cls.objects.get_or_create(user=user)
+        return profile
+
+    def preferences_text(self) -> str:
+        def lines(text):
+            return "; ".join(l.strip() for l in text.splitlines() if l.strip())
+
+        parts = []
+        if self.target_roles.strip():
+            parts.append("Target roles: " + lines(self.target_roles))
+        if self.locations.strip():
+            parts.append("Locations: " + lines(self.locations))
+        if self.remote_preference != "any":
+            parts.append("Work arrangement: " + self.get_remote_preference_display())
+        if self.salary_floor.strip():
+            parts.append("Salary floor: " + self.salary_floor.strip())
+        if self.deal_breakers.strip():
+            parts.append("Deal-breakers: " + lines(self.deal_breakers))
+        if self.about.strip():
+            parts.append(self.about.strip())
+        return "\n".join(parts)
+
+    @property
+    def is_complete(self) -> bool:
+        return bool(self.profile_cv.strip() and self.target_roles.strip())
 
 
 class Bucket(models.Model):
@@ -328,7 +454,11 @@ class Application(models.Model):
         ("uncertain", "Unclear"),
     ]
 
-    careerops_num = models.PositiveIntegerField(null=True, blank=True, unique=True, help_text="Row # in the career-ops tracker.")
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="applications",
+        help_text="Whose job search this belongs to. Everyone sees only their own.",
+    )
+    careerops_num = models.PositiveIntegerField(null=True, blank=True, help_text="Row # in the career-ops tracker.")
     company = models.CharField(max_length=160)
     role = models.CharField(max_length=200)
     url = models.URLField(max_length=600, blank=True)
@@ -361,6 +491,9 @@ class Application(models.Model):
 
     class Meta:
         ordering = ["-careerops_num", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "careerops_num"], name="uniq_owner_careerops_num"),
+        ]
 
     def __str__(self):
         return f"{self.company} - {self.role}"
@@ -466,8 +599,11 @@ class KnowledgeSource(models.Model):
         ("other", "Other"),
     ]
 
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="knowledge_sources"
+    )
     key = models.CharField(
-        max_length=160, unique=True, null=True, blank=True, editable=False,
+        max_length=160, null=True, blank=True, editable=False,
         help_text="Set for sources kept in sync automatically (pasted CV, career-ops files).",
     )
     title = models.CharField(max_length=160)
@@ -479,6 +615,7 @@ class KnowledgeSource(models.Model):
 
     class Meta:
         ordering = ["kind", "title"]
+        constraints = [models.UniqueConstraint(fields=["owner", "key"], name="uniq_owner_knowledge_key")]
 
     def __str__(self):
         return self.title
@@ -496,6 +633,7 @@ class KnowledgeChunk(models.Model):
 
 
 class LivenessRun(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="liveness_runs")
     started_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     running = models.BooleanField(default=True)
