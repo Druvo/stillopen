@@ -97,6 +97,12 @@ def parse_tldr(md: str) -> str:
     return m.group(1).replace("**", "").strip() if m else ""
 
 
+def parse_jd(md: str) -> str:
+    """The verbatim posting that career-ops archives under '## Job Description (archived verbatim)'."""
+    m = re.search(r"^##\s+Job Description[^\n]*\n(.*?)(?=^##\s|\Z)", md, re.M | re.S)
+    return m.group(1).strip() if m else ""
+
+
 def parse_deadline(text: str) -> date | None:
     m = re.search(r"deadline[^0-9]{0,12}(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?\s+(\d{4})", text or "", re.I)
     if not m:
@@ -209,6 +215,8 @@ def import_all(config, sync_status: bool = False) -> dict:
         app.next_action = summary.get("next_action") or app.next_action
         app.advertised_pay = summary.get("advertised_comp") or app.advertised_pay
         app.report_path = row["report"] or app.report_path
+        if not app.description.strip():  # never overwrite text you pasted yourself
+            app.description = parse_jd(report_md)[:30000]
         app.deadline = parse_deadline(row["notes"]) or app.deadline
         app.save()
 

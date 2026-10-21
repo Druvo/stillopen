@@ -115,6 +115,8 @@ a{color:var(--accent)}
         {% for s in statuses %}<option value="{{ s.pk }}" {% if s.pk == a.status_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
       </select>
       {% if a.url %}<a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">Job post</a>{% endif %}
+      {% if a.description or a.url %}<button data-eval="{{ a.pk }}" title="Provider: {{ config.get_ai_provider_display }}">{% if a.ai_evaluated_at %}Re-evaluate{% else %}Evaluate match{% endif %}</button>{% endif %}
+      {% if a.ai_method %}<span class="muted" style="font-size:12px">{% if a.ai_method == "keywords" %}keyword match{% else %}AI-evaluated{% endif %}</span>{% endif %}
     </div>
 
     {% if a.summary %}<div>{{ a.summary }}</div>{% endif %}
@@ -176,6 +178,13 @@ document.querySelectorAll('[data-push]').forEach(btn => btn.addEventListener('cl
   btn.disabled = true; btn.textContent = 'Sending...';
   const r = await post(`/api/document/${btn.dataset.push}/paperless/`);
   if (r.data.ok) location.reload(); else { toast(r.data.error || 'Paperless upload failed'); btn.disabled = false; btn.textContent = 'Send to Paperless'; }
+}));
+
+document.querySelectorAll('[data-eval]').forEach(btn => btn.addEventListener('click', async () => {
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Evaluating...';
+  const r = await post(`/api/application/${btn.dataset.eval}/evaluate/`);
+  if (r.data.ok) location.reload(); else { toast(r.data.error || 'Evaluation failed'); btn.disabled = false; btn.textContent = label; }
 }));
 
 document.getElementById('btn-import').addEventListener('click', async (e) => {

@@ -6,6 +6,8 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
+from . import crypto
+
 
 class SiteConfig(models.Model):
     """Single-row configuration, edited in the admin."""
@@ -66,6 +68,32 @@ class SiteConfig(models.Model):
         ),
     )
 
+    AI_PROVIDERS = [
+        ("none", "Off (free keyword match only)"),
+        ("anthropic", "Anthropic API key"),
+        ("openai", "OpenAI-compatible API (OpenAI, Ollama, LM Studio...)"),
+        ("claude_cli", "Claude Code CLI installed on this machine"),
+        ("agent_sdk", "Claude Agent SDK (pip install -r requirements-ai.txt)"),
+    ]
+    ai_provider = models.CharField(max_length=12, choices=AI_PROVIDERS, default="none")
+    ai_model = models.CharField(max_length=100, blank=True, help_text="Leave blank for the provider's default.")
+    ai_base_url = models.CharField(
+        max_length=300, blank=True, help_text="OpenAI-compatible only, e.g. http://127.0.0.1:11434/v1 for Ollama."
+    )
+    ai_claude_command = models.CharField(max_length=200, default="claude", help_text="Claude Code CLI command or full path.")
+    ai_timeout = models.PositiveIntegerField(default=120, help_text="Seconds to wait for one evaluation.")
+    ai_max_input_chars = models.PositiveIntegerField(
+        default=12000, help_text="Job descriptions longer than this are cut before being sent to the AI."
+    )
+    ai_key_encrypted = models.TextField(blank=True, editable=False)
+    profile_cv = models.TextField(
+        blank=True,
+        help_text="Your CV as plain text. Sent to the AI provider you choose. Blank = read cv.md from the career-ops folder.",
+    )
+    profile_preferences = models.TextField(
+        blank=True, help_text="What you want: target roles, locations, remote, salary floor, deal-breakers."
+    )
+
     landing_enabled = models.BooleanField(
         default=True, help_text="Show the public landing page at the site root. Off sends visitors straight to sign-in."
     )
@@ -108,6 +136,24 @@ class SiteConfig(models.Model):
             if rule and rule in (email, domain):
                 return True
         return False
+
+    def set_ai_key(self, plain: str) -> None:
+        self.ai_key_encrypted = crypto.encrypt(plain.strip())
+
+    @property
+    def effective_ai_key(self) -> str:
+        return os.environ.get("STILLOPEN_AI_API_KEY", "").strip() or crypto.decrypt(self.ai_key_encrypted)
+
+    @property
+    def effective_profile_cv(self) -> str:
+        if self.profile_cv.strip():
+            return self.profile_cv
+        if self.careerops_path:
+            cv = os.path.join(self.careerops_path, "cv.md")
+            if os.path.isfile(cv):
+                with open(cv, encoding="utf-8") as fh:
+                    return fh.read()
+        return ""
 
     @property
     def effective_paperless_token(self):
@@ -241,6 +287,9 @@ class Application(models.Model):
     applied_date = models.DateField(null=True, blank=True)
     deadline = models.DateField(null=True, blank=True)
     report_path = models.CharField(max_length=500, blank=True, help_text="Path to the career-ops report (relative to the career-ops folder).")
+    description = models.TextField(blank=True, help_text="Job description text. Paste it, or leave blank to fetch it from the URL.")
+    ai_evaluated_at = models.DateTimeField(null=True, blank=True)
+    ai_method = models.CharField(max_length=40, blank=True)
 
     live_state = models.CharField(max_length=10, choices=LIVE, default="unknown")
     live_detail = models.CharField(max_length=300, blank=True)

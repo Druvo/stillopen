@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import Application, Bucket, Document, Event, ScoreBand, SiteConfig, Status
-from .services import careerops, liveness
+from .services import ai, careerops, liveness
 from .services.files import resolve_document_path
 from .services.paperless import PaperlessClient, PaperlessError, push_document
 
@@ -111,6 +111,18 @@ def set_status(request, pk):
             text=f"Status set to {status.name}",
         )
     return JsonResponse({"ok": True, "status": status.name})
+
+
+@login_required
+@require_POST
+def evaluate(request, pk):
+    app = get_object_or_404(Application, pk=pk)
+    config = SiteConfig.load()
+    try:
+        result = ai.evaluate_application(app, config)
+    except ai.AIError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    return JsonResponse({"ok": True, "match_percent": result["match_percent"], "method": app.ai_method})
 
 
 @login_required

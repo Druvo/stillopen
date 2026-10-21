@@ -1,0 +1,3 @@
+# Optional: only for the "Claude Agent SDK" provider. Bundles a Claude Code runtime; large download.
+-r requirements.txt
+claude-agent-sdk>=0.2,<0.3

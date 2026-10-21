@@ -18,7 +18,7 @@ from .models import (
     Source,
     Status,
 )
-from .services import liveness
+from .services import ai, liveness
 from .services.paperless import PaperlessClient, PaperlessError, push_document
 
 
@@ -29,6 +29,18 @@ class SiteConfigForm(forms.ModelForm):
         help_text="Leave blank to keep the saved token. The PAPERLESS_TOKEN environment variable takes precedence.",
     )
 
+    ai_api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        label="AI API key",
+        help_text=(
+            "Stored encrypted, never shown again. Leave blank to keep the saved key. "
+            "The STILLOPEN_AI_API_KEY environment variable takes precedence. "
+            "Not needed for Claude Code CLI or the Agent SDK if they are already logged in."
+        ),
+    )
+    clear_ai_key = forms.BooleanField(required=False, label="Delete the saved AI key")
+
     class Meta:
         model = SiteConfig
         fields = "__all__"
@@ -36,6 +48,16 @@ class SiteConfigForm(forms.ModelForm):
     def clean_paperless_token(self):
         token = self.cleaned_data.get("paperless_token", "")
         return token or (self.instance.paperless_token if self.instance else "")
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.cleaned_data.get("clear_ai_key"):
+            instance.ai_key_encrypted = ""
+        elif self.cleaned_data.get("ai_api_key"):
+            instance.set_ai_key(self.cleaned_data["ai_api_key"])
+        if commit:
+            instance.save()
+        return instance
 
 
 @admin.register(SiteConfig)
@@ -45,6 +67,27 @@ class SiteConfigAdmin(admin.ModelAdmin):
         ("Dashboard", {"fields": ("site_title", "score_scale", "urgent_days", "auto_close_expired")}),
         ("Landing page", {"fields": ("landing_enabled", "landing_headline", "landing_subheadline", "landing_github_url")}),
         ("career-ops import", {"fields": ("careerops_path", "node_command")}),
+        (
+            "Your profile (used for matching)",
+            {
+                "fields": ("profile_cv", "profile_preferences"),
+                "description": "Sent to the AI provider you choose below, and only when you evaluate a job.",
+            },
+        ),
+        (
+            "AI evaluation",
+            {
+                "fields": (
+                    "ai_provider", "ai_model", "ai_base_url", "ai_claude_command",
+                    "ai_api_key", "clear_ai_key", "ai_timeout", "ai_max_input_chars",
+                ),
+                "description": (
+                    "Pick how jobs are scored. <strong>Off</strong> uses a free keyword match against your CV. "
+                    "The other options send the job text, your CV and your preferences to that provider. "
+                    "Claude Code CLI and the Agent SDK run with all tools disabled."
+                ),
+            },
+        ),
         ("Open / closed check", {"fields": ("liveness_mode", "liveness_timeout")}),
         (
             "Google sign-in",
@@ -148,15 +191,31 @@ class ApplicationAdmin(admin.ModelAdmin):
     search_fields = ("company", "role", "notes", "summary")
     date_hierarchy = "found_date"
     inlines = [InsightInline, DocumentInline, EventInline]
-    readonly_fields = ("live_state", "live_detail", "live_checked_at", "created_at", "updated_at")
+    readonly_fields = ("live_state", "live_detail", "live_checked_at", "ai_evaluated_at", "ai_method", "created_at", "updated_at")
     fieldsets = (
         (None, {"fields": ("company", "role", "url", "source", "status", "careerops_num")}),
+        ("Job description", {"fields": ("description", "ai_evaluated_at", "ai_method")}),
         ("Evaluation", {"fields": ("score", "decision", "legitimacy", "risk", "summary", "next_action", "advertised_pay", "report_path")}),
         ("Dates", {"fields": ("found_date", "applied_date", "deadline")}),
         ("Notes", {"fields": ("notes",)}),
         ("Open / closed check", {"fields": ("live_state", "live_detail", "live_checked_at")}),
     )
-    actions = ["mark_applied", "mark_discarded", "check_open_status", "push_documents_to_paperless"]
+    actions = ["evaluate_match", "mark_applied", "mark_discarded", "check_open_status", "push_documents_to_paperless"]
+
+    @admin.action(description="Evaluate match (AI provider, or keyword match if AI is off)")
+    def evaluate_match(self, request, queryset):
+        config = SiteConfig.load()
+        ok, failed = 0, []
+        for app in queryset:
+            try:
+                ai.evaluate_application(app, config)
+                ok += 1
+            except ai.AIError as exc:
+                failed.append(f"{app.company}: {exc}")
+        if ok:
+            self.message_user(request, f"Evaluated {ok} application(s).")
+        for line in failed[:5]:
+            self.message_user(request, line, messages.ERROR)
 
     @admin.display(description="Match")
     def match(self, obj):
