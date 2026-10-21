@@ -45,6 +45,7 @@ td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left;vertic
     <a class="btn" href="{% url 'dashboard' %}">Dashboard</a>
     <a class="btn" href="{% url 'add_job' %}">Add job</a>
     <a class="btn" href="{% url 'profile' %}">Profile</a>
+    <a class="btn" href="{% url 'cv_list' %}">CVs</a>
     <a class="btn" href="{% url 'knowledge' %}">Documents</a>
     <a class="btn" href="{% url 'profile_ai' %}">AI settings</a>
     <form method="post" action="{% url 'account_logout' %}" style="display:inline">{% csrf_token %}<button type="submit">Sign out</button></form>

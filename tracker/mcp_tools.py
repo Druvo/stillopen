@@ -7,8 +7,9 @@ Every tool acts for exactly one user (set_user), and only ever sees that user's 
 """
 from django.utils import timezone
 
-from .models import Application, Bucket, Event, KnowledgeSource, SiteConfig, Status
-from .services import ai, knowledge, liveness
+from .models import Application, Bucket, CVVersion, Event, KnowledgeSource, SiteConfig, Status
+from .services import ai, cvversions, knowledge, liveness
+from .services.factcheck import fact_check
 
 MAX_TEXT = 30000
 _user = None
@@ -232,3 +233,58 @@ def check_open(app_id: int) -> dict:
     state, detail = liveness.check_url(app.url, _config())
     Application.objects.filter(pk=app.pk).update(live_state=state, live_detail=detail[:300], live_checked_at=timezone.now())
     return {"id": app.pk, "state": state, "detail": detail}
+
+
+def _version(version_id: int) -> CVVersion:
+    version = CVVersion.objects.select_related("application").filter(owner=_owner(), pk=version_id).first()
+    if not version:
+        raise ValueError(f"No CV version with id {version_id}.")
+    return version
+
+
+def _version_row(v: CVVersion) -> dict:
+    return {
+        "id": v.pk, "kind": v.kind, "label": v.label, "source": v.source,
+        "application_id": v.application_id, "created": v.created_at.isoformat(),
+        "flagged_claims": len(v.check_report), "approved": v.approved, "exportable": v.exportable,
+    }
+
+
+def list_cv_versions(application_id: int | None = None) -> list[dict]:
+    """The person's CV history and tailored CVs, newest first. Optionally only those made for one application."""
+    qs = CVVersion.objects.filter(owner=_owner())
+    if application_id is not None:
+        qs = qs.filter(application_id=application_id)
+    return [_version_row(v) for v in qs[:50]]
+
+
+def get_cv_version(version_id: int) -> dict:
+    """One CV version with its Markdown and the fact-check findings."""
+    v = _version(version_id)
+    return {**_version_row(v), "content": v.content, "check_report": v.check_report}
+
+
+def save_tailored_cv(app_id: int, content: str, label: str = "") -> dict:
+    """Store a tailored CV you wrote for an application. It is fact-checked against the person's own CV and documents.
+
+    Use only facts from get_profile / search_profile. You cannot approve it: if anything is flagged, tell the person
+    to review it in the web app, where they can edit or approve it before exporting."""
+    app = _app(app_id)
+    config = _config()
+    try:
+        content = cvversions.clean_content(content)
+        master = cvversions.ensure_master(_owner(), config)
+        cvversions.check_quota(_owner())
+    except cvversions.CVError as exc:
+        raise ValueError(str(exc)) from exc
+    findings = fact_check(content, cvversions.source_texts(_owner(), config), app.description)
+    v = CVVersion.objects.create(
+        owner=_owner(), application=app, parent=master, kind="tailored", source="ai", provider="mcp",
+        label=(label.strip() or f"{app.company} - {app.role}")[:140], content=content,
+        job_snapshot=app.description[:MAX_TEXT], check_report=findings,
+    )
+    return {
+        **_version_row(v), "flags": findings,
+        "next_step": "Ask the person to open the CVs page, review the flagged claims, and approve before downloading." if findings
+        else "Nothing unsupported was found. The person can download it from the CVs page.",
+    }

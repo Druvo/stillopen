@@ -1,0 +1,49 @@
+{% extends "tracker/base_app.html" %}
+{% block title %}CV versions{% endblock %}
+{% block content %}
+<h1>Your CV versions</h1>
+<p class="muted">Every change to your CV is kept. Each tailored CV is saved with the job it was made for, so you always know exactly what you sent. Tailor a CV from a job on the dashboard.</p>
+
+<h2>Tailored for jobs</h2>
+<div class="card">
+  {% if tailored %}
+  <table>
+    {% for v in tailored %}
+    <tr>
+      <td><a href="{% url 'cv_detail' v.pk %}"><strong>{{ v.label }}</strong></a><br>
+        <span class="muted">v{{ v.pk }} · {{ v.created_at|date:"j M Y H:i" }} · {{ v.get_source_display }}{% if v.provider %} ({{ v.provider }}){% endif %}</span></td>
+      <td style="text-align:right;white-space:nowrap">
+        {% if v.flagged and not v.approved %}<span class="pill" style="border-color:var(--warn);color:var(--warn)">{{ v.check_report|length }} to review</span>
+        {% elif v.flagged %}<span class="pill" style="border-color:var(--ok);color:var(--ok)">approved</span>
+        {% else %}<span class="pill" style="border-color:var(--ok);color:var(--ok)">checked</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <span class="muted">None yet. Press <strong>Tailor CV</strong> on a job.</span>
+  {% endif %}
+</div>
+
+<h2>Your CV over time</h2>
+<div class="card">
+  {% if masters %}
+  <table>
+    {% for v in masters %}
+    <tr>
+      <td><a href="{% url 'cv_detail' v.pk %}"><strong>{{ v.label }}</strong></a>{% if forloop.first %} <span class="pill">current</span>{% endif %}<br>
+        <span class="muted">v{{ v.pk }} · {{ v.created_at|date:"j M Y H:i" }} · {{ v.get_source_display }}</span></td>
+      <td style="text-align:right;white-space:nowrap">
+        {% if not forloop.first %}
+        <a class="btn" href="{% url 'cv_diff' masters.0.pk %}?against={{ v.pk }}">Compare with current</a>
+        <form method="post" action="{% url 'cv_restore' v.pk %}" style="display:inline" onsubmit="return confirm('Make this your current CV? Your history is kept.')">{% csrf_token %}<button type="submit">Restore</button></form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <span class="muted">Add your CV in <a href="{% url 'profile' %}">Profile</a> and it appears here.</span>
+  {% endif %}
+</div>
+{% endblock %}

@@ -543,6 +543,60 @@ class Insight(models.Model):
         return f"{self.kind}: {self.text[:60]}"
 
 
+class CVVersion(models.Model):
+    """One immutable snapshot of a CV: a master version (the person's own CV over time) or one tailored for a job.
+
+    Content never changes after creation; editing makes a new version whose parent is the old one. A tailored
+    version is only exported once it is approved, and it is flagged when it states things the person's own
+    material does not support."""
+
+    KINDS = [("master", "Master CV"), ("tailored", "Tailored for a job")]
+    SOURCES = [
+        ("manual", "Written or edited by hand"),
+        ("ai", "AI"),
+        ("keywords", "Keyword tailoring (no AI)"),
+        ("restored", "Restored from an earlier version"),
+    ]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cv_versions")
+    application = models.ForeignKey(Application, null=True, blank=True, on_delete=models.CASCADE, related_name="cv_versions")
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children")
+    kind = models.CharField(max_length=10, choices=KINDS, default="master")
+    source = models.CharField(max_length=10, choices=SOURCES, default="manual")
+    label = models.CharField(max_length=140, blank=True)
+    content = models.TextField(help_text="The CV in Markdown.")
+    provider = models.CharField(max_length=40, blank=True, help_text="Which AI provider wrote it, if any.")
+    job_snapshot = models.TextField(blank=True, help_text="The job description as it was when this was made (postings disappear).")
+    check_report = models.JSONField(default=list, blank=True, help_text="Claims the fact check could not find in the person's own material.")
+    approved = models.BooleanField(default=False, help_text="The person has reviewed any flagged items and accepts this version.")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    notes = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "CV version"
+
+    def __str__(self):
+        return self.label or f"{self.get_kind_display()} #{self.pk}"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            old = CVVersion.objects.filter(pk=self.pk).values("content", "kind", "owner_id").first()
+            if old and (old["content"] != self.content or old["kind"] != self.kind or old["owner_id"] != self.owner_id):
+                raise ValueError("A CV version cannot be changed. Create a new version instead.")
+        super().save(*args, **kwargs)
+
+    @property
+    def flagged(self) -> bool:
+        return bool(self.check_report)
+
+    @property
+    def exportable(self) -> bool:
+        """Master versions are the person's own words; tailored ones need approval when anything was flagged."""
+        return self.kind == "master" or self.approved or not self.check_report
+
+
 class Document(models.Model):
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="documents")
     kind = models.ForeignKey(DocumentKind, on_delete=models.PROTECT, related_name="documents")

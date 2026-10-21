@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ v.label|default:"CV" }}</title>
+<style>
+body{margin:0;background:#eee;color:#111;font:11pt/1.45 Calibri,"Segoe UI",Arial,sans-serif}
+.page{max-width:8.3in;margin:0 auto;background:#fff;padding:0.7in 0.8in}
+h1{font-size:20pt;margin:0 0 4pt}
+h2{font-size:12pt;margin:14pt 0 4pt;padding-bottom:2pt;border-bottom:1px solid #999;text-transform:uppercase;letter-spacing:.04em}
+h3{font-size:11pt;margin:8pt 0 2pt}
+p{margin:2pt 0}
+ul{margin:2pt 0 2pt 16pt;padding:0}
+li{margin:1pt 0}
+a{color:#111;text-decoration:none}
+hr{border:0;border-top:1px solid #bbb}
+.bar{position:sticky;top:0;background:#222;color:#fff;padding:8px 14px;font:13px system-ui;display:flex;gap:12px;align-items:center;justify-content:space-between}
+.bar button{background:#5b9dff;border:0;border-radius:6px;color:#fff;padding:6px 14px;font-weight:600;cursor:pointer}
+@media print{.bar{display:none}body{background:#fff}.page{padding:0;max-width:none}@page{margin:0.7in 0.8in}}
+</style>
+</head>
+<body>
+<div class="bar"><span>Choose "Save as PDF" as the printer. Single column, plain text: ATS friendly.</span><button onclick="window.print()">Print / save as PDF</button></div>
+<div class="page">{{ body|safe }}</div>
+</body>
+</html>

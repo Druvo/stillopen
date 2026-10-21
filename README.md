@@ -81,6 +81,17 @@ Each person keeps their own, in the web app (not the admin):
 - **Documents**: any number of extra documents (up to 40): project write-ups, work-history details, certificates, cover letters. Hide one from the AI without deleting it.
 - Admins can also use **Import from career-ops** (cv.md, article-digest.md, modes/_profile.md) in the admin, or `python manage.py index_knowledge --import-careerops --user NAME`.
 
+## Tailored CVs and versions
+
+Press **Tailor CV** on a job to make a CV for that role from your own CV and documents. With an AI provider configured the model rewrites it; without one, the free keyword mode reorders your bullets and skills by relevance to the posting and trims the weakest, adding nothing.
+
+- **Honesty check.** The result is checked against everything you have written about yourself. Numbers, names (employers, schools, tools) and posting keywords that your material never mentions are flagged. A flagged CV cannot be downloaded or printed until you edit it or approve it ("everything listed is true"). The check is deliberately conservative: "8 years" against "eight years" is flagged for you to confirm.
+- **Versions.** Every CV is an immutable version with a parent, who or what made it, the job it was for, and the job description as it was that day. Editing makes a new version; the master CV keeps a full history you can compare and restore (restoring adds a version, it never deletes).
+- **Export.** DOCX (plain single column, real headings and bullets, no tables or images) and a print view for "Save as PDF". The output is Markdown you can also download.
+- **Claude Code.** The `list_cv_versions`, `get_cv_version` and `save_tailored_cv` MCP tools let an AI client write a tailored CV; it goes through the same check and cannot approve its own work.
+
+Limits: 200 versions and 20 tailorings per hour per person (`STILLOPEN_MAX_CV_VERSIONS`, `STILLOPEN_CVGEN_PER_HOUR`). Not built yet: cover letters, and an apply assistant that records which version you sent.
+
 ## Retrieval (RAG)
 
 A long CV and many documents do not need to be sent for every job. With **Retrieval (RAG)** on (the default), each evaluation sends the opening of your CV plus only the passages most relevant to that job, and records how in the role's timeline ("RAG lexical, 4 passages from 29").

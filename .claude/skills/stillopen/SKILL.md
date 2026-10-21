@@ -17,6 +17,8 @@ StillOpen is a self-hosted tracker for one person's job search. The `stillopen` 
 | `get_profile` | The user's CV and preferences. Needed before judging fit |
 | `search_profile` | Passages of the CV and knowledge sources relevant to a skill or requirement. Use per requirement instead of re-reading the whole CV |
 | `list_knowledge` | Which extra documents (projects, work history, notes) the user has added |
+| `list_cv_versions` / `get_cv_version` | The person's CV history and tailored CVs, with fact-check findings |
+| `save_tailored_cv` | Store a CV you tailored for an application. It is fact-checked; you cannot approve it |
 | `list_statuses` | Valid status names and what they mean |
 | `add_application` | Add a role (pass the full posting text as `description` when you have it) |
 | `set_description` | Attach or replace a role's posting text |
@@ -46,6 +48,11 @@ There are no delete tools and no way to read settings, keys or file contents. Th
 1. `get_profile`, then `get_application`. If `description_untrusted` is empty, ask the user for the posting text or fetch it yourself, then `set_description`.
 2. Compare requirements to the CV honestly: what matches, what is missing, any risk (pay, location, legitimacy). For each important requirement, call `search_profile` with that requirement to find supporting evidence (projects, work history). Only call something a gap after searching; say "not evidenced" rather than "lacks" when the material is thin.
 3. `save_evaluation` with a one-to-two sentence summary, up to 5 strengths and 5 gaps, a risk of Low/Medium/High, and a concrete next action. Show the user the result.
+
+**Tailor a CV for a role**
+1. `get_application` (posting text), `get_profile` (their CV), and `search_profile` for each requirement to find real evidence.
+2. Write a tailored CV in Markdown that uses ONLY facts from their material: reorder, trim, reword with the posting's vocabulary where the same fact is supported. Never add employers, titles, dates, numbers, tools or certifications they do not already have; leave unmet requirements out.
+3. `save_tailored_cv`. If it returns flags, remove or fix the flagged claims and save again, or tell the person to review them. Never claim a flagged version is safe to send; only the person can approve it in the web app.
 
 **Add a job the user found**
 1. Get the posting text (they paste it, or you read the page). `add_application` with company, role, URL and the text.

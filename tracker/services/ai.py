@@ -435,3 +435,13 @@ def evaluate_application(app: Application, config: SiteConfig | None = None) -> 
         method = f"ai:{config.ai_provider}"
     store_result(app, result, config, method, note)
     return result
+
+
+def complete(config: SiteConfig, system: str, user: str) -> str:
+    """One round trip to the person's configured provider with their own instructions (used for CV tailoring)."""
+    if config.ai_provider == "none":
+        raise AIError("Choose an AI provider in AI settings, or use the free keyword tailoring.")
+    backend = BACKENDS.get(config.ai_provider)
+    if backend is None:
+        raise AIError(f"Unknown AI provider: {config.ai_provider}")
+    return backend(system, user, config)

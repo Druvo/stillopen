@@ -15,7 +15,8 @@ from . import forms
 from .models import (
     Application, Bucket, Document, Event, KnowledgeSource, ScoreBand, SiteConfig, Status, UserProfile,
 )
-from .services import ai, careerops, knowledge, liveness
+from .services import ai, careerops, cvversions, knowledge, liveness
+from .services.cvversions import CVError
 from .services.files import resolve_document_path
 from .services.paperless import PaperlessClient, PaperlessError, push_document
 
@@ -106,6 +107,7 @@ def card_for(app, config, bands):
         "strengths": [i for i in app.insights.all() if i.kind == "strength"],
         "gaps": [i for i in app.insights.all() if i.kind == "gap"],
         "documents": list(app.documents.all()),
+        "cv": next(iter(app.cv_versions.all()), None),
     }
 
 
@@ -117,7 +119,7 @@ def dashboard(request):
     bands = list(ScoreBand.objects.all())
     buckets = list(Bucket.objects.all())
     statuses = list(Status.objects.all())
-    apps = mine(request).select_related("status", "status__bucket", "source").prefetch_related("insights", "documents__kind")
+    apps = mine(request).select_related("status", "status__bucket", "source").prefetch_related("insights", "documents__kind", "cv_versions")
 
     tabs = {b.pk: [] for b in buckets}
     for app in apps:
@@ -279,6 +281,11 @@ def profile(request):
     if request.method == "POST" and form.is_valid():
         form.save()
         knowledge.sync_cv(SiteConfig.for_user(request.user), request.user)
+        if "profile_cv" in form.changed_data and obj.profile_cv.strip():
+            try:
+                cvversions.record_master(request.user, obj.profile_cv)  # every CV change is kept in the history
+            except CVError:
+                pass
         messages.success(request, "Profile saved.")
         return redirect("profile")
     return render(request, "tracker/profile.html", {
@@ -355,6 +362,11 @@ def export_data(request):
         "knowledge": [
             {"title": s.title, "kind": s.kind, "enabled": s.enabled, "text": s.text}
             for s in KnowledgeSource.objects.filter(owner=user).exclude(key__in=["profile-cv", "careerops:cv.md"])
+        ],
+        "cv_versions": [
+            {"label": v.label, "kind": v.kind, "source": v.source, "created": v.created_at.isoformat(),
+             "for_job": f"{v.application.company} - {v.application.role}" if v.application else None, "content": v.content}
+            for v in user.cv_versions.select_related("application")
         ],
         "applications": [
             {

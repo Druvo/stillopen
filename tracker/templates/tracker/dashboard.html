@@ -56,6 +56,7 @@ a{color:var(--accent)}
     {% if can_import %}<button id="btn-import">Import from career-ops</button>{% endif %}
     {% if paperless_on %}<a class="btn" href="{{ paperless_url }}" target="_blank" rel="noopener">Paperless</a>{% endif %}
     <a class="btn" href="{% url 'profile' %}">Profile</a>
+    <a class="btn" href="{% url 'cv_list' %}">CVs</a>
     <a class="btn" href="{% url 'knowledge' %}">Documents</a>
     <a class="btn" href="{% url 'profile_ai' %}">AI</a>
     {% if user.is_staff %}<a class="btn" href="{% url 'admin:index' %}">Admin</a>{% endif %}
@@ -127,6 +128,8 @@ a{color:var(--accent)}
       </select>
       {% if a.url %}<a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">Job post</a>{% endif %}
       {% if a.description or a.url %}<button data-eval="{{ a.pk }}" title="Provider: {{ config.get_ai_provider_display }}">{% if a.ai_evaluated_at %}Re-evaluate{% else %}Evaluate match{% endif %}</button>{% endif %}
+      {% if a.description or a.url %}<form method="post" action="{% url 'tailor_cv' a.pk %}" style="display:inline">{% csrf_token %}<button type="submit" title="Make a CV tailored to this job from your own CV. Nothing is invented.">Tailor CV</button></form>{% endif %}
+      {% if c.cv %}<a href="{% url 'cv_detail' c.cv.pk %}" class="pill" style="color:{% if c.cv.flagged and not c.cv.approved %}var(--warn){% else %}var(--ok){% endif %}">CV v{{ c.cv.pk }}{% if c.cv.flagged and not c.cv.approved %} · review{% endif %}</a>{% endif %}
       {% if a.ai_method %}<span class="muted" style="font-size:12px">{% if a.ai_method == "keywords" %}keyword match{% else %}AI-evaluated{% endif %}</span>{% endif %}
     </div>
 

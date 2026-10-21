@@ -1,0 +1,20 @@
+{% extends "tracker/base_app.html" %}
+{% block title %}Compare CV versions{% endblock %}
+{% block content %}
+<p><a href="{% url 'cv_detail' v.pk %}">&larr; Back to v{{ v.pk }}</a></p>
+<h1>Compare</h1>
+<p class="muted">
+  <span style="color:var(--bad)">Red</span>: in <strong>{{ other.label|default:"earlier version" }}</strong> (v{{ other.pk }}) only.
+  <span style="color:var(--ok)">Green</span>: in <strong>{{ v.label|default:"this version" }}</strong> (v{{ v.pk }}) only.
+</p>
+<form method="get" class="row">
+  <label for="against" style="margin:0">Compare v{{ v.pk }} with</label>
+  <select id="against" name="against" style="width:auto">
+    {% for c in choices %}<option value="{{ c.pk }}" {% if c.pk == other.pk %}selected{% endif %}>v{{ c.pk }} · {{ c.label|default:c.get_kind_display }}</option>{% endfor %}
+  </select>
+  <button type="submit">Compare</button>
+</form>
+<div class="card" style="font-family:ui-monospace,Consolas,monospace;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere">
+{% for tag, line in rows %}<div style="{% if tag == 'del' %}background:rgba(241,101,101,.16);color:var(--bad){% elif tag == 'add' %}background:rgba(62,207,142,.16);color:var(--ok){% endif %}">{% if tag == 'del' %}- {% elif tag == 'add' %}+ {% else %}  {% endif %}{{ line }}</div>{% endfor %}
+</div>
+{% endblock %}

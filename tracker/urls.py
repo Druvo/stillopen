@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_cv
 
 urlpatterns = [
     path("", views.landing, name="landing"),
@@ -14,6 +14,15 @@ urlpatterns = [
     path("profile/delete/", views.delete_account, name="delete_account"),
     path("knowledge/", views.knowledge_list, name="knowledge"),
     path("knowledge/<int:pk>/<str:action>/", views.knowledge_action, name="knowledge_action"),
+    path("cv/", views_cv.cv_list, name="cv_list"),
+    path("cv/<int:pk>/", views_cv.cv_detail, name="cv_detail"),
+    path("cv/<int:pk>/diff/", views_cv.cv_diff, name="cv_diff"),
+    path("cv/<int:pk>/approve/", views_cv.cv_approve, name="cv_approve"),
+    path("cv/<int:pk>/restore/", views_cv.cv_restore, name="cv_restore"),
+    path("cv/<int:pk>/delete/", views_cv.cv_delete, name="cv_delete"),
+    path("cv/<int:pk>/print/", views_cv.cv_print, name="cv_print"),
+    path("cv/<int:pk>/download/<str:fmt>/", views_cv.cv_download, name="cv_download"),
+    path("jobs/<int:pk>/tailor/", views_cv.tailor_cv, name="tailor_cv"),
     path("api/application/<int:pk>/status/", views.set_status, name="set_status"),
     path("api/application/<int:pk>/evaluate/", views.evaluate, name="evaluate"),
     path("api/liveness/start/", views.liveness_start, name="liveness_start"),

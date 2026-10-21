@@ -1,0 +1,69 @@
+{% extends "tracker/base_app.html" %}
+{% block title %}{{ v.label|default:"CV" }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'cv_list' %}">&larr; All versions</a></p>
+<h1>{{ v.label|default:"CV" }} <span class="pill">v{{ v.pk }}</span></h1>
+<p class="muted">
+  {{ v.get_kind_display }} · {{ v.get_source_display }}{% if v.provider %} ({{ v.provider }}){% endif %} · {{ v.created_at|date:"j M Y H:i" }}
+  {% if v.application %} · for <strong>{{ v.application.company }} — {{ v.application.role }}</strong>{% endif %}
+  {% if v.parent %} · based on <a href="{% url 'cv_detail' v.parent.pk %}">v{{ v.parent.pk }}</a>{% endif %}
+</p>
+
+{% if v.kind == "tailored" %}
+  {% if v.flagged and not v.approved %}
+  <div class="banner">
+    <strong>Check these before you use this CV.</strong> They are not in your own CV or documents, so they may have been invented.
+    <ul>
+      {% for f in v.check_report %}
+      <li>
+        {% if f.kind == "number" %}Number <code>{{ f.text }}</code>
+        {% elif f.kind == "name" %}Name or term <code>{{ f.text }}</code>
+        {% else %}The job asks for <code>{{ f.text }}</code>, which your material never mentions{% endif %}
+        <span class="muted">(line {{ f.line }})</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="muted" style="margin:6px 0">Edit the text below to remove anything untrue, which makes a new version. If everything listed is in fact true, approve it. Downloading is locked until then.</p>
+    <form method="post" action="{% url 'cv_approve' v.pk %}">{% csrf_token %}<button class="primary" type="submit">Everything listed is true: approve</button></form>
+  </div>
+  {% elif v.flagged %}
+  <div class="msg success">You approved this version{% if v.approved_at %} on {{ v.approved_at|date:"j M Y" }}{% endif %} after reviewing {{ v.check_report|length }} flagged item{{ v.check_report|length|pluralize }}.</div>
+  {% else %}
+  <div class="msg success">Fact check passed: nothing here goes beyond your own CV and documents.</div>
+  {% endif %}
+{% endif %}
+
+<div class="row" style="margin:12px 0">
+  {% if v.exportable %}
+    <a class="btn primary" href="{% url 'cv_download' v.pk 'docx' %}">Download DOCX</a>
+    <a class="btn" href="{% url 'cv_print' v.pk %}" target="_blank" rel="noopener">Print / save as PDF</a>
+    <a class="btn" href="{% url 'cv_download' v.pk 'md' %}">Markdown</a>
+  {% else %}
+    <span class="muted">Downloads unlock after you review the flagged items.</span>
+  {% endif %}
+  <a class="btn" href="{% url 'cv_diff' v.pk %}">Compare</a>
+  {% if v.kind == "master" %}
+  <form method="post" action="{% url 'cv_restore' v.pk %}" style="display:inline" onsubmit="return confirm('Make this your current CV? Your history is kept.')">{% csrf_token %}<button type="submit">Restore as current</button></form>
+  {% else %}
+  <form method="post" action="{% url 'cv_delete' v.pk %}" style="display:inline" onsubmit="return confirm('Delete this tailored version?')">{% csrf_token %}<button class="danger" type="submit">Delete</button></form>
+  {% endif %}
+</div>
+
+<h2>Preview</h2>
+<div class="card" style="background:#fff;color:#111;line-height:1.5">{{ preview|safe }}</div>
+
+<h2>Edit</h2>
+<p class="muted">Saving creates a new version; this one stays as it is.{% if v.kind == "master" %} The saved text becomes your current CV.{% endif %}</p>
+<form method="post" class="card">
+  {% csrf_token %}
+  <label for="label">Name for the new version (optional)</label>
+  <input type="text" id="label" name="label" maxlength="140">
+  <label for="content">CV (Markdown: # name, ## sections, - bullets, **bold**)</label>
+  <textarea id="content" name="content" rows="22" style="font-family:ui-monospace,Consolas,monospace">{{ v.content }}</textarea>
+  <div class="row" style="margin-top:12px"><button class="primary" type="submit">Save as new version</button></div>
+</form>
+
+{% if v.job_snapshot %}
+<details class="card"><summary>Job description when this was made</summary><pre style="white-space:pre-wrap">{{ v.job_snapshot }}</pre></details>
+{% endif %}
+{% endblock %}
