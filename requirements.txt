@@ -2,5 +2,6 @@ Django>=5.2,<5.3
 requests>=2.32
 django-allauth[socialaccount]>=65,<66
 cryptography>=43
+pypdf>=5
 gunicorn>=23.0
 whitenoise>=6.7

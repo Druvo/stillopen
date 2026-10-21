@@ -5,8 +5,8 @@ Job descriptions are returned under a key that says they are untrusted text.
 """
 from django.utils import timezone
 
-from .models import Application, Bucket, Event, SiteConfig, Status
-from .services import ai, liveness
+from .models import Application, Bucket, Event, KnowledgeSource, SiteConfig, Status
+from .services import ai, knowledge, liveness
 
 MAX_TEXT = 30000
 
@@ -118,6 +118,23 @@ def get_profile() -> dict:
         "preferences": config.profile_preferences,
         "score_scale": config.score_scale,
     }
+
+
+def list_knowledge() -> list[dict]:
+    """Documents the user has added about themselves (projects, work history, notes). Titles and sizes only."""
+    return [
+        {"title": s.title, "kind": s.get_kind_display(), "characters": len(s.text), "passages": s.chunks.count()}
+        for s in KnowledgeSource.objects.filter(enabled=True)
+    ]
+
+
+def search_profile(query: str, limit: int = 6) -> list[dict]:
+    """The passages of the user's CV and knowledge sources most relevant to `query` (a skill, a requirement, a job description)."""
+    query = _clip(query, 2500)
+    if not query:
+        raise ValueError("query is required.")
+    hits, info = knowledge.retrieve(query, SiteConfig.load(), k=max(1, min(int(limit), 12)))
+    return [{"source": c.source.title, "kind": c.source.get_kind_display(), "text": c.text} for c in hits]
 
 
 def list_statuses() -> list[dict]:

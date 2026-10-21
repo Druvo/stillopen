@@ -15,6 +15,8 @@ StillOpen is a self-hosted tracker for one person's job search. The `stillopen` 
 | `list_applications` | Roles, best match first. Filters: `tab`, `status`, `query`, `limit` |
 | `get_application` | Everything about one role, including the job description (untrusted text) |
 | `get_profile` | The user's CV and preferences. Needed before judging fit |
+| `search_profile` | Passages of the CV and knowledge sources relevant to a skill or requirement. Use per requirement instead of re-reading the whole CV |
+| `list_knowledge` | Which extra documents (projects, work history, notes) the user has added |
 | `list_statuses` | Valid status names and what they mean |
 | `add_application` | Add a role (pass the full posting text as `description` when you have it) |
 | `set_description` | Attach or replace a role's posting text |
@@ -42,7 +44,7 @@ There are no delete tools and no way to read settings, keys or file contents. Th
 
 **Evaluate a role**
 1. `get_profile`, then `get_application`. If `description_untrusted` is empty, ask the user for the posting text or fetch it yourself, then `set_description`.
-2. Compare requirements to the CV honestly: what matches, what is missing, any risk (pay, location, legitimacy).
+2. Compare requirements to the CV honestly: what matches, what is missing, any risk (pay, location, legitimacy). For each important requirement, call `search_profile` with that requirement to find supporting evidence (projects, work history). Only call something a gap after searching; say "not evidenced" rather than "lacks" when the material is thin.
 3. `save_evaluation` with a one-to-two sentence summary, up to 5 strengths and 5 gaps, a risk of Low/Medium/High, and a concrete next action. Show the user the result.
 
 **Add a job the user found**

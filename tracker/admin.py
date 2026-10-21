@@ -12,13 +12,14 @@ from .models import (
     Event,
     ExpiredPhrase,
     Insight,
+    KnowledgeSource,
     LivenessRun,
     ScoreBand,
     SiteConfig,
     Source,
     Status,
 )
-from .services import ai, liveness
+from .services import ai, knowledge, liveness
 from .services.paperless import PaperlessClient, PaperlessError, push_document
 
 
@@ -40,6 +41,16 @@ class SiteConfigForm(forms.ModelForm):
         ),
     )
     clear_ai_key = forms.BooleanField(required=False, label="Delete the saved AI key")
+    rag_embedding_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        label="Embeddings API key",
+        help_text=(
+            "Stored encrypted, never shown again. Blank keeps the saved key; if none is saved the AI key is used. "
+            "STILLOPEN_EMBEDDING_API_KEY takes precedence."
+        ),
+    )
+    clear_rag_key = forms.BooleanField(required=False, label="Delete the saved embeddings key")
 
     class Meta:
         model = SiteConfig
@@ -55,6 +66,10 @@ class SiteConfigForm(forms.ModelForm):
             instance.ai_key_encrypted = ""
         elif self.cleaned_data.get("ai_api_key"):
             instance.set_ai_key(self.cleaned_data["ai_api_key"])
+        if self.cleaned_data.get("clear_rag_key"):
+            instance.rag_embedding_key_encrypted = ""
+        elif self.cleaned_data.get("rag_embedding_key"):
+            instance.set_rag_key(self.cleaned_data["rag_embedding_key"])
         if commit:
             instance.save()
         return instance
@@ -71,7 +86,25 @@ class SiteConfigAdmin(admin.ModelAdmin):
             "Your profile (used for matching)",
             {
                 "fields": ("profile_cv", "profile_preferences"),
-                "description": "Sent to the AI provider you choose below, and only when you evaluate a job.",
+                "description": (
+                    "Your CV and what you are looking for. Put longer material (projects, work history details, cover letters, "
+                    "certificates, PDFs) under <strong>Knowledge sources</strong>. Sent to the AI provider you choose, "
+                    "and only when you evaluate a job."
+                ),
+            },
+        ),
+        (
+            "Retrieval (RAG)",
+            {
+                "fields": (
+                    "rag_enabled", "rag_mode", "rag_top_k", "rag_chunk_chars", "rag_always_chars",
+                    "rag_embedding_base_url", "rag_embedding_model", "rag_embedding_key", "clear_rag_key",
+                ),
+                "description": (
+                    "Instead of sending the whole CV, send the passages of your CV and knowledge sources that best match each job. "
+                    "<strong>Keyword ranking</strong> is free and offline. <strong>Embeddings</strong> understand meaning but send your "
+                    "text passages to the embeddings service you configure."
+                ),
             },
         ),
         (
@@ -156,6 +189,71 @@ class ExpiredPhraseAdmin(admin.ModelAdmin):
 class DocumentKindAdmin(admin.ModelAdmin):
     list_display = ("name", "keywords", "paperless_tag", "paperless_document_type", "order")
     list_editable = ("keywords", "paperless_tag", "paperless_document_type", "order")
+
+
+@admin.register(KnowledgeSource)
+class KnowledgeSourceAdmin(admin.ModelAdmin):
+    list_display = ("title", "kind", "enabled", "characters", "passages", "embedded", "updated_at")
+    list_filter = ("kind", "enabled")
+    search_fields = ("title", "text")
+    fields = ("title", "kind", "enabled", "text", "file")
+    actions = ["reindex", "compute_embeddings"]
+    change_list_template = "admin/tracker/knowledgesource/change_list.html"
+
+    @admin.display(description="Characters")
+    def characters(self, obj):
+        return len(obj.text)
+
+    @admin.display(description="Passages")
+    def passages(self, obj):
+        return obj.chunks.count()
+
+    @admin.display(description="Embedded", boolean=True)
+    def embedded(self, obj):
+        total = obj.chunks.count()
+        return bool(total) and obj.chunks.exclude(embedding=None).count() == total
+
+    def get_urls(self):
+        from django.urls import path
+
+        return [
+            path("import-careerops/", self.admin_site.admin_view(self.import_careerops_view), name="tracker_knowledgesource_import")
+        ] + super().get_urls()
+
+    def import_careerops_view(self, request):
+        if request.method != "POST":
+            return HttpResponseRedirect(reverse("admin:tracker_knowledgesource_changelist"))
+        done = knowledge.import_careerops(SiteConfig.load())
+        if done:
+            self.message_user(request, "Imported from career-ops: " + ", ".join(done) + ".")
+        else:
+            self.message_user(request, "Nothing found. Check the career-ops folder in Site configuration.", messages.WARNING)
+        return HttpResponseRedirect(reverse("admin:tracker_knowledgesource_changelist"))
+
+    def save_model(self, request, obj, form, change):
+        try:
+            if obj.file and "file" in form.changed_data and not obj.text.strip():
+                obj.text = knowledge.extract_text(obj.file.file)
+        except knowledge.KnowledgeError as exc:
+            self.message_user(request, f"File not read: {exc}", messages.ERROR)
+        super().save_model(request, obj, form, change)
+        count = knowledge.reindex_source(obj)
+        self.message_user(request, f"Split into {count} passage(s).")
+
+    @admin.action(description="Rebuild passages")
+    def reindex(self, request, queryset):
+        config = SiteConfig.load()
+        total = sum(knowledge.reindex_source(s, config) for s in queryset)
+        self.message_user(request, f"Rebuilt {total} passage(s).")
+
+    @admin.action(description="Compute embeddings now (Embeddings mode)")
+    def compute_embeddings(self, request, queryset):
+        try:
+            done = knowledge.embed_pending(SiteConfig.load())
+        except knowledge.KnowledgeError as exc:
+            self.message_user(request, str(exc), messages.ERROR)
+            return
+        self.message_user(request, f"Embedded {done} passage(s).")
 
 
 class InsightInline(admin.TabularInline):

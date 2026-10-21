@@ -54,7 +54,8 @@ a{color:var(--accent)}
     <button id="btn-check">Check open/closed</button>
     <button id="btn-import">Import from career-ops</button>
     {% if paperless_on %}<a class="btn" href="{{ paperless_url }}" target="_blank" rel="noopener">Paperless</a>{% endif %}
-    {% if user.is_staff %}<a class="btn" href="{% url 'admin:index' %}">Admin</a>{% endif %}
+    {% if user.is_staff %}<a class="btn" href="{% url 'admin:tracker_knowledgesource_changelist' %}">Profile &amp; knowledge</a>
+    <a class="btn" href="{% url 'admin:index' %}">Admin</a>{% endif %}
     <form method="post" action="{% url 'account_logout' %}" style="display:inline">{% csrf_token %}<button type="submit">Sign out</button></form>
   </div>
 </header>

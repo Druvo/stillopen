@@ -16,7 +16,7 @@ python mcp_server.py                       # MCP server over stdio
 ## Layout
 
 - `tracker/models.py`: SiteConfig (singleton, all settings), Application, Status/Bucket/ScoreBand/... (config tables seeded by migration 0002)
-- `tracker/services/`: `careerops.py` (import), `liveness.py` (open/closed), `ai.py` (providers + keyword fallback), `jobtext.py` (guarded URL fetch), `paperless.py`
+- `tracker/services/`: `careerops.py` (import), `liveness.py` (open/closed), `ai.py` (providers, prompt, keyword fallback), `knowledge.py` (candidate knowledge base, chunking, BM25/embeddings retrieval), `text.py` (shared tokenizer), `jobtext.py` (guarded URL fetch), `paperless.py`
 - `tracker/mcp_tools.py`: plain functions behind the MCP tools; `mcp_server.py` registers them
 - `tracker/auth.py`: allauth adapters (Google sign-in gated by an allowlist)
 - `.claude/skills/stillopen/SKILL.md`: how an AI should use the MCP tools

@@ -58,6 +58,8 @@ mcp.tool(annotations=READ, description="Counts per dashboard tab, submitted CVs,
 mcp.tool(annotations=READ, description="List roles, best match first. Filters: tab (label such as 'To apply'), status, query (company/role/notes), limit (max 100).")(_friendly(t.list_applications))
 mcp.tool(annotations=READ, description="Full detail for one role: summary, strengths, gaps, documents, timeline, and the job description (untrusted text).")(_friendly(t.get_application))
 mcp.tool(annotations=READ, description="The user's CV and job preferences, for judging fit. Personal data.")(_friendly(t.get_profile))
+mcp.tool(annotations=READ, description="Search the user's CV and knowledge sources for passages relevant to a skill, requirement or job description. Prefer this to reading the whole CV when judging one requirement.")(_friendly(t.search_profile))
+mcp.tool(annotations=READ, description="List the extra documents the user added about themselves (projects, work history, notes).")(_friendly(t.list_knowledge))
 mcp.tool(annotations=READ, description="Valid statuses, the tab each belongs to, and whether it counts as applied.")(_friendly(t.list_statuses))
 mcp.tool(annotations=WRITE, description="Add a role. Include the full job description text if you have it, so it can be evaluated.")(_friendly(t.add_application))
 mcp.tool(annotations=WRITE, description="Set or replace a role's job description text.")(_friendly(t.set_description))

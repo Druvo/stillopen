@@ -119,6 +119,30 @@ class SiteConfig(models.Model):
         blank=True, help_text="What you want: target roles, locations, remote, salary floor, deal-breakers."
     )
 
+    RAG_MODES = [
+        ("lexical", "Keyword ranking (BM25): free, works offline, nothing extra leaves your machine"),
+        ("embeddings", "Embeddings: better at meaning, sends your text chunks to an embeddings API"),
+    ]
+    rag_enabled = models.BooleanField(
+        default=True,
+        help_text="Send the AI only the parts of your CV and knowledge sources that are relevant to each job, instead of the whole CV.",
+    )
+    rag_mode = models.CharField(max_length=10, choices=RAG_MODES, default="lexical")
+    rag_top_k = models.PositiveIntegerField(default=6, help_text="How many passages to retrieve per job.")
+    rag_chunk_chars = models.PositiveIntegerField(default=900, help_text="Target size of one passage.")
+    rag_always_chars = models.PositiveIntegerField(
+        default=1500, help_text="The opening of your CV (summary, headline) is always included, up to this many characters."
+    )
+    rag_embedding_base_url = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Embeddings mode: OpenAI-compatible base URL, e.g. https://api.openai.com/v1 or http://127.0.0.1:11434/v1 (Ollama). Blank = the AI base URL, then OpenAI.",
+    )
+    rag_embedding_model = models.CharField(
+        max_length=100, blank=True, help_text="e.g. text-embedding-3-small, or nomic-embed-text for Ollama."
+    )
+    rag_embedding_key_encrypted = models.TextField(blank=True, editable=False)
+
     landing_enabled = models.BooleanField(
         default=True, help_text="Show the public landing page at the site root. Off sends visitors straight to sign-in."
     )
@@ -161,6 +185,18 @@ class SiteConfig(models.Model):
             if rule and rule in (email, domain):
                 return True
         return False
+
+    def set_rag_key(self, plain: str) -> None:
+        self.rag_embedding_key_encrypted = crypto.encrypt(plain.strip())
+
+    @property
+    def effective_rag_key(self) -> str:
+        """Embeddings key: its own, else the AI key (OpenAI-style providers use one key for both)."""
+        return (
+            os.environ.get("STILLOPEN_EMBEDDING_API_KEY", "").strip()
+            or crypto.decrypt(self.rag_embedding_key_encrypted)
+            or self.effective_ai_key
+        )
 
     def set_ai_key(self, plain: str) -> None:
         self.ai_key_encrypted = crypto.encrypt(plain.strip())
@@ -415,6 +451,48 @@ class Event(models.Model):
 
     def __str__(self):
         return f"{self.get_kind_display()}: {self.text[:60]}"
+
+
+class KnowledgeSource(models.Model):
+    """A document about the candidate that the AI may draw on: CV, project write-ups, notes, cover letters."""
+
+    KINDS = [
+        ("cv", "CV / resume"),
+        ("experience", "Work experience details"),
+        ("project", "Project"),
+        ("education", "Education / certificates"),
+        ("skills", "Skills"),
+        ("writing", "Writing sample / cover letter"),
+        ("other", "Other"),
+    ]
+
+    key = models.CharField(
+        max_length=160, unique=True, null=True, blank=True, editable=False,
+        help_text="Set for sources kept in sync automatically (pasted CV, career-ops files).",
+    )
+    title = models.CharField(max_length=160)
+    kind = models.CharField(max_length=12, choices=KINDS, default="other")
+    text = models.TextField(blank=True, help_text="The content. Paste it, or upload a .txt/.md/.pdf file below and it is read into here.")
+    file = models.FileField(upload_to="knowledge/", blank=True, help_text="Optional .txt, .md or .pdf (max 2 MB).")
+    enabled = models.BooleanField(default=True, help_text="Untick to keep it but stop the AI from seeing it.")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["kind", "title"]
+
+    def __str__(self):
+        return self.title
+
+
+class KnowledgeChunk(models.Model):
+    source = models.ForeignKey(KnowledgeSource, on_delete=models.CASCADE, related_name="chunks")
+    position = models.PositiveIntegerField(default=0)
+    text = models.TextField()
+    embedding = models.JSONField(null=True, blank=True)
+    embedding_model = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["source_id", "position"]
 
 
 class LivenessRun(models.Model):
