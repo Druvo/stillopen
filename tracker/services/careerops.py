@@ -40,6 +40,13 @@ def parse_tracker_table(markdown: str) -> list[dict]:
         if m:
             # Links are relative to data/applications.md's own folder.
             report_rel = posixpath.normpath(posixpath.join("data", m.group(2)))
+        # career-ops renders the URL cell as a markdown link with a short label
+        # (vendor/host name) once a URL exceeds a length threshold, never a bare
+        # URL alone (career-ops AGENTS.md "URL cell rendering" #3516); extract
+        # the href the same way the report cell is handled above.
+        url_cell = row.get("url", "")
+        url_m = re.search(r"\[([^\]]*)\]\(([^)]+)\)", url_cell)
+        url_value = url_m.group(2) if url_m else url_cell
         score_raw = row.get("score", "").replace("/5", "").strip()
         try:
             score = float(score_raw)
@@ -55,7 +62,7 @@ def parse_tracker_table(markdown: str) -> list[dict]:
                 "status": row.get("status", ""),
                 "report": report_rel,
                 "notes": row.get("notes", ""),
-                "url": row.get("url", ""),
+                "url": url_value,
             }
         )
     return rows

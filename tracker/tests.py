@@ -13,10 +13,10 @@ from tracker.services.paperless import PaperlessClient, PaperlessError, push_doc
 
 TRACKER = """# Applications Tracker
 
-| # | Date | Company | Role | Score | Status | PDF | Report | Notes |
-|---|------|---------|------|-------|--------|-----|--------|-------|
-| 1 | 2026-10-01 | Acme | Backend Engineer | 4.2/5 | Applied | ✅ | [001](../reports/001-acme-2026-10-01.md) | Deadline 24 Oct 2026 |
-| 2 | 2026-10-02 | Beta | .NET Developer | N/A | Evaluated | ❌ | | |
+| # | Date | Company | Role | Score | Status | PDF | Report | Notes | URL |
+|---|------|---------|------|-------|--------|-----|--------|-------|-----|
+| 1 | 2026-10-01 | Acme | Backend Engineer | 4.2/5 | Applied | ✅ | [001](../reports/001-acme-2026-10-01.md) | Deadline 24 Oct 2026 | [ashby](https://jobs.ashbyhq.com/acme/123) |
+| 2 | 2026-10-02 | Beta | .NET Developer | N/A | Evaluated | ❌ | | | https://jobs.beta.test/net-dev |
 """
 
 REPORT = """# Report
@@ -50,6 +50,14 @@ class ParsingTests(TestCase):
         self.assertEqual(rows[0]["score"], 4.2)
         self.assertEqual(rows[0]["report"], "reports/001-acme-2026-10-01.md")
         self.assertIsNone(rows[1]["score"])
+
+    def test_tracker_url_extracted_from_markdown_link_and_bare_cell(self):
+        # career-ops renders a URL cell as a markdown link with a short label
+        # once the raw URL is long (AGENTS.md "URL cell rendering" #3516), or
+        # bare when the link form can't carry it. Both must yield the href.
+        rows = careerops.parse_tracker_table(TRACKER)
+        self.assertEqual(rows[0]["url"], "https://jobs.ashbyhq.com/acme/123")
+        self.assertEqual(rows[1]["url"], "https://jobs.beta.test/net-dev")
 
     def test_machine_summary_and_deadline(self):
         s = careerops.parse_machine_summary(REPORT)
