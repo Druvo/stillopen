@@ -13,9 +13,9 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from . import forms
 from .models import (
-    Application, Bucket, Document, Event, KnowledgeSource, ScoreBand, SiteConfig, Status, UserProfile,
+    Application, Bucket, Document, Event, JobSource, KnowledgeSource, ScoreBand, SiteConfig, Status, UserProfile,
 )
-from .services import ai, careerops, cvversions, knowledge, liveness
+from .services import ai, careerops, cvversions, knowledge, liveness, scan
 from .services import apply as apply_service
 from .services import fit as fit_service, geo
 from .services.cvversions import CVError
@@ -159,6 +159,8 @@ def dashboard(request):
         "can_import": request.user.is_staff and bool(config.careerops_path),
         "run": liveness.current_run(request.user),
         "checked_at": apps.exclude(live_checked_at=None).order_by("-live_checked_at").values_list("live_checked_at", flat=True).first(),
+        "scan_run": scan.current_run(request.user),
+        "can_scan": JobSource.objects.filter(enabled=True).exists(),
     }
     return render(request, "tracker/dashboard.html", context)
 
@@ -211,6 +213,39 @@ def liveness_status(request):
     if run is None:
         return JsonResponse({"running": False, "done": 0, "total": 0, "error": ""})
     return JsonResponse({"running": run.running, "done": run.done, "total": run.total, "error": run.error})
+
+
+@login_required
+@require_POST
+def scan_start(request):
+    if throttled(request.user, "scan", settings.STILLOPEN_SCANS_PER_HOUR):
+        return too_many()
+    run = scan.start_run(request.user)
+    return JsonResponse({"running": run.running, "done": run.done, "total": run.total})
+
+
+@login_required
+@require_GET
+def scan_status(request):
+    run = scan.current_run(request.user)
+    if run is None:
+        return JsonResponse({"running": False, "done": 0, "total": 0, "found": 0, "added": 0, "error": "", "entries": []})
+    entries = [
+        {
+            "source": e.source_name,
+            "connector": e.get_connector_display(),
+            "found": e.found,
+            "matched": e.matched,
+            "added": e.added,
+            "duplicates": e.duplicates,
+            "error": e.error,
+        }
+        for e in run.entries.all()
+    ]
+    return JsonResponse({
+        "running": run.running, "done": run.done, "total": run.total,
+        "found": run.found, "added": run.added, "error": run.error, "entries": entries,
+    })
 
 
 @login_required

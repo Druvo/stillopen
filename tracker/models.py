@@ -3,7 +3,7 @@ from datetime import date
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -809,3 +809,68 @@ class LivenessRun(models.Model):
 
     class Meta:
         ordering = ["-started_at"]
+
+
+class JobSource(models.Model):
+    """A company's job board to search, via a zero-token public ATS API (no AI call to discover a posting).
+
+    Admin-managed: this fetches from a specific external host, so it is restricted the same way the career-ops
+    folder and Paperless URL are (server-side features the admin controls, not something an ordinary visitor
+    can point at an arbitrary address)."""
+
+    CONNECTORS = [
+        ("greenhouse", "Greenhouse"),
+        ("lever", "Lever"),
+        ("ashby", "Ashby"),
+    ]
+
+    name = models.CharField(max_length=120, help_text="Company name, shown in the scan log and as the job's source.")
+    connector = models.CharField(max_length=12, choices=CONNECTORS)
+    board_token = models.CharField(
+        max_length=80,
+        help_text="The board token from the ATS's own job-board URL, e.g. 'resend' for jobs.ashbyhq.com/resend, "
+        "or 'acme' for boards.greenhouse.io/acme. Letters, digits, dot, dash and underscore only.",
+        validators=[RegexValidator(r"^[A-Za-z0-9._-]+$", "Only letters, digits, dot, dash and underscore.")],
+    )
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+        constraints = [models.UniqueConstraint(fields=["connector", "board_token"], name="uniq_connector_token")]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_connector_display()})"
+
+
+class ScanRun(models.Model):
+    """One person's job-search run over every enabled JobSource. Mirrors LivenessRun's shape and lifecycle."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="scan_runs")
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    running = models.BooleanField(default=True)
+    total = models.PositiveIntegerField(default=0, help_text="Number of enabled sources to check.")
+    done = models.PositiveIntegerField(default=0, help_text="Sources checked so far.")
+    found = models.PositiveIntegerField(default=0, help_text="Postings seen across all sources.")
+    added = models.PositiveIntegerField(default=0, help_text="New applications created.")
+    error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+
+class ScanLogEntry(models.Model):
+    """Per-source result of one ScanRun: exactly what was searched and what it found, for the scan log panel."""
+
+    run = models.ForeignKey(ScanRun, on_delete=models.CASCADE, related_name="entries")
+    source_name = models.CharField(max_length=120)
+    connector = models.CharField(max_length=12, choices=JobSource.CONNECTORS)
+    found = models.PositiveIntegerField(default=0, help_text="Postings returned by this source.")
+    matched = models.PositiveIntegerField(default=0, help_text="Postings whose title matched one of your target roles.")
+    added = models.PositiveIntegerField(default=0, help_text="New applications created from this source.")
+    duplicates = models.PositiveIntegerField(default=0, help_text="Matched postings already in your tracker.")
+    error = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]

@@ -16,9 +16,10 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from tracker.models import (
-    Application, Document, DocumentKind, Event, KnowledgeSource, LivenessRun, SiteConfig, Status, UserProfile,
+    Application, Document, DocumentKind, Event, JobSource, KnowledgeSource, LivenessRun, ScanRun, SiteConfig, Status,
+    UserProfile,
 )
-from tracker.services import ai, claim, knowledge, who
+from tracker.services import ai, claim, knowledge, scan, who
 
 User = get_user_model()
 PW = "correct-horse-battery-staple"
@@ -96,15 +97,27 @@ class Isolation(TestCase):
         data = self.client.get(reverse("liveness_status")).json()
         self.assertEqual(data["total"], 0)  # Bob's run is not Alice's
 
+    def test_scan_runs_and_results_are_per_person(self):
+        JobSource.objects.create(name="Acme", connector="greenhouse", board_token="acme", enabled=True)
+        other_run = ScanRun.objects.create(owner=self.b, total=9, done=4, running=True)
+        data = self.client.get(reverse("scan_status")).json()
+        self.assertEqual(data["total"], 0)  # Bob's run is not Alice's
+        with mock.patch("tracker.services.scan.fetch_greenhouse") as fetch:
+            fetch.return_value = [{"title": "Senior Backend Engineer", "url": "https://x.test/1", "location": ""}]
+            scan.start_run(self.a, background=False)
+        self.assertFalse(Application.objects.filter(owner=self.b, company="Acme").exists())
+        other_run.refresh_from_db()
+        self.assertEqual(other_run.added, 0)  # Alice's scan never touched Bob's run or data
+
     def test_anonymous_visitors_reach_nothing_private(self):
         self.client.logout()
         for name, args in [("dashboard", []), ("profile", []), ("profile_ai", []), ("knowledge", []), ("add_job", []),
-                           ("export_data", []), ("document_file", [1])]:
+                           ("export_data", []), ("document_file", [1]), ("scan_status", [])]:
             r = self.client.get(reverse(name, args=args))
             self.assertEqual(r.status_code, 302, name)
             self.assertIn("/accounts/login/", r["Location"])
         for name, args in [("set_status", [self.job_a.pk]), ("evaluate", [self.job_a.pk]), ("liveness_start", []),
-                           ("delete_account", []), ("import_tracker", [])]:
+                           ("scan_start", []), ("delete_account", []), ("import_tracker", [])]:
             self.assertEqual(self.client.post(reverse(name, args=args)).status_code, 302, name)
 
 

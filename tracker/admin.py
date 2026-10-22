@@ -12,8 +12,11 @@ from .models import (
     Event,
     ExpiredPhrase,
     Insight,
+    JobSource,
     KnowledgeSource,
     LivenessRun,
+    ScanLogEntry,
+    ScanRun,
     ScoreBand,
     SiteConfig,
     Source,
@@ -381,6 +384,35 @@ class DocumentAdmin(admin.ModelAdmin):
 class LivenessRunAdmin(admin.ModelAdmin):
     list_display = ("started_at", "finished_at", "running", "done", "total", "error")
     readonly_fields = [f.name for f in LivenessRun._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(JobSource)
+class JobSourceAdmin(admin.ModelAdmin):
+    list_display = ("name", "connector", "board_token", "enabled")
+    list_editable = ("enabled",)
+    list_filter = ("connector", "enabled")
+    search_fields = ("name", "board_token")
+
+
+class ScanLogEntryInline(admin.TabularInline):
+    model = ScanLogEntry
+    extra = 0
+    fields = ("source_name", "connector", "found", "matched", "added", "duplicates", "error")
+    readonly_fields = fields
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ScanRun)
+class ScanRunAdmin(admin.ModelAdmin):
+    list_display = ("owner", "started_at", "finished_at", "running", "done", "total", "found", "added", "error")
+    readonly_fields = [f.name for f in ScanRun._meta.fields]
+    inlines = [ScanLogEntryInline]
 
     def has_add_permission(self, request):
         return False

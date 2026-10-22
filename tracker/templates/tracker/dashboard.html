@@ -52,6 +52,7 @@ a{color:var(--accent)}
   </div>
   <div class="actions">
     <a class="btn" href="{% url 'add_job' %}" style="background:var(--accent);border-color:var(--accent);color:#fff">Add job</a>
+    {% if can_scan %}<button id="btn-scan" title="Searches every enabled job board for postings matching your target roles. Free -- no AI used.">Search jobs</button>{% endif %}
     <button id="btn-check">Check open/closed</button>
     {% if can_import %}<button id="btn-import">Import from career-ops</button>{% endif %}
     {% if paperless_on %}<a class="btn" href="{{ paperless_url }}" target="_blank" rel="noopener">Paperless</a>{% endif %}
@@ -68,6 +69,32 @@ a{color:var(--accent)}
 <div class="card" style="margin:12px 20px;border-color:var(--warn)">
   <strong>Finish your profile.</strong> Add the roles you want and your CV so matches mean something.
   <a href="{% url 'profile' %}?welcome=1">Open profile</a>
+</div>
+{% endif %}
+
+{% if scan_run %}
+<div class="card" style="margin:12px 20px;gap:6px" id="scan-log-card">
+  <div class="row" style="justify-content:space-between">
+    <strong id="scan-log-title">
+      {% if scan_run.running %}Searching... {{ scan_run.done }}/{{ scan_run.total }} sources{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- {{ scan_run.found }} found, {{ scan_run.added }} new{% if scan_run.error %}, error{% endif %}{% endif %}
+    </strong>
+  </div>
+  {% if scan_run.error %}<div class="muted" style="color:var(--bad)">{{ scan_run.error }}</div>{% endif %}
+  <details id="scan-log-details" {% if not scan_run.running %}open{% endif %}>
+    <summary>Scan log -- where it searched and what it found</summary>
+    <div id="scan-log-entries">
+      {% for e in scan_run.entries.all %}
+      <div class="row" style="justify-content:space-between;font-size:13px">
+        <span>{{ e.source_name }} <span class="muted">({{ e.get_connector_display }})</span></span>
+        <span class="muted">
+          {% if e.error %}<span style="color:var(--bad)">{{ e.error }}</span>{% else %}{{ e.found }} found, {{ e.matched }} matched, {{ e.added }} new, {{ e.duplicates }} already tracked{% endif %}
+        </span>
+      </div>
+      {% empty %}
+      <div class="muted">No sources checked yet.</div>
+      {% endfor %}
+    </div>
+  </details>
 </div>
 {% endif %}
 
@@ -242,6 +269,37 @@ checkBtn.addEventListener('click', async () => {
   poll();
 });
 {% if run and run.running %}checkBtn.disabled = true; poll();{% endif %}
+
+const scanBtn = document.getElementById('btn-scan');
+function renderScanEntries(entries) {
+  const box = document.getElementById('scan-log-entries');
+  if (!box) return;
+  if (!entries.length) { box.innerHTML = '<div class="muted">No sources checked yet.</div>'; return; }
+  box.innerHTML = entries.map(e => `
+    <div class="row" style="justify-content:space-between;font-size:13px">
+      <span>${e.source} <span class="muted">(${e.connector})</span></span>
+      <span class="muted">${e.error ? `<span style="color:var(--bad)">${e.error}</span>` : `${e.found} found, ${e.matched} matched, ${e.added} new, ${e.duplicates} already tracked`}</span>
+    </div>`).join('');
+}
+async function scanPoll() {
+  const s = await fetch('/api/scan/status/').then(r => r.json());
+  renderScanEntries(s.entries || []);
+  const title = document.getElementById('scan-log-title');
+  if (s.running) {
+    if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = `Searching ${s.done}/${s.total}...`; }
+    if (title) title.textContent = `Searching... ${s.done}/${s.total} sources`;
+    setTimeout(scanPoll, 1500);
+  } else if (scanBtn && scanBtn.disabled) {
+    location.reload();
+  }
+}
+if (scanBtn) scanBtn.addEventListener('click', async () => {
+  scanBtn.disabled = true; scanBtn.textContent = 'Starting...';
+  const r = await post('/api/scan/start/');
+  if (!r.ok) { toast(r.data.error || 'Could not start search'); scanBtn.disabled = false; scanBtn.textContent = 'Search jobs'; return; }
+  scanPoll();
+});
+{% if scan_run and scan_run.running %}if (scanBtn) { scanBtn.disabled = true; } scanPoll();{% endif %}
 </script>
 </body>
 </html>
