@@ -112,13 +112,24 @@ class Isolation(TestCase):
     def test_anonymous_visitors_reach_nothing_private(self):
         self.client.logout()
         for name, args in [("dashboard", []), ("profile", []), ("profile_ai", []), ("knowledge", []), ("add_job", []),
-                           ("export_data", []), ("document_file", [1]), ("scan_status", [])]:
+                           ("export_data", []), ("document_file", [1]), ("scan_status", []), ("all_postings", [])]:
             r = self.client.get(reverse(name, args=args))
             self.assertEqual(r.status_code, 302, name)
             self.assertIn("/accounts/login/", r["Location"])
         for name, args in [("set_status", [self.job_a.pk]), ("evaluate", [self.job_a.pk]), ("liveness_start", []),
-                           ("scan_start", []), ("delete_account", []), ("import_tracker", [])]:
+                           ("scan_start", []), ("delete_account", []), ("import_tracker", []), ("add_posting", [1])]:
             self.assertEqual(self.client.post(reverse(name, args=args)).status_code, 302, name)
+
+    def test_all_postings_never_shows_someone_elses_tracked_status(self):
+        from tracker.models import JobSource, Posting
+        from tracker.services import scan
+
+        src = JobSource.objects.create(name="Acme", connector="greenhouse", board_token="acme", enabled=True)
+        p = scan.record_sighting(src, "Backend Engineer", "https://x.test/shared", "Remote", company="Acme")
+        job(self.b, url="https://x.test/shared", role="Backend Engineer")  # Bob tracked it
+        r = self.client.get(reverse("all_postings"))  # Alice, who hasn't
+        self.assertContains(r, "Add to tracker")
+        self.assertNotContains(r, "Tracked")
 
 
 class StaffOnly(TestCase):

@@ -6,14 +6,18 @@ from django.contrib import messages
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
+from django.core.paginator import Paginator
+from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from . import forms
 from .models import (
-    Application, Bucket, Document, Event, JobSource, KnowledgeSource, ScoreBand, SiteConfig, Status, UserProfile,
+    Application, Bucket, Document, Event, JobSource, KnowledgeSource, Posting, ScoreBand, SiteConfig, Status,
+    UserProfile,
 )
 from .services import ai, careerops, cvversions, knowledge, liveness, scan
 from .services import apply as apply_service
@@ -317,6 +321,67 @@ def add_job(request):
         messages.success(request, f"Added {app.company} - {app.role}.")
         return redirect("dashboard")
     return render(request, "tracker/add_job.html", {"form": form, "config": SiteConfig.load()})
+
+
+@login_required
+@require_GET
+def all_postings(request):
+    """Every posting any scan has ever seen, matched or not -- shared across everyone, since a posting is a
+    fact about the job market, not about any one person's search (same reasoning as the repost signal itself).
+    This is the answer to "it found 586 but only tracked 11 -- where did the rest go?": nowhere, they were
+    never hidden, just never auto-added because they didn't match your target roles."""
+    qs = Posting.objects.select_related("source").order_by("-last_seen_at")
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(Q(title__icontains=q) | Q(company__icontains=q))
+    source_id = request.GET.get("source", "").strip()
+    if source_id:
+        qs = qs.filter(source_id=source_id)
+    page = Paginator(qs, 50).get_page(request.GET.get("page"))
+    tracked_urls = set(Application.objects.filter(owner=request.user).exclude(url="").values_list("url", flat=True))
+    rows = [{"posting": p, "repost": scan.repost_signal(p), "tracked": p.url in tracked_urls} for p in page]
+    qs_no_page = request.GET.copy()
+    qs_no_page.pop("page", None)
+    return render(request, "tracker/postings.html", {
+        "config": SiteConfig.for_user(request.user),
+        "page": page,
+        "rows": rows,
+        "q": q,
+        "source_id": source_id,
+        "sources": JobSource.objects.order_by("name"),
+        "qs": qs_no_page.urlencode(),
+    })
+
+
+@login_required
+@require_POST
+def add_posting(request, pk):
+    posting = get_object_or_404(Posting, pk=pk)
+    target = reverse("all_postings")
+    qs = request.POST.get("qs", "")
+    if qs:
+        target = f"{target}?{qs}"
+    if mine(request).filter(url=posting.url).exists():
+        messages.info(request, "Already in your tracker.")
+        return redirect(target)
+    if mine(request).count() >= settings.STILLOPEN_MAX_APPLICATIONS:
+        messages.error(request, f"You have reached the limit of {settings.STILLOPEN_MAX_APPLICATIONS} tracked jobs. Delete some first.")
+        return redirect(target)
+    app = Application(
+        owner=request.user,
+        company=posting.company or posting.source.name,
+        role=posting.title,
+        url=posting.url,
+        location_text=posting.location,
+        posting=posting,
+        status=Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first(),
+        found_date=timezone.localdate(),
+    )
+    app.save()
+    geo.fill_details(app)
+    Event.objects.create(application=app, kind="note", text="Added from All postings")
+    messages.success(request, f"Added {app.company} - {app.role}.")
+    return redirect(target)
 
 
 @login_required

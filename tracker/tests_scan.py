@@ -404,3 +404,68 @@ class RepostDetectionTests(TestCase):
             scan.start_run(user, background=False)
         r = self.client.get(reverse("dashboard"))
         self.assertContains(r, "Possible repost")
+
+
+class AllPostingsViewTests(TestCase):
+    """"Found 586 but only tracked 11" -- the browsable, shared, read-mostly answer to where the rest went."""
+
+    def setUp(self):
+        self.source = JobSource.objects.create(name="Acme", connector="greenhouse", board_token="acme", enabled=True)
+        self.u = user("zahid")
+        self.client.force_login(self.u)
+        self.p1 = scan.record_sighting(self.source, "Backend Engineer", "https://x.test/1", "Remote", company="Acme")
+        self.p2 = scan.record_sighting(self.source, "Marketing Manager", "https://x.test/2", "NYC", company="Acme")
+
+    def test_lists_every_posting_regardless_of_match(self):
+        r = self.client.get(reverse("all_postings"))
+        self.assertContains(r, "Backend Engineer")
+        self.assertContains(r, "Marketing Manager")
+        self.assertEqual(r.context["page"].paginator.count, 2)
+
+    def test_search_filters_by_title_or_company(self):
+        r = self.client.get(reverse("all_postings"), {"q": "backend"})
+        self.assertContains(r, "Backend Engineer")
+        self.assertNotContains(r, "Marketing Manager")
+
+    def test_source_filter(self):
+        other = JobSource.objects.create(name="Other", connector="lever", board_token="other", enabled=True)
+        scan.record_sighting(other, "Platform Engineer", "https://x.test/3", "", company="Other")
+        r = self.client.get(reverse("all_postings"), {"source": other.pk})
+        self.assertContains(r, "Platform Engineer")
+        self.assertNotContains(r, "Backend Engineer")
+
+    def test_add_to_tracker_creates_an_application_linked_to_the_posting(self):
+        r = self.client.post(reverse("add_posting", args=[self.p1.pk]), follow=True)
+        self.assertContains(r, "Added Acme - Backend Engineer")
+        app = Application.objects.get(owner=self.u, url="https://x.test/1")
+        self.assertEqual(app.posting_id, self.p1.pk)
+        self.assertEqual(app.company, "Acme")
+
+    def test_adding_the_same_posting_twice_does_not_duplicate(self):
+        self.client.post(reverse("add_posting", args=[self.p1.pk]))
+        self.client.post(reverse("add_posting", args=[self.p1.pk]))
+        self.assertEqual(Application.objects.filter(owner=self.u, url="https://x.test/1").count(), 1)
+
+    def test_already_tracked_posting_shows_as_tracked_not_addable(self):
+        self.client.post(reverse("add_posting", args=[self.p1.pk]))
+        r = self.client.get(reverse("all_postings"))
+        self.assertContains(r, "Tracked")
+
+    @override_settings(STILLOPEN_MAX_APPLICATIONS=1)
+    def test_respects_the_application_limit(self):
+        self.client.post(reverse("add_posting", args=[self.p1.pk]))
+        r = self.client.post(reverse("add_posting", args=[self.p2.pk]), follow=True)
+        self.assertContains(r, "reached the limit")
+        self.assertEqual(Application.objects.filter(owner=self.u).count(), 1)
+
+    def test_another_persons_tracked_status_never_leaks(self):
+        other = user("other")
+        Application.objects.create(owner=other, company="Acme", role="Backend Engineer", url="https://x.test/1", status=Status.objects.first())
+        r = self.client.get(reverse("all_postings"))
+        self.assertContains(r, "Add to tracker")  # this viewer hasn't tracked it themselves
+        self.assertNotContains(r, "Tracked")
+
+    def test_anonymous_cannot_view_or_add(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse("all_postings")).status_code, 302)
+        self.assertEqual(self.client.post(reverse("add_posting", args=[self.p1.pk])).status_code, 302)

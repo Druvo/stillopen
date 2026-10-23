@@ -56,6 +56,7 @@ a{color:var(--accent)}
     <button id="btn-check">Check open/closed</button>
     {% if can_import %}<button id="btn-import">Import from career-ops</button>{% endif %}
     {% if paperless_on %}<a class="btn" href="{{ paperless_url }}" target="_blank" rel="noopener">Paperless</a>{% endif %}
+    <a class="btn" href="{% url 'all_postings' %}">All postings</a>
     <a class="btn" href="{% url 'profile' %}">Profile</a>
     <a class="btn" href="{% url 'cv_list' %}">CVs</a>
     <a class="btn" href="{% url 'knowledge' %}">Documents</a>
