@@ -826,24 +826,37 @@ class LivenessRun(models.Model):
 
 
 class JobSource(models.Model):
-    """A company's job board to search, via a zero-token public ATS API (no AI call to discover a posting).
+    """A job board to search, via a zero-token public API or feed (no AI call to discover a posting).
 
     Admin-managed: this fetches from a specific external host, so it is restricted the same way the career-ops
     folder and Paperless URL are (server-side features the admin controls, not something an ordinary visitor
-    can point at an arbitrary address)."""
+    can point at an arbitrary address).
+
+    Two shapes of source: Greenhouse/Lever/Ashby are single-company boards (`board_token` is that company's
+    slug in the ATS's own URL, e.g. 'resend' for jobs.ashbyhq.com/resend, and `name` is that company). RemoteOK/
+    We Work Remotely/Himalayas are aggregators spanning many employers (`board_token` is an optional filter --
+    a RemoteOK tag, a We Work Remotely category slug, or 'all' for no filter on either -- and the actual
+    employer comes back per-posting, read from `Posting.company`, not from `name`)."""
 
     CONNECTORS = [
         ("greenhouse", "Greenhouse"),
         ("lever", "Lever"),
         ("ashby", "Ashby"),
+        ("remoteok", "RemoteOK"),
+        ("weworkremotely", "We Work Remotely"),
+        ("himalayas", "Himalayas"),
     ]
 
-    name = models.CharField(max_length=120, help_text="Company name, shown in the scan log and as the job's source.")
-    connector = models.CharField(max_length=12, choices=CONNECTORS)
+    name = models.CharField(max_length=120, help_text="Shown in the scan log. The company name for a single-company connector; a label like 'RemoteOK' for an aggregator.")
+    connector = models.CharField(max_length=20, choices=CONNECTORS)
     board_token = models.CharField(
         max_length=80,
-        help_text="The board token from the ATS's own job-board URL, e.g. 'resend' for jobs.ashbyhq.com/resend, "
-        "or 'acme' for boards.greenhouse.io/acme. Letters, digits, dot, dash and underscore only.",
+        help_text="Single-company connector: the board token from the ATS's own URL, e.g. 'resend' for "
+        "jobs.ashbyhq.com/resend, or 'acme' for boards.greenhouse.io/acme. Aggregator connector: an optional "
+        "filter -- a RemoteOK tag (e.g. 'dev'), a We Work Remotely category slug (e.g. "
+        "'remote-full-stack-programming-jobs'), or 'all' for no filter (Himalayas ignores this and always "
+        "fetches its newest postings, since its public API has no working keyword filter to request narrower "
+        "than that). Letters, digits, dot, dash and underscore only.",
         validators=[RegexValidator(r"^[A-Za-z0-9._-]+$", "Only letters, digits, dot, dash and underscore.")],
     )
     enabled = models.BooleanField(default=True)
@@ -878,7 +891,7 @@ class ScanLogEntry(models.Model):
 
     run = models.ForeignKey(ScanRun, on_delete=models.CASCADE, related_name="entries")
     source_name = models.CharField(max_length=120)
-    connector = models.CharField(max_length=12, choices=JobSource.CONNECTORS)
+    connector = models.CharField(max_length=20, choices=JobSource.CONNECTORS)
     found = models.PositiveIntegerField(default=0, help_text="Postings returned by this source.")
     matched = models.PositiveIntegerField(default=0, help_text="Postings whose title matched one of your target roles.")
     added = models.PositiveIntegerField(default=0, help_text="New applications created from this source.")
@@ -895,12 +908,18 @@ class Posting(models.Model):
 
     This is what repost/ghost-job detection reads: a company re-listing the same role under a new URL shows up
     as several Postings sharing one `title_key` at the same `source`. Shared across every user watching that
-    source -- a repost pattern is a property of the posting, not of any one person's search."""
+    source -- a repost pattern is a property of the posting, not of any one person's search.
+
+    `company` matters because a source isn't always one employer: for a single-company connector (Greenhouse/
+    Lever/Ashby) it's always `source.name`, but for an aggregator (RemoteOK, We Work Remotely, Himalayas) it
+    varies per posting -- so `title_key` is derived from company+title together, or two different real
+    employers' same-titled roles on one aggregator would wrongly look like one company reposting."""
 
     source = models.ForeignKey(JobSource, on_delete=models.CASCADE, related_name="postings")
     url = models.URLField(max_length=600)
+    company = models.CharField(max_length=160, blank=True, help_text="The actual employer. Same as the source's name for a single-company connector; varies per posting on an aggregator.")
     title = models.CharField(max_length=300)
-    title_key = models.CharField(max_length=300, db_index=True, help_text="Normalized title, used to group reposts of the same role.")
+    title_key = models.CharField(max_length=300, db_index=True, help_text="Normalized company+title, used to group reposts of the same role.")
     location = models.CharField(max_length=160, blank=True)
     first_seen_at = models.DateTimeField(auto_now_add=True)
     last_seen_at = models.DateTimeField(auto_now=True)

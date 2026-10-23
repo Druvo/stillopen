@@ -1,8 +1,17 @@
 """Search configured job boards for postings matching your target roles.
 
-Zero-token: Greenhouse, Lever and Ashby all publish a plain public JSON endpoint for their job boards. Finding a
+Zero-token: every connector here is a plain public JSON or RSS endpoint -- Greenhouse, Lever and Ashby for a
+single company's own board; RemoteOK, We Work Remotely and Himalayas for a multi-employer aggregator. Finding a
 posting costs one HTTP GET per enabled JobSource, no AI call. Scoring/tailoring a posting once it's in your
 tracker still goes through the normal (optional, BYOK) AI path -- this module only discovers and records it.
+
+Deliberately NOT a connector here: LinkedIn (scraping it violates its Terms of Service and its anti-bot
+measures are the kind this project won't try to defeat -- see AGENTS.md-equivalent discipline in CLAUDE.md;
+paste a LinkedIn URL into "Add job" instead, which fetches that one page you asked for, not a search) and any
+board with no public API or feed that would require a headless browser to read (bdjobs.com is a client-side
+app with no server-rendered listings and no documented API -- out of scope for this zero-token module; a
+Playwright-based scanner the way career-ops' own scan-interamt.mjs handles an equivalent case is a different,
+heavier kind of connector and isn't built here).
 
 A posting is matched against your own UserProfile.target_roles (simple case-insensitive phrase containment,
 the same zero-token approach career-ops' own title_filter uses) before anything is saved, and a posting whose
@@ -40,12 +49,21 @@ def title_key(title: str) -> str:
     return re.sub(r"\s+", " ", title.strip().lower())[:300]
 
 
-def record_sighting(source: JobSource, title: str, url: str, location: str, seen_date=None) -> Posting:
-    """Upsert the Posting for (source, url) and mark it seen today (or `seen_date`, for tests)."""
+def record_sighting(source: JobSource, title: str, url: str, location: str, company: str | None = None, seen_date=None) -> Posting:
+    """Upsert the Posting for (source, url) and mark it seen today (or `seen_date`, for tests).
+
+    `company` defaults to the source's own name (correct for a single-company connector). An aggregator
+    connector passes the posting's actual employer explicitly, since it varies per posting -- the key is
+    derived from company+title together so two different real employers on one aggregator are never grouped
+    as if one of them were reposting the other's role."""
+    company = (company or source.name).strip()
     seen_date = seen_date or timezone.localdate()
     posting, _ = Posting.objects.update_or_create(
         source=source, url=url[:600],
-        defaults={"title": title[:300], "title_key": title_key(title), "location": (location or "")[:160]},
+        defaults={
+            "title": title[:300], "company": company[:160],
+            "title_key": title_key(f"{company} :: {title}"), "location": (location or "")[:160],
+        },
     )
     PostingSighting.objects.get_or_create(posting=posting, seen_date=seen_date)
     return posting
@@ -116,6 +134,78 @@ def fetch_ashby(token: str) -> list[dict]:
     return out
 
 
+def fetch_remoteok(token: str) -> list[dict]:
+    """RemoteOK's public API (https://remoteok.com/api, documented in its own `legal` field). `token` is an
+    optional tag filter (e.g. 'dev'); 'all' or blank fetches unfiltered. Aggregator: company varies per posting."""
+    url = "https://remoteok.com/api" if token in ("", "all") else f"https://remoteok.com/api?tags={token}"
+    resp = safe_get(url, timeout=20)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    out = []
+    for j in resp.json():
+        if not j.get("id"):
+            continue  # first element is RemoteOK's own legal/attribution notice, not a job
+        out.append({
+            "title": j.get("position", ""),
+            "url": j.get("url", ""),
+            "location": j.get("location") or "Remote",
+            "company": j.get("company", ""),
+        })
+    return out
+
+
+def fetch_weworkremotely(token: str) -> list[dict]:
+    """We Work Remotely's public RSS feeds. `token` is an optional category slug (e.g.
+    'remote-full-stack-programming-jobs'); 'all' or blank fetches the combined feed of every category.
+    Aggregator: company varies per posting, and WWR's own <title> is 'Company: Role' together."""
+    import xml.etree.ElementTree as ET
+
+    url = (
+        "https://weworkremotely.com/remote-jobs.rss"
+        if token in ("", "all")
+        else f"https://weworkremotely.com/categories/{token}.rss"
+    )
+    resp = safe_get(url, timeout=20)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    try:
+        root = ET.fromstring(resp.text)
+    except ET.ParseError as exc:
+        raise FetchError(f"Could not parse feed: {exc}") from exc
+    out = []
+    for item in root.findall(".//item"):
+        raw = (item.findtext("title") or "").strip()
+        company, sep, role = raw.partition(": ")
+        if not sep:  # no "Company: Role" split found -- treat the whole thing as the title
+            company, role = "", raw
+        out.append({
+            "title": role.strip(),
+            "url": (item.findtext("link") or "").strip(),
+            "location": (item.findtext("region") or "").strip(),
+            "company": company.strip(),
+        })
+    return out
+
+
+def fetch_himalayas(token: str) -> list[dict]:
+    """Himalayas' public API (https://himalayas.app/jobs/api, documented in its own `comments` field). No
+    working server-side keyword/category filter was found to exist for it, so `token` is ignored and this
+    always fetches the newest page. Aggregator: company varies per posting."""
+    resp = safe_get("https://himalayas.app/jobs/api?limit=100", timeout=20)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    out = []
+    for j in resp.json().get("jobs", []):
+        restrictions = j.get("locationRestrictions") or []
+        out.append({
+            "title": j.get("title", ""),
+            "url": j.get("applicationLink", ""),
+            "location": ", ".join(restrictions) if restrictions else "Remote",
+            "company": j.get("companyName", ""),
+        })
+    return out
+
+
 def _fetch(connector: str, token: str) -> list[dict]:
     # Resolved by name against this module's own namespace (not a dict built at import time) so that
     # mock.patch("tracker.services.scan.fetch_greenhouse", ...) in tests reaches the call that's actually made.
@@ -151,7 +241,7 @@ def _worker(run_id: int):
                     # Recorded regardless of match: a repost pattern is a property of the posting/company,
                     # not of any one person's target roles, so it should build up even from scans that match
                     # nothing for this particular user.
-                    posting = record_sighting(source, p["title"], p["url"], p.get("location") or "")
+                    posting = record_sighting(source, p["title"], p["url"], p.get("location") or "", company=p.get("company"))
                     if not _matches(p["title"], roles):
                         continue
                     entry.matched += 1
@@ -163,7 +253,7 @@ def _worker(run_id: int):
                         break
                     app = Application(
                         owner=owner,
-                        company=source.name,
+                        company=p.get("company") or source.name,
                         role=p["title"][:200],
                         url=p["url"][:600],
                         location_text=(p.get("location") or "")[:160],

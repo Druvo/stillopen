@@ -400,9 +400,9 @@ class JobSourceAdmin(admin.ModelAdmin):
 
 @admin.register(Posting)
 class PostingAdmin(admin.ModelAdmin):
-    list_display = ("title", "source", "location", "first_seen_at", "last_seen_at", "repost_flag")
+    list_display = ("title", "company", "source", "location", "first_seen_at", "last_seen_at", "repost_flag")
     list_filter = ("source",)
-    search_fields = ("title", "title_key", "url")
+    search_fields = ("title", "company", "title_key", "url")
     readonly_fields = [f.name for f in Posting._meta.fields]
 
     def has_add_permission(self, request):

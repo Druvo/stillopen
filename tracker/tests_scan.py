@@ -35,6 +35,30 @@ ASHBY_PAYLOAD = {
         {"title": "Platform Engineer", "jobUrl": "https://jobs.ashbyhq.com/acme/1", "location": "Remote"},
     ]
 }
+REMOTEOK_PAYLOAD = [
+    {"legal": "API Terms of Service: ..."},  # RemoteOK's own first element, not a job
+    {"id": "1", "position": "Backend Engineer", "url": "https://remoteok.com/remote-jobs/1", "location": "", "company": "Acme Corp"},
+    {"id": "2", "position": "Marketing Manager", "url": "https://remoteok.com/remote-jobs/2", "location": "Worldwide", "company": "Beta Inc"},
+]
+WWR_RSS = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Acme Corp: Backend Engineer</title>
+    <region>Anywhere in the World</region>
+    <link>https://weworkremotely.com/remote-jobs/acme-backend-engineer</link>
+  </item>
+  <item>
+    <title>No Colon Here Just A Title</title>
+    <region>USA Only</region>
+    <link>https://weworkremotely.com/remote-jobs/no-colon</link>
+  </item>
+</channel></rss>"""
+HIMALAYAS_PAYLOAD = {
+    "jobs": [
+        {"title": "Backend Engineer", "applicationLink": "https://himalayas.app/jobs/1", "companyName": "Acme Corp", "locationRestrictions": ["Poland"]},
+        {"title": "Marketing Manager", "applicationLink": "https://himalayas.app/jobs/2", "companyName": "Beta Inc", "locationRestrictions": []},
+    ]
+}
 
 
 class ConnectorTests(TestCase):
@@ -62,6 +86,50 @@ class ConnectorTests(TestCase):
         get.return_value = mock.Mock(status_code=404, json=lambda: {})
         with self.assertRaises(FetchError):
             scan.fetch_greenhouse("missing")
+
+    @mock.patch("tracker.services.scan.safe_get")
+    def test_remoteok_parses_jobs_and_skips_its_own_legal_notice(self, get):
+        get.return_value = mock.Mock(status_code=200, json=lambda: REMOTEOK_PAYLOAD)
+        out = scan.fetch_remoteok("all")
+        self.assertEqual(len(out), 2)  # the legal-notice element is not a job and must not appear
+        self.assertEqual(out[0], {"title": "Backend Engineer", "url": "https://remoteok.com/remote-jobs/1", "location": "Remote", "company": "Acme Corp"})
+        self.assertEqual(out[1]["location"], "Worldwide")  # a real location is kept, not overridden to "Remote"
+
+    @mock.patch("tracker.services.scan.safe_get")
+    def test_remoteok_token_all_omits_the_tag_filter(self, get):
+        get.return_value = mock.Mock(status_code=200, json=lambda: [])
+        scan.fetch_remoteok("all")
+        self.assertEqual(get.call_args[0][0], "https://remoteok.com/api")
+        scan.fetch_remoteok("dev")
+        self.assertEqual(get.call_args[0][0], "https://remoteok.com/api?tags=dev")
+
+    @mock.patch("tracker.services.scan.safe_get")
+    def test_weworkremotely_splits_company_from_role_in_the_title(self, get):
+        get.return_value = mock.Mock(status_code=200, text=WWR_RSS)
+        out = scan.fetch_weworkremotely("all")
+        self.assertEqual(len(out), 2)
+        self.assertEqual(out[0], {
+            "title": "Backend Engineer", "url": "https://weworkremotely.com/remote-jobs/acme-backend-engineer",
+            "location": "Anywhere in the World", "company": "Acme Corp",
+        })
+        # No "Company: Role" split found -- the whole title is kept as the role, company left blank rather than guessed.
+        self.assertEqual(out[1]["title"], "No Colon Here Just A Title")
+        self.assertEqual(out[1]["company"], "")
+
+    @mock.patch("tracker.services.scan.safe_get")
+    def test_weworkremotely_token_all_uses_the_combined_feed(self, get):
+        get.return_value = mock.Mock(status_code=200, text="<rss><channel></channel></rss>")
+        scan.fetch_weworkremotely("all")
+        self.assertEqual(get.call_args[0][0], "https://weworkremotely.com/remote-jobs.rss")
+        scan.fetch_weworkremotely("remote-full-stack-programming-jobs")
+        self.assertEqual(get.call_args[0][0], "https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss")
+
+    @mock.patch("tracker.services.scan.safe_get")
+    def test_himalayas_parses_jobs(self, get):
+        get.return_value = mock.Mock(status_code=200, json=lambda: HIMALAYAS_PAYLOAD)
+        out = scan.fetch_himalayas("all")
+        self.assertEqual(out[0], {"title": "Backend Engineer", "url": "https://himalayas.app/jobs/1", "location": "Poland", "company": "Acme Corp"})
+        self.assertEqual(out[1]["location"], "Remote")  # no locationRestrictions -- defaults to Remote, not blank
 
     def test_title_matching_is_case_insensitive_phrase_containment(self):
         roles = ["backend engineer"]
@@ -226,6 +294,31 @@ class RepostDetectionTests(TestCase):
     def test_a_single_sighting_is_not_a_repost(self):
         p = scan.record_sighting(self.source, "Backend Engineer", "https://x.test/1", "Remote")
         self.assertIsNone(scan.repost_signal(p))
+
+    def test_company_defaults_to_the_source_name_for_a_single_company_board(self):
+        p = scan.record_sighting(self.source, "Backend Engineer", "https://x.test/1", "Remote")
+        self.assertEqual(p.company, "Acme")
+
+    def test_aggregator_source_keeps_two_different_real_employers_apart(self):
+        # Two different real companies, same title, same aggregator source -- must never look like one repost.
+        aggregator = JobSource.objects.create(name="RemoteOK", connector="remoteok", board_token="all", enabled=True)
+        import datetime
+        day1, day2 = datetime.date(2026, 1, 1), datetime.date(2026, 1, 15)
+        p1 = scan.record_sighting(aggregator, "Backend Engineer", "https://remoteok.test/1", "", company="Acme Corp", seen_date=day1)
+        p2 = scan.record_sighting(aggregator, "Backend Engineer", "https://remoteok.test/2", "", company="Beta Inc", seen_date=day2)
+        self.assertNotEqual(p1.title_key, p2.title_key)
+        self.assertIsNone(scan.repost_signal(p1))
+        self.assertIsNone(scan.repost_signal(p2))
+
+    def test_aggregator_source_still_flags_the_same_employer_reposting(self):
+        aggregator = JobSource.objects.create(name="RemoteOK", connector="remoteok", board_token="all", enabled=True)
+        import datetime
+        day1, day2 = datetime.date(2026, 1, 1), datetime.date(2026, 1, 15)
+        p1 = scan.record_sighting(aggregator, "Backend Engineer", "https://remoteok.test/1", "", company="Acme Corp", seen_date=day1)
+        p2 = scan.record_sighting(aggregator, "Backend Engineer", "https://remoteok.test/2", "", company="Acme Corp", seen_date=day2)
+        signal = scan.repost_signal(p2)
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal["distinct_urls"], 2)
 
     def test_two_urls_seen_the_same_day_is_not_flagged(self):
         # Two genuinely concurrent openings (different reqs, same title) posted on the same day.
