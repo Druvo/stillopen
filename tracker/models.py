@@ -177,6 +177,11 @@ class SiteConfig(PersonalSettings):
         default=True,
         help_text="Show applications whose posting is confirmed expired under the closed tab (unless already applied).",
     )
+    followup_emails_enabled = models.BooleanField(
+        default=False,
+        help_text="Send a daily digest email when someone has a follow-up due. Needs SMTP (EMAIL_HOST) configured -- "
+        "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
+    )
 
     careerops_path = models.CharField(
         max_length=500,
@@ -604,6 +609,11 @@ class Application(models.Model):
     applied_channel = models.CharField(max_length=10, choices=CHANNELS, blank=True)
     applied_note = models.CharField(max_length=300, blank=True)
     follow_up_date = models.DateField(null=True, blank=True)
+    follow_up_emailed_for = models.DateField(
+        null=True, blank=True,
+        help_text="The follow_up_date a reminder email was last sent for. Lets the daily digest send once per due "
+        "date instead of re-notifying every day it stays overdue; a snooze or a new follow-up date clears it.",
+    )
     jd_at_apply = models.TextField(blank=True, help_text="The job description as it was when the application was sent (postings disappear).")
     ai_evaluated_at = models.DateTimeField(null=True, blank=True)
     ai_method = models.CharField(max_length=40, blank=True)
@@ -941,6 +951,7 @@ class PostingSighting(models.Model):
 
     class Meta:
         ordering = ["seen_date"]
+        constraints = [models.UniqueConstraint(fields=["posting", "seen_date"], name="uniq_posting_seen_date")]
 
 
 class AIUsageEvent(models.Model):

@@ -50,7 +50,13 @@ class SiteConfigForm(forms.ModelForm):
 class SiteConfigAdmin(admin.ModelAdmin):
     form = SiteConfigForm
     fieldsets = (
-        ("Dashboard", {"fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired")}),
+        (
+            "Dashboard",
+            {
+                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled"),
+                "description": "Follow-up emails need SMTP (EMAIL_HOST in the environment) and `manage.py send_followup_emails` on a schedule (e.g. daily cron) -- enabling this alone does not send anything by itself.",
+            },
+        ),
         (
             "Registration",
             {

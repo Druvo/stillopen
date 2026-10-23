@@ -355,3 +355,117 @@ class Mcp(TestCase):
         self.assertEqual(self.app.status.name, "Evaluated")
         theirs_app.refresh_from_db()
         self.assertEqual(theirs_app.status.name, "Evaluated")
+
+
+class FollowUpEmails(TestCase):
+    def setUp(self):
+        self.today = timezone.localdate()
+
+    def _verified(self, user):
+        from allauth.account.models import EmailAddress
+
+        EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
+        return user
+
+    def test_digest_lists_every_due_job_in_one_email_and_marks_them_emailed(self):
+        from django.core import mail
+
+        u = self._verified(person("digestUser"))
+        due = job(u, company="Due", follow_up_date=self.today)
+        overdue = job(u, company="Overdue", follow_up_date=self.today - timedelta(days=3))
+        job(u, company="Later", follow_up_date=self.today + timedelta(days=2))  # not due -- must not appear
+        apps = apply_service.due_followups_to_email(u)
+        self.assertTrue(apply_service.send_followup_digest(u, apps))
+        self.assertEqual(len(mail.outbox), 1)
+        body = mail.outbox[0].body
+        self.assertIn("Due", body)
+        self.assertIn("Overdue", body)
+        self.assertNotIn("Later", body)
+        self.assertEqual(mail.outbox[0].to, [u.email])
+        due.refresh_from_db()
+        overdue.refresh_from_db()
+        self.assertEqual(due.follow_up_emailed_for, due.follow_up_date)
+        self.assertEqual(overdue.follow_up_emailed_for, overdue.follow_up_date)
+
+    def test_already_emailed_due_date_is_not_resent_but_a_new_one_is(self):
+        from django.core import mail
+
+        u = self._verified(person("repeatUser"))
+        a = job(u, follow_up_date=self.today)
+        apply_service.send_followup_digest(u, apply_service.due_followups_to_email(u))
+        self.assertEqual(len(mail.outbox), 1)
+        # Running again the same day (e.g. cron fired twice) must not re-send for the same due date.
+        self.assertEqual(list(apply_service.due_followups_to_email(u)), [])
+        apply_service.followup_snooze(a, 3)
+        self.assertEqual(len(apply_service.due_followups_to_email(u)), 0)  # not due yet after the snooze
+        later = self.today + timedelta(days=3)
+        self.assertEqual(len(apply_service.due_followups_to_email(u, today=later)), 1)  # new date arrives -- fires again
+
+    def test_no_verified_email_means_nothing_sent(self):
+        from django.core import mail
+
+        u = person("unverifiedUser")  # no EmailAddress row at all
+        job(u, follow_up_date=self.today)
+        self.assertFalse(apply_service.send_followup_digest(u, apply_service.due_followups_to_email(u)))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_nothing_due_sends_nothing(self):
+        from django.core import mail
+
+        u = self._verified(person("emptyUser"))
+        self.assertFalse(apply_service.send_followup_digest(u, []))
+        self.assertEqual(len(mail.outbox), 0)
+
+
+class SendFollowupEmailsCommand(TestCase):
+    def test_disabled_by_default_sends_nothing(self):
+        from io import StringIO
+
+        from django.core import mail
+        from django.core.management import call_command
+
+        u = person("cmdUser")
+        from allauth.account.models import EmailAddress
+
+        EmailAddress.objects.create(user=u, email=u.email, verified=True, primary=True)
+        job(u, follow_up_date=timezone.localdate())
+        out = StringIO()
+        call_command("send_followup_emails", stdout=out)
+        self.assertIn("off", out.getvalue())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_enabled_sends_to_everyone_with_something_due(self):
+        from io import StringIO
+
+        from django.core import mail
+        from django.core.management import call_command
+        from allauth.account.models import EmailAddress
+
+        SiteConfig.objects.filter(pk=1).update(followup_emails_enabled=True)
+        u1, u2 = person("cmdUser1"), person("cmdUser2")
+        for u in (u1, u2):
+            EmailAddress.objects.create(user=u, email=u.email, verified=True, primary=True)
+        job(u1, follow_up_date=timezone.localdate())
+        # u2 has nothing due -- must not receive an email or count as a "skipped" person
+        out = StringIO()
+        call_command("send_followup_emails", stdout=out)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [u1.email])
+        self.assertIn("Sent 1 digest", out.getvalue())
+
+    def test_user_flag_targets_one_person(self):
+        from io import StringIO
+
+        from django.core import mail
+        from django.core.management import call_command
+        from allauth.account.models import EmailAddress
+
+        SiteConfig.objects.filter(pk=1).update(followup_emails_enabled=True)
+        u1, u2 = person("cmdSingle1"), person("cmdSingle2")
+        for u in (u1, u2):
+            EmailAddress.objects.create(user=u, email=u.email, verified=True, primary=True)
+        job(u1, follow_up_date=timezone.localdate())
+        job(u2, follow_up_date=timezone.localdate())
+        call_command("send_followup_emails", "--user", "cmdSingle1", stdout=StringIO())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [u1.email])

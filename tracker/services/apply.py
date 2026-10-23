@@ -5,6 +5,9 @@ job description (postings disappear), and schedules a follow-up reminder.
 """
 from datetime import date, timedelta
 
+from django.conf import settings
+from django.core.mail import send_mail
+from django.db import models
 from django.utils import timezone
 
 from tracker.models import Application, CVVersion, Event, SiteConfig, Status
@@ -117,6 +120,46 @@ def due_followups(owner, today: date | None = None):
         .select_related("status", "applied_cv")
         .order_by("follow_up_date")
     )
+
+
+def due_followups_to_email(owner, today: date | None = None):
+    """Due follow-ups this owner hasn't already been emailed about for their current follow_up_date -- a snooze
+    or a new follow-up date naturally clears the "already emailed" marker, so it fires again when it falls due."""
+    today = today or timezone.localdate()
+    return due_followups(owner, today).exclude(follow_up_emailed_for=models.F("follow_up_date"))
+
+
+def followup_digest_text(apps) -> str:
+    today = timezone.localdate()
+    lines = ["Follow-ups due on your StillOpen tracker:", ""]
+    for app in apps:
+        overdue = (today - app.follow_up_date).days
+        when = "today" if overdue == 0 else f"{overdue} day{'s' if overdue != 1 else ''} overdue"
+        lines.append(f"- {app.company} - {app.role} ({when}, applied {app.applied_date:%d %b %Y})" if app.applied_date else f"- {app.company} - {app.role} ({when})")
+    lines += ["", "Open your dashboard to mark one done or push it back a few days."]
+    return "\n".join(lines)
+
+
+def send_followup_digest(owner, apps) -> bool:
+    """One email per person per run, listing every follow-up that's newly due -- never one email per job.
+    Returns False (and sends nothing) if the owner has no usable, verified address."""
+    from allauth.account.models import EmailAddress
+
+    apps = list(apps)
+    if not apps:
+        return False
+    if not EmailAddress.objects.filter(user=owner, email=owner.email, verified=True).exists():
+        return False
+    count = len(apps)
+    send_mail(
+        subject=f"StillOpen: {count} follow-up{'s' if count != 1 else ''} due",
+        message=followup_digest_text(apps),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[owner.email],
+        fail_silently=False,
+    )
+    Application.objects.filter(pk__in=[a.pk for a in apps]).update(follow_up_emailed_for=models.F("follow_up_date"))
+    return True
 
 
 def followup_done(app: Application) -> None:

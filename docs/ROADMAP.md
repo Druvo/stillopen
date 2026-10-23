@@ -114,10 +114,12 @@ Takeaways:
    estimate is only known after the call, since it needs the actual token count), and the static price table
    isn't admin-editable yet (a `ScoreBand`-style admin screen would be the natural next step if prices drift
    enough to matter).
-3. **Follow-up email nudges -- NEXT UP (queued, not started).** `EMAIL_HOST` is already wired for account
-   confirmation; reuse it for "it's been N days since you applied to X" using the existing follow-up date
-   field. No AI needed, cron-friendly (`manage.py` command + a scheduled task, same pattern as
-   `check_liveness`). User has explicitly asked to come back to this one next.
+3. **Follow-up email nudges -- done.** `manage.py send_followup_emails` (cron-friendly, same `--user`/
+   `--all-users`-by-default pattern as `check_liveness`) sends one digest email per person per run listing
+   every newly-due follow-up -- never one email per job, never a repeat for the same `follow_up_date`
+   (`Application.follow_up_emailed_for` tracks it; a snooze or a new date clears it naturally). Requires a
+   verified allauth email address and `SiteConfig.followup_emails_enabled` (off by default -- admin opts in
+   once SMTP/`EMAIL_HOST` is configured). No AI needed.
 4. **Recurring/scheduled scan with a digest.** Today's "Search jobs" is a one-shot manual click. Add an
    opt-in daily/weekly scheduled scan (cron + the existing `scan.py` machinery) with an email digest of new
    matches. No AI needed — pure scheduling on top of what exists.
