@@ -140,6 +140,13 @@ Takeaways:
 10. **Dashboard search/filter.** The "All postings" page already has search/source filters
     (`views.py:328-353`); the main dashboard tabs don't. Add a search box + bucket/source/date filters to the
     dashboard itself — pure UI, no backend gap.
+11. **Guided CV builder for a candidate with nothing yet.** Today, no CV means no scoring, no tailoring, no
+    apply assistant -- every one of those depends on a CV or knowledge doc already existing. A short Q&A
+    wizard (role history, skills, education, a project or two) that assembles a first Markdown CV via the
+    existing `CVVersion`/knowledge pipeline would let a true first-time candidate start from zero instead of
+    needing to arrive with a CV already written. Free-tier version: a fixed question set, template assembly,
+    no AI. Optional AI layer: have the provider turn rough answers into better-phrased bullets, same
+    fact-check-gate discipline as tailoring (never invents anything not in the person's own answers).
 
 ### Tier 3 — polish / scale prerequisites, do before claiming "production-ready for the public"
 
