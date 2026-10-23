@@ -39,6 +39,7 @@ ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
 
 INSTALLED_APPS = [
+    "jazzmin",  # must come before django.contrib.admin to replace its templates
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -90,6 +91,36 @@ TEMPLATES = [
 # templates, ignoring TEMPLATES[0]["DIRS"] above -- so templates/django/forms/widgets/*.html
 # (the Tabler/Bootstrap checkbox-list markup override) would silently never be found without this.
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
+
+# django-jazzmin: Bootstrap-based admin skin so /admin/ matches the Tabler/Bootstrap theme of the rest
+# of the app, instead of stock Django admin's unrelated look.
+JAZZMIN_SETTINGS = {
+    "site_title": "StillOpen admin",
+    "site_header": "StillOpen",
+    "site_brand": "StillOpen admin",
+    "welcome_sign": "Sign in to the StillOpen admin",
+    "copyright": "StillOpen",
+    "show_sidebar": True,
+    "navigation_expanded": False,
+    "changeform_format": "horizontal_tabs",
+}
+JAZZMIN_UI_TWEAKS = {
+    "theme": "darkly",
+    "dark_mode_theme": "darkly",
+    "navbar": "navbar-dark",
+    "no_navbar_border": True,
+    "sidebar": "sidebar-dark-primary",
+    "brand_colour": "navbar-primary",
+    "accent": "accent-primary",
+    "button_classes": {
+        "primary": "btn-primary",
+        "secondary": "btn-secondary",
+        "info": "btn-info",
+        "warning": "btn-warning",
+        "danger": "btn-danger",
+        "success": "btn-success",
+    },
+}
 
 WSGI_APPLICATION = "config.wsgi.application"
 
