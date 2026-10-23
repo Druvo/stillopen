@@ -124,7 +124,7 @@ def tailor(app: Application, config: SiteConfig, mode: str = "auto") -> CVVersio
         mode = "ai" if config.ai_provider != "none" else "keywords"
     if mode == "ai":
         try:
-            reply = ai.complete(config, SYSTEM_PROMPT, build_user_prompt(app, config, master.content))
+            reply = ai.complete(config, SYSTEM_PROMPT, build_user_prompt(app, config, master.content), app=app)
         except ai.AIError as exc:
             raise CVError(str(exc)) from exc
         content, source, provider = strip_reply(reply), "ai", config.ai_provider

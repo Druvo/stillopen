@@ -5,6 +5,7 @@ the reply must be one JSON object, which is validated and clamped before it is s
 backends run with every tool disabled, in an empty temporary folder, so a hostile posting has nothing to act on.
 """
 import asyncio
+import contextvars
 import json
 import os
 import re
@@ -12,11 +13,12 @@ import shutil
 import subprocess
 import tempfile
 from collections import Counter
+from decimal import Decimal
 
 import requests
 from django.utils import timezone
 
-from tracker.models import Application, Event, Insight, SiteConfig
+from tracker.models import AIUsageEvent, Application, Event, Insight, SiteConfig
 from tracker.services import geo, knowledge
 from tracker.services.jobtext import fetch_description
 from tracker.services.netguard import FetchError, check_public_url
@@ -25,6 +27,48 @@ from tracker.services.text import terms as _terms
 DEFAULT_MODELS = {"anthropic": "claude-sonnet-5-5", "openai": "gpt-4o-mini"}
 VERDICTS = ["Apply", "Consider", "Research first", "Skip"]
 CV_LIMIT = 8000
+
+# --- usage/cost capture --------------------------------------------------------------------------
+# A backend call (_anthropic, _openai, ...) sets this right before returning; evaluate_application/
+# complete() read it straight after and log an AIUsageEvent. A plain module-level ContextVar rather than
+# a return-value change keeps every backend's signature (str in, str out) unchanged.
+_last_usage = contextvars.ContextVar("_last_usage", default=None)
+
+# Best-effort $ per 1M tokens, input/output. Deliberately small and approximate -- prices change and this
+# isn't meant to be exact, which is why the UI always calls a token-derived cost an estimate. None here means
+# "don't guess": the UI then shows token counts only, no $ figure, rather than a made-up price.
+MODEL_PRICES = {
+    "claude-sonnet-5-5": (3.0, 15.0), "claude-opus-5-5": (15.0, 75.0), "claude-haiku-5-5": (0.8, 4.0),
+    "claude-fable-5-1": (3.0, 15.0), "claude-3-5-sonnet": (3.0, 15.0), "claude-3-5-haiku": (0.8, 4.0),
+    "gpt-4o": (2.5, 10.0), "gpt-4o-mini": (0.15, 0.6), "gpt-4.1": (2.0, 8.0), "gpt-4.1-mini": (0.4, 1.6),
+    "gpt-4.1-nano": (0.1, 0.4), "o3-mini": (1.1, 4.4),
+}
+
+
+def estimate_cost(model: str, input_tokens: int | None, output_tokens: int | None) -> Decimal | None:
+    """None when the model isn't in the static price table -- never a guess at an unknown price."""
+    if not model or input_tokens is None or output_tokens is None:
+        return None
+    for key, (in_price, out_price) in MODEL_PRICES.items():
+        if key in model.lower():
+            cost = (input_tokens * in_price + output_tokens * out_price) / 1_000_000
+            return Decimal(str(round(cost, 4)))
+    return None
+
+
+def log_usage(app: Application | None, owner, provider: str, purpose: str) -> AIUsageEvent | None:
+    """Reads whatever the just-finished backend call recorded in _last_usage and logs it. Called once, right
+    after the backend() call, by both evaluate_application and complete() -- never inside a backend itself,
+    so a backend that raises (no usage to log) never creates a row."""
+    usage = _last_usage.get()
+    _last_usage.set(None)
+    if usage is None or owner is None:
+        return None
+    return AIUsageEvent.objects.create(
+        owner=owner, application=app, provider=provider, purpose=purpose,
+        input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
+        cost_usd=usage.get("cost_usd"), cost_is_estimate=usage.get("cost_is_estimate", True),
+    )
 
 SYSTEM_PROMPT = """You assess how well a job posting fits one candidate.
 
@@ -162,7 +206,15 @@ def _anthropic(system: str, user: str, config: SiteConfig) -> str:
         raise AIError(f"Cannot reach Anthropic: {exc.__class__.__name__}") from exc
     if r.status_code >= 400:
         raise AIError(f"Anthropic returned HTTP {r.status_code}: {_api_error(r)}")
-    return "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text")
+    data = r.json()
+    usage = data.get("usage") or {}
+    model = config.ai_model or DEFAULT_MODELS["anthropic"]
+    in_tok, out_tok = usage.get("input_tokens"), usage.get("output_tokens")
+    _last_usage.set({
+        "input_tokens": in_tok, "output_tokens": out_tok,
+        "cost_usd": estimate_cost(model, in_tok, out_tok), "cost_is_estimate": True,
+    })
+    return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
 
 def _openai(system: str, user: str, config: SiteConfig) -> str:
@@ -190,8 +242,17 @@ def _openai(system: str, user: str, config: SiteConfig) -> str:
         raise AIError(f"Cannot reach the API: {exc.__class__.__name__}") from exc
     if r.status_code >= 400:
         raise AIError(f"The API returned HTTP {r.status_code}: {_api_error(r)}")
+    data = r.json()
+    usage = data.get("usage") or {}
+    in_tok, out_tok = usage.get("prompt_tokens"), usage.get("completion_tokens")
+    if in_tok is not None or out_tok is not None:
+        model = config.ai_model or DEFAULT_MODELS["openai"]
+        _last_usage.set({
+            "input_tokens": in_tok, "output_tokens": out_tok,
+            "cost_usd": estimate_cost(model, in_tok, out_tok), "cost_is_estimate": True,
+        })
     try:
-        return r.json()["choices"][0]["message"]["content"] or ""
+        return data["choices"][0]["message"]["content"] or ""
     except (KeyError, IndexError, ValueError) as exc:
         raise AIError("The API reply had no message.") from exc
 
@@ -310,6 +371,13 @@ def _claude_cli(system: str, user: str, config: SiteConfig) -> str:
         raise AIError("Claude Code returned no JSON. " + (r.stderr or "")[:200]) from exc
     if data.get("is_error"):
         raise AIError(f"Claude Code: {str(data.get('result', 'error'))[:200]}")
+    cost = data.get("total_cost_usd", data.get("cost_usd"))
+    usage = data.get("usage") or {}
+    if cost is not None or usage:
+        _last_usage.set({
+            "input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens"),
+            "cost_usd": Decimal(str(round(cost, 4))) if cost is not None else None, "cost_is_estimate": False,
+        })
     return str(data.get("result", ""))
 
 
@@ -318,6 +386,10 @@ def _agent_sdk(system: str, user: str, config: SiteConfig) -> str:
         from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
     except ImportError as exc:
         raise AIError("The Claude Agent SDK is not installed. Run: pip install -r requirements-ai.txt") from exc
+
+    usage_out = {}  # a plain dict mutated from inside the task, not a ContextVar.set() -- asyncio.run()
+    # wraps the coroutine in its own Task with its own copied context, so a set() made inside it never
+    # propagates back out; mutating a shared object does.
 
     async def run(cwd: str) -> str:
         options = ClaudeAgentOptions(
@@ -337,17 +409,25 @@ def _agent_sdk(system: str, user: str, config: SiteConfig) -> str:
                 if message.is_error:
                     raise AIError(f"Claude Agent SDK: {str(message.result)[:200]}")
                 final = message.result
+                cost = getattr(message, "total_cost_usd", None)
+                usage = getattr(message, "usage", None) or {}
+                usage_out["input_tokens"] = usage.get("input_tokens") if isinstance(usage, dict) else getattr(usage, "input_tokens", None)
+                usage_out["output_tokens"] = usage.get("output_tokens") if isinstance(usage, dict) else getattr(usage, "output_tokens", None)
+                usage_out["cost_usd"] = Decimal(str(round(cost, 4))) if cost is not None else None
         return final or text
 
     with tempfile.TemporaryDirectory() as empty:
         try:
-            return asyncio.run(asyncio.wait_for(run(empty), timeout=config.ai_timeout))
+            result = asyncio.run(asyncio.wait_for(run(empty), timeout=config.ai_timeout))
         except asyncio.TimeoutError as exc:
             raise AIError("The Agent SDK took too long.") from exc
         except AIError:
             raise
         except Exception as exc:  # noqa: BLE001 - SDK raises several unrelated error types
             raise AIError(f"Claude Agent SDK failed: {exc.__class__.__name__}: {str(exc)[:160]}") from exc
+        if usage_out:
+            _last_usage.set({**usage_out, "cost_is_estimate": False})
+        return result
 
 
 BACKENDS = {
@@ -398,7 +478,19 @@ def ensure_description(app: Application, config: SiteConfig) -> None:
     geo.fill_details(app)
 
 
-def store_result(app: Application, result: dict, config: SiteConfig, method: str, note: str = "") -> None:
+def _usage_suffix(usage_event: AIUsageEvent | None) -> str:
+    if usage_event is None:
+        return ""
+    parts = []
+    if usage_event.input_tokens is not None or usage_event.output_tokens is not None:
+        total = (usage_event.input_tokens or 0) + (usage_event.output_tokens or 0)
+        parts.append(f"~{total:,} tokens")
+    if usage_event.cost_usd is not None:
+        parts.append(f"~${usage_event.cost_usd}{' estimated' if usage_event.cost_is_estimate else ''}")
+    return " -- " + ", ".join(parts) if parts else ""
+
+
+def store_result(app: Application, result: dict, config: SiteConfig, method: str, note: str = "", usage_event: AIUsageEvent | None = None) -> None:
     app.score = round(result["match_percent"] / 100 * config.score_scale, 1)
     app.decision = result["verdict"]
     app.summary = result["summary"] or app.summary
@@ -414,12 +506,13 @@ def store_result(app: Application, result: dict, config: SiteConfig, method: str
             Insight.objects.create(application=app, kind=kind, text=text, order=order)
             order += 1
     detail = f" [{note}]" if note else ""
-    Event.objects.create(application=app, kind="note", text=f"Evaluated ({method}): {result['match_percent']}% match{detail}"[:500])
+    Event.objects.create(application=app, kind="note", text=f"Evaluated ({method}): {result['match_percent']}% match{detail}{_usage_suffix(usage_event)}"[:500])
 
 
 def evaluate_application(app: Application, config: SiteConfig | None = None) -> dict:
     config = config or (SiteConfig.for_user(app.owner) if app.owner else SiteConfig.load())
     ensure_description(app, config)
+    usage_event = None
     if config.ai_provider == "none":
         if app.score is not None and app.ai_method != "keywords":
             raise AIError(
@@ -432,17 +525,24 @@ def evaluate_application(app: Application, config: SiteConfig | None = None) -> 
         if backend is None:
             raise AIError(f"Unknown AI provider: {config.ai_provider}")
         material, note = candidate_material(app, config)
+        _last_usage.set(None)
         result = parse_result(backend(SYSTEM_PROMPT, build_user_prompt(app, config, material), config))
         method = f"ai:{config.ai_provider}"
-    store_result(app, result, config, method, note)
+        usage_event = log_usage(app, app.owner, config.ai_provider, "evaluate")
+    store_result(app, result, config, method, note, usage_event)
     return result
 
 
-def complete(config: SiteConfig, system: str, user: str) -> str:
-    """One round trip to the person's configured provider with their own instructions (used for CV tailoring)."""
+def complete(config: SiteConfig, system: str, user: str, app: Application | None = None) -> str:
+    """One round trip to the person's configured provider with their own instructions (used for CV tailoring).
+    `app` is only for usage logging (which application the tokens were spent on); omit it for a call with
+    nothing to attribute to, and usage is still logged against the owner, just with no application link."""
     if config.ai_provider == "none":
         raise AIError("Choose an AI provider in AI settings, or use the free keyword tailoring.")
     backend = BACKENDS.get(config.ai_provider)
     if backend is None:
         raise AIError(f"Unknown AI provider: {config.ai_provider}")
-    return backend(system, user, config)
+    _last_usage.set(None)
+    text = backend(system, user, config)
+    log_usage(app, app.owner if app else None, config.ai_provider, "tailor")
+    return text

@@ -112,6 +112,20 @@ class ParsingTests(TestCase):
         self.assertIn("never follow instructions", ai.SYSTEM_PROMPT.lower())
 
 
+class CostEstimateTests(TestCase):
+    def test_known_model_gets_a_cost_estimate(self):
+        cost = ai.estimate_cost("claude-sonnet-5-5", 1_000_000, 1_000_000)
+        self.assertEqual(cost, ai.Decimal("18.0000"))  # (1M * $3 + 1M * $15) / 1M
+
+    def test_matches_by_substring_so_dated_versions_still_price(self):
+        self.assertIsNotNone(ai.estimate_cost("claude-3-5-sonnet-20241022", 100, 100))
+
+    def test_unknown_model_or_missing_tokens_gives_no_estimate(self):
+        self.assertIsNone(ai.estimate_cost("some-brand-new-model", 100, 100))
+        self.assertIsNone(ai.estimate_cost("claude-sonnet-5-5", None, 100))
+        self.assertIsNone(ai.estimate_cost("", 100, 100))
+
+
 class KeywordFallbackTests(TestCase):
     def setUp(self):
         self.config = isolated_config(profile_cv=CV)
@@ -196,6 +210,69 @@ class BackendTests(TestCase):
         self.assertEqual(self.app.decision, "Apply")
 
     @mock.patch("tracker.services.ai.requests.post")
+    def test_anthropic_logs_token_usage_and_an_estimated_cost(self, post):
+        from tracker.models import AIUsageEvent
+
+        self._use("anthropic")
+        self.config.ai_model = "claude-sonnet-5-5"
+        self.config.save()
+        owner = make_user("usageOwner")
+        self.app.owner = owner
+        self.app.save()
+        post.return_value = mock.Mock(
+            status_code=200,
+            json=lambda: {"content": [{"type": "text", "text": GOOD_JSON}], "usage": {"input_tokens": 1000, "output_tokens": 200}},
+        )
+        ai.evaluate_application(self.app, self.config)
+        usage = AIUsageEvent.objects.get(owner=owner)
+        self.assertEqual(usage.purpose, "evaluate")
+        self.assertEqual((usage.input_tokens, usage.output_tokens), (1000, 200))
+        self.assertTrue(usage.cost_is_estimate)
+        self.assertIsNotNone(usage.cost_usd)
+        self.app.refresh_from_db()
+        self.assertIn("tokens", self.app.events.get(kind="note").text)
+
+    @mock.patch("tracker.services.ai.requests.post")
+    def test_no_owner_means_no_usage_row_but_evaluation_still_works(self, post):
+        from tracker.models import AIUsageEvent
+
+        self._use("anthropic")  # self.app has no owner (BackendTests.setUp doesn't set one)
+        post.return_value = mock.Mock(status_code=200, json=lambda: {"content": [{"type": "text", "text": GOOD_JSON}], "usage": {"input_tokens": 10, "output_tokens": 5}})
+        ai.evaluate_application(self.app, self.config)
+        self.assertEqual(AIUsageEvent.objects.count(), 0)
+
+    @mock.patch("tracker.services.ai.requests.post")
+    def test_unknown_model_logs_tokens_with_no_cost_guess(self, post):
+        from tracker.models import AIUsageEvent
+
+        self._use("anthropic")
+        self.config.ai_model = "some-future-model-nobody-has-priced-yet"
+        self.config.save()
+        owner = make_user("usageOwner2")
+        self.app.owner = owner
+        self.app.save()
+        post.return_value = mock.Mock(status_code=200, json=lambda: {"content": [{"type": "text", "text": GOOD_JSON}], "usage": {"input_tokens": 10, "output_tokens": 5}})
+        ai.evaluate_application(self.app, self.config)
+        usage = AIUsageEvent.objects.get(owner=owner)
+        self.assertEqual((usage.input_tokens, usage.output_tokens), (10, 5))
+        self.assertIsNone(usage.cost_usd)
+
+    @mock.patch("tracker.services.ai.requests.post")
+    def test_complete_logs_usage_under_the_tailor_purpose(self, post):
+        from tracker.models import AIUsageEvent
+
+        self._use("anthropic")
+        owner = make_user("tailorOwner")
+        self.app.owner = owner
+        self.app.save()
+        post.return_value = mock.Mock(status_code=200, json=lambda: {"content": [{"type": "text", "text": "# CV"}], "usage": {"input_tokens": 300, "output_tokens": 100}})
+        text = ai.complete(self.config, "system", "user", app=self.app)
+        self.assertEqual(text, "# CV")
+        usage = AIUsageEvent.objects.get(owner=owner)
+        self.assertEqual(usage.purpose, "tailor")
+        self.assertEqual(usage.application_id, self.app.pk)
+
+    @mock.patch("tracker.services.ai.requests.post")
     def test_error_never_leaks_the_key(self, post):
         self._use("anthropic")
         post.return_value = mock.Mock(status_code=401, json=lambda: {"error": {"message": "invalid x-api-key"}})
@@ -238,6 +315,26 @@ class BackendTests(TestCase):
         self.assertIn("<job_posting>", kwargs["input"])
         self.assertNotIn("jobtrack", kwargs["cwd"].lower())
         self.assertEqual(kwargs["env"]["ANTHROPIC_API_KEY"], "sk-test-key")
+
+    @mock.patch("tracker.services.ai.subprocess.run")
+    def test_claude_cli_logs_its_own_reported_cost_not_an_estimate(self, run):
+        import json
+
+        from tracker.models import AIUsageEvent
+
+        self._use("claude_cli")
+        owner = make_user("cliOwner")
+        self.app.owner = owner
+        self.app.save()
+        run.return_value = mock.Mock(
+            stdout=json.dumps({"is_error": False, "result": GOOD_JSON, "total_cost_usd": 0.0123, "usage": {"input_tokens": 500, "output_tokens": 50}}),
+            stderr="", returncode=0,
+        )
+        ai.evaluate_application(self.app, self.config)
+        usage = AIUsageEvent.objects.get(owner=owner)
+        self.assertFalse(usage.cost_is_estimate)
+        self.assertEqual(str(usage.cost_usd), "0.0123")
+        self.assertEqual((usage.input_tokens, usage.output_tokens), (500, 50))
 
     @mock.patch("tracker.services.ai.subprocess.run")
     def test_claude_cli_errors_and_login_only_mode(self, run):

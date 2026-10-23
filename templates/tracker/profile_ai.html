@@ -5,6 +5,22 @@
 {% block content %}
 <p class="text-secondary">Choose how your jobs are scored. <strong>Off</strong> is free and uses a keyword match against your CV. Any other choice uses <em>your own</em> account with that provider: when you press Evaluate, the job text, your preferences and the relevant parts of your CV are sent to it.</p>
 
+<div class="card mb-3">
+  <div class="card-body">
+    <h3 class="mt-0">AI usage this month</h3>
+    {% if usage.calls %}
+    <p class="mb-0">
+      {{ usage.calls }} paid-provider call{{ usage.calls|pluralize }}
+      {% if usage.total_tokens %}&middot; ~{{ usage.total_tokens }} tokens{% endif %}
+      {% if usage.cost_usd %}&middot; ~${{ usage.cost_usd }}{% if usage.any_estimated %} (estimated for some calls -- provider prices change and this is approximate){% endif %}{% endif %}
+    </p>
+    <small class="text-secondary">The free keyword match (no AI provider) never appears here -- it costs nothing and makes no network call.</small>
+    {% else %}
+    <p class="mb-0 text-secondary">No paid-provider AI calls yet this month. The free keyword match doesn't count -- it's always free.</p>
+    {% endif %}
+  </div>
+</div>
+
 <div class="card">
   <div class="card-body">
   <form method="post">

@@ -7,7 +7,7 @@ from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -16,8 +16,8 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from . import forms
 from .models import (
-    Application, Bucket, Document, Event, JobSource, KnowledgeSource, Posting, ScoreBand, SiteConfig, Status,
-    UserProfile,
+    AIUsageEvent, Application, Bucket, Document, Event, JobSource, KnowledgeSource, Posting, ScoreBand, SiteConfig,
+    Status, UserProfile,
 )
 from .services import ai, careerops, cvversions, jobtext, knowledge, liveness, scan
 from .services import apply as apply_service
@@ -457,9 +457,17 @@ def profile_ai(request):
         form.save()
         messages.success(request, "AI settings saved.")
         return redirect("profile_ai")
+    now = timezone.localtime()
+    usage = AIUsageEvent.objects.filter(
+        owner=request.user, created_at__year=now.year, created_at__month=now.month,
+    ).aggregate(input_tokens=Sum("input_tokens"), output_tokens=Sum("output_tokens"), cost_usd=Sum("cost_usd"), calls=Count("id"))
+    usage["total_tokens"] = (usage["input_tokens"] or 0) + (usage["output_tokens"] or 0)
+    usage["any_estimated"] = AIUsageEvent.objects.filter(
+        owner=request.user, created_at__year=now.year, created_at__month=now.month, cost_is_estimate=True, cost_usd__isnull=False,
+    ).exists()
     return render(request, "tracker/profile_ai.html", {
         "form": form, "config": SiteConfig.load(), "has_key": bool(obj.ai_key_encrypted),
-        "has_rag_key": bool(obj.rag_embedding_key_encrypted),
+        "has_rag_key": bool(obj.rag_embedding_key_encrypted), "usage": usage,
     })
 
 

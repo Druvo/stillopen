@@ -16,8 +16,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from tracker.models import (
-    Application, Document, DocumentKind, Event, JobSource, KnowledgeSource, LivenessRun, ScanRun, SiteConfig, Status,
-    UserProfile,
+    AIUsageEvent, Application, Document, DocumentKind, Event, JobSource, KnowledgeSource, LivenessRun, ScanRun,
+    SiteConfig, Status, UserProfile,
 )
 from tracker.services import ai, claim, jobtext, knowledge, scan, who
 
@@ -328,6 +328,19 @@ class ProfilePages(TestCase):
         page = self.client.get(reverse("profile_ai")).content.decode()
         self.assertNotIn("visible-secret", page)
         self.assertIn("saved", page)
+
+    def test_ai_page_shows_no_usage_yet_then_this_months_total(self):
+        page = self.client.get(reverse("profile_ai"))
+        self.assertContains(page, "No paid-provider AI calls yet this month")
+        AIUsageEvent.objects.create(owner=self.u, provider="anthropic", purpose="evaluate", input_tokens=1000, output_tokens=200, cost_usd="0.0180", cost_is_estimate=True)
+        page = self.client.get(reverse("profile_ai"))
+        self.assertContains(page, "1 paid-provider call")
+        self.assertContains(page, "1200 tokens")
+        self.assertContains(page, "$0.0180")
+        other = User.objects.create_user("otherAiUser", password=PW)
+        AIUsageEvent.objects.create(owner=other, provider="anthropic", purpose="evaluate", input_tokens=99999, output_tokens=99999)
+        page = self.client.get(reverse("profile_ai"))
+        self.assertContains(page, "1 paid-provider call")  # the other person's usage never shows up here
 
     def _ai_post(self, **extra):
         data = {

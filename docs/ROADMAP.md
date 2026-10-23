@@ -72,7 +72,7 @@ No TODO/FIXME markers anywhere in the Python source — gaps are tracked in pros
 | Job alerts / saved recurring search | yes (board aggregation) | — | — | — | — | one-shot scan only, **no recurring/scheduled scan or digest** |
 | **"Is this posting still open" live check** | — | — | — | — | — (ApplyPotato: via Gmail only) | **yes — a genuine differentiator, lean into it** |
 | **Referral tracking** | — | — | — | — | — | **none — whitespace, no competitor has this either** |
-| Cost/token transparency for AI use | — | — | — | — | — | **none** — real gap for a BYOK public tool |
+| Cost/token transparency for AI use | — | — | — | — | — | tokens + cost per call, monthly total on Profile -> AI settings |
 | Mobile app | native | native | extension | — | — | responsive web only |
 
 Takeaways:
@@ -101,10 +101,15 @@ Takeaways:
    hands off to the add-job form via the session (prefilled, one-shot, never auto-saved -- the person still
    reviews and submits). No AI required. Not yet done: running the match evaluation automatically right
    after a quick-add save (currently still a separate "Evaluate match" click, same as a manually-added job).
-2. **Cost/token transparency.** Capture `usage` from Anthropic/OpenAI-compatible responses, append to the
-   existing `Event` line, show a running "tokens used this month" per user, and a pre-click estimate (chars
-   → rough token count, admin-editable per-model price table mirroring `ScoreBand`). No AI cost itself —
-   pure instrumentation of calls already being made. Needed for BYOK trust.
+2. **Cost/token transparency -- done.** Every paid-provider call (`evaluate_application` and the CV-tailoring
+   `complete()`) now logs an `AIUsageEvent`: tokens from the provider's own response (Anthropic, any OpenAI-
+   compatible endpoint), cost either reported directly (Claude Code CLI, Agent SDK) or estimated from a small
+   static per-model price table (never a guess for a model not in it). Surfaced as a running monthly total on
+   Profile -> AI settings and appended to each evaluation's Event note. The free keyword match logs nothing --
+   it makes no network call. Not yet done: a pre-click estimate before the person presses Evaluate (today's
+   estimate is only known after the call, since it needs the actual token count), and the static price table
+   isn't admin-editable yet (a `ScoreBand`-style admin screen would be the natural next step if prices drift
+   enough to matter).
 3. **Follow-up email nudges.** `EMAIL_HOST` is already wired for account confirmation; reuse it for "it's
    been N days since you applied to X" using the existing follow-up date field. No AI needed, cron-friendly
    (`manage.py` command + a scheduled task, same pattern as `check_liveness`).

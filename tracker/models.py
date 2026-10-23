@@ -941,4 +941,33 @@ class PostingSighting(models.Model):
 
     class Meta:
         ordering = ["seen_date"]
+
+
+class AIUsageEvent(models.Model):
+    """One paid-provider AI call (never the free keyword fallback, which costs nothing and isn't logged here).
+
+    Token counts come straight from the provider's own response where it reports them (Anthropic, any
+    OpenAI-compatible endpoint); `cost_usd` is either the provider's own reported figure (Claude Code CLI,
+    Claude Agent SDK) or a best-effort estimate from a small static per-model price table (services/ai.py) --
+    never exact for every model, which is why the UI always labels it an estimate. A provider this can't
+    measure at all (Custom HTTP, whose response shape is unknowable in general) simply logs no tokens/cost,
+    not a guess."""
+
+    PURPOSES = [("evaluate", "Evaluate match"), ("tailor", "Tailor CV")]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ai_usage_events")
+    application = models.ForeignKey(Application, null=True, blank=True, on_delete=models.SET_NULL, related_name="ai_usage_events")
+    created_at = models.DateTimeField(auto_now_add=True)
+    provider = models.CharField(max_length=20)
+    purpose = models.CharField(max_length=12, choices=PURPOSES)
+    input_tokens = models.PositiveIntegerField(null=True, blank=True)
+    output_tokens = models.PositiveIntegerField(null=True, blank=True)
+    cost_usd = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True)
+    cost_is_estimate = models.BooleanField(default=True, help_text="False only when the provider itself reported the cost.")
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.provider} {self.purpose} {self.created_at:%Y-%m-%d}"
         constraints = [models.UniqueConstraint(fields=["posting", "seen_date"], name="uniq_posting_seen_date")]

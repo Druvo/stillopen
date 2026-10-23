@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
+    AIUsageEvent,
     Application,
     Bucket,
     Document,
@@ -429,6 +430,17 @@ class ScanRunAdmin(admin.ModelAdmin):
     list_display = ("owner", "started_at", "finished_at", "running", "done", "total", "found", "added", "error")
     readonly_fields = [f.name for f in ScanRun._meta.fields]
     inlines = [ScanLogEntryInline]
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(AIUsageEvent)
+class AIUsageEventAdmin(admin.ModelAdmin):
+    list_display = ("owner", "provider", "purpose", "input_tokens", "output_tokens", "cost_usd", "cost_is_estimate", "created_at")
+    list_filter = ("provider", "purpose", "cost_is_estimate")
+    search_fields = ("owner__username",)
+    readonly_fields = [f.name for f in AIUsageEvent._meta.fields]
 
     def has_add_permission(self, request):
         return False
