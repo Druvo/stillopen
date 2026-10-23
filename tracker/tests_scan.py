@@ -35,6 +35,17 @@ ASHBY_PAYLOAD = {
         {"title": "Platform Engineer", "jobUrl": "https://jobs.ashbyhq.com/acme/1", "location": "Remote"},
     ]
 }
+SMARTRECRUITERS_PAYLOAD = {
+    "content": [
+        {"id": "123", "name": "Backend Engineer", "location": {"fullLocation": "Austin, TX, United States"}},
+    ]
+}
+RECRUITEE_PAYLOAD = {
+    "offers": [
+        {"title": "Backend Engineer", "careers_apply_url": "https://jobs.acme.com/o/backend-engineer/c/new", "city": "Utrecht", "country": "Netherlands", "remote": False},
+        {"title": "Remote Support Engineer", "careers_apply_url": "https://jobs.acme.com/o/support/c/new", "city": "", "country": "", "remote": True},
+    ]
+}
 REMOTEOK_PAYLOAD = [
     {"legal": "API Terms of Service: ..."},  # RemoteOK's own first element, not a job
     {"id": "1", "position": "Backend Engineer", "url": "https://remoteok.com/remote-jobs/1", "location": "", "company": "Acme Corp"},
@@ -80,6 +91,19 @@ class ConnectorTests(TestCase):
         get.return_value = mock.Mock(status_code=200, json=lambda: ASHBY_PAYLOAD)
         out = scan.fetch_ashby("acme")
         self.assertEqual(out, [{"title": "Platform Engineer", "url": "https://jobs.ashbyhq.com/acme/1", "location": "Remote"}])
+
+    @mock.patch("tracker.services.scan.safe_get")
+    def test_smartrecruiters_parses_postings_and_builds_the_public_url(self, get):
+        get.return_value = mock.Mock(status_code=200, json=lambda: SMARTRECRUITERS_PAYLOAD)
+        out = scan.fetch_smartrecruiters("Equinox")
+        self.assertEqual(out, [{"title": "Backend Engineer", "url": "https://jobs.smartrecruiters.com/Equinox/123", "location": "Austin, TX, United States"}])
+
+    @mock.patch("tracker.services.scan.safe_get")
+    def test_recruitee_parses_offers_and_falls_back_to_remote_label(self, get):
+        get.return_value = mock.Mock(status_code=200, json=lambda: RECRUITEE_PAYLOAD)
+        out = scan.fetch_recruitee("acme")
+        self.assertEqual(out[0], {"title": "Backend Engineer", "url": "https://jobs.acme.com/o/backend-engineer/c/new", "location": "Utrecht, Netherlands"})
+        self.assertEqual(out[1]["location"], "Remote")  # no city/country, but remote=True
 
     @mock.patch("tracker.services.scan.safe_get")
     def test_non_200_raises_fetch_error(self, get):

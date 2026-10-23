@@ -1,9 +1,14 @@
 """Search configured job boards for postings matching your target roles.
 
-Zero-token: every connector here is a plain public JSON or RSS endpoint -- Greenhouse, Lever and Ashby for a
-single company's own board; RemoteOK, We Work Remotely and Himalayas for a multi-employer aggregator. Finding a
-posting costs one HTTP GET per enabled JobSource, no AI call. Scoring/tailoring a posting once it's in your
-tracker still goes through the normal (optional, BYOK) AI path -- this module only discovers and records it.
+Zero-token: every connector here is a plain public JSON or RSS endpoint -- Greenhouse, Lever, Ashby,
+SmartRecruiters and Recruitee for a single company's own board; RemoteOK, We Work Remotely and Himalayas for a
+multi-employer aggregator. Finding a posting costs one HTTP GET per enabled JobSource, no AI call. Scoring/
+tailoring a posting once it's in your tracker still goes through the normal (optional, BYOK) AI path -- this
+module only discovers and records it.
+
+Checked and NOT added: Workable's public job-board API returned an empty result for every real company tried
+(Dashlane, Pipedrive, Skyscanner, Typeform, Babbel...) -- looks deprecated/sunset rather than unreachable, so
+it isn't wired in without a confirmed-working account to verify against.
 
 Deliberately NOT a connector here: LinkedIn (scraping it violates its Terms of Service and its anti-bot
 measures are the kind this project won't try to defeat -- see AGENTS.md-equivalent discipline in CLAUDE.md;
@@ -130,6 +135,36 @@ def fetch_ashby(token: str) -> list[dict]:
             "title": j.get("title", ""),
             "url": j.get("jobUrl") or j.get("applyUrl") or "",
             "location": j.get("location", ""),
+        })
+    return out
+
+
+def fetch_smartrecruiters(token: str) -> list[dict]:
+    resp = safe_get(f"https://api.smartrecruiters.com/v1/companies/{token}/postings", timeout=20)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    out = []
+    for j in resp.json().get("content", []):
+        posting_id = j.get("id", "")
+        out.append({
+            "title": j.get("name", ""),
+            "url": f"https://jobs.smartrecruiters.com/{token}/{posting_id}" if posting_id else "",
+            "location": (j.get("location") or {}).get("fullLocation", ""),
+        })
+    return out
+
+
+def fetch_recruitee(token: str) -> list[dict]:
+    resp = safe_get(f"https://{token}.recruitee.com/api/offers/", timeout=20)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    out = []
+    for j in resp.json().get("offers", []):
+        location = ", ".join(x for x in (j.get("city"), j.get("country")) if x) or ("Remote" if j.get("remote") else "")
+        out.append({
+            "title": j.get("title", ""),
+            "url": j.get("careers_apply_url") or j.get("careers_url") or "",
+            "location": location,
         })
     return out
 

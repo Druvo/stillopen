@@ -842,6 +842,8 @@ class JobSource(models.Model):
         ("greenhouse", "Greenhouse"),
         ("lever", "Lever"),
         ("ashby", "Ashby"),
+        ("smartrecruiters", "SmartRecruiters"),
+        ("recruitee", "Recruitee"),
         ("remoteok", "RemoteOK"),
         ("weworkremotely", "We Work Remotely"),
         ("himalayas", "Himalayas"),
@@ -852,8 +854,9 @@ class JobSource(models.Model):
     board_token = models.CharField(
         max_length=80,
         help_text="Single-company connector: the board token from the ATS's own URL, e.g. 'resend' for "
-        "jobs.ashbyhq.com/resend, or 'acme' for boards.greenhouse.io/acme. Aggregator connector: an optional "
-        "filter -- a RemoteOK tag (e.g. 'dev'), a We Work Remotely category slug (e.g. "
+        "jobs.ashbyhq.com/resend, 'acme' for boards.greenhouse.io/acme, 'Equinox' for "
+        "jobs.smartrecruiters.com/Equinox, or 'channable' for channable.recruitee.com. Aggregator connector: an "
+        "optional filter -- a RemoteOK tag (e.g. 'dev'), a We Work Remotely category slug (e.g. "
         "'remote-full-stack-programming-jobs'), or 'all' for no filter (Himalayas ignores this and always "
         "fetches its newest postings, since its public API has no working keyword filter to request narrower "
         "than that). Letters, digits, dot, dash and underscore only.",
