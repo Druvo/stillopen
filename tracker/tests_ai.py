@@ -535,3 +535,27 @@ class CustomHttpTests(TestCase):
             ai.evaluate_application(self.app, self.config)
         self.assertNotIn("sk-custom-key", str(ctx.exception))
         self.assertIn("403", str(ctx.exception))
+
+
+class CostBookkeepingNeverBreaksAnAnswer(TestCase):
+    def test_money_accepts_numbers_and_rejects_everything_else(self):
+        from decimal import Decimal
+
+        self.assertEqual(ai.money(0.0123456), Decimal("0.0123"))
+        self.assertEqual(ai.money("0.5"), Decimal("0.5"))
+        self.assertEqual(ai.money(2), Decimal("2.0"))
+        for bad in (None, True, "abc", object(), float("nan"), mock.MagicMock()):
+            self.assertIsNone(ai.money(bad), repr(bad))
+
+    @mock.patch("tracker.services.ai.subprocess.run")
+    def test_a_garbage_cost_from_the_cli_does_not_fail_the_evaluation(self, run):
+        import json
+
+        config = isolated_config(profile_cv=CV)
+        config.ai_provider = "claude_cli"
+        config.ai_key_encrypted = ""
+        run.return_value = mock.Mock(
+            stdout=json.dumps({"is_error": False, "result": GOOD_JSON, "total_cost_usd": "not a number", "usage": {"input_tokens": 5}}),
+            stderr="", returncode=0,
+        )
+        self.assertEqual(ai.evaluate_application(make_app(description=JD), config)["match_percent"], 82)

@@ -45,6 +45,19 @@ MODEL_PRICES = {
 }
 
 
+def money(value) -> Decimal | None:
+    """A reported cost as Decimal, or None if it is missing or not a usable number.
+
+    Cost accounting is bookkeeping: whatever a provider or SDK reports, it must never turn a good answer into an error."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
+        return None
+    try:
+        cost = Decimal(str(round(float(value), 4)))
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+    return cost if cost.is_finite() and cost >= 0 else None
+
+
 def estimate_cost(model: str, input_tokens: int | None, output_tokens: int | None) -> Decimal | None:
     """None when the model isn't in the static price table -- never a guess at an unknown price."""
     if not model or input_tokens is None or output_tokens is None:
@@ -376,7 +389,7 @@ def _claude_cli(system: str, user: str, config: SiteConfig) -> str:
     if cost is not None or usage:
         _last_usage.set({
             "input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens"),
-            "cost_usd": Decimal(str(round(cost, 4))) if cost is not None else None, "cost_is_estimate": False,
+            "cost_usd": money(cost), "cost_is_estimate": False,
         })
     return str(data.get("result", ""))
 
@@ -413,7 +426,7 @@ def _agent_sdk(system: str, user: str, config: SiteConfig) -> str:
                 usage = getattr(message, "usage", None) or {}
                 usage_out["input_tokens"] = usage.get("input_tokens") if isinstance(usage, dict) else getattr(usage, "input_tokens", None)
                 usage_out["output_tokens"] = usage.get("output_tokens") if isinstance(usage, dict) else getattr(usage, "output_tokens", None)
-                usage_out["cost_usd"] = Decimal(str(round(cost, 4))) if cost is not None else None
+                usage_out["cost_usd"] = money(cost)
         return final or text
 
     with tempfile.TemporaryDirectory() as empty:
