@@ -103,6 +103,7 @@ JAZZMIN_SETTINGS = {
     "show_sidebar": True,
     "navigation_expanded": False,
     "changeform_format": "horizontal_tabs",
+    "use_google_fonts_cdn": False,  # no third-party requests from the admin either
 }
 JAZZMIN_UI_TWEAKS = {
     "theme": "darkly",
@@ -150,6 +151,8 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# Vendored front-end files (Tabler) live here and are served by this app, never from a third-party CDN.
+STATICFILES_DIRS = [BASE_DIR / "static"]
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},

@@ -41,6 +41,10 @@ People who register themselves must confirm their email before they can sign in.
 - Because the server fetches URLs that users supply (job links, AI endpoints), every outgoing request refuses non-http(s) schemes and any host that resolves to a private, loopback, link-local or cloud-metadata address, and redirects are checked hop by hop. AI requests do not follow redirects.
 - Uploaded CV and document files are read for their text and discarded; only the text is stored. Deleting an account removes the profile, jobs, notes, documents and any stored files.
 
+## No third-party requests from the browser
+
+The interface (Tabler 1.7.0, MIT) is shipped inside the app under `static/vendor/tabler/` and served by your own server, and the admin theme's Google Fonts CDN is turned off. Visitors' browsers therefore contact only your domain, so nothing about who visits or what they open leaks to a CDN, and a compromised CDN cannot inject script into your users' sessions. `tracker/tests_selfhost.py` fails if any page starts loading an asset from another host. The files are checked against jsDelivr's published SHA-256 hashes; see `static/vendor/tabler/NOTICE.md` to upgrade.
+
 ## Limits per person
 
 Set in `.env`: `STILLOPEN_MAX_APPLICATIONS` (500), `STILLOPEN_MAX_KNOWLEDGE` (40 documents), `STILLOPEN_EVALS_PER_HOUR` (30), `STILLOPEN_CHECKS_PER_HOUR` (12). Uploads are limited to 2 MB and PDFs to 60 pages.
