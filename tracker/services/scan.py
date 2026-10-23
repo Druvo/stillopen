@@ -20,7 +20,13 @@ heavier kind of connector and isn't built here).
 
 A posting is matched against your own UserProfile.target_roles (simple case-insensitive phrase containment,
 the same zero-token approach career-ops' own title_filter uses) before anything is saved, and a posting whose
-URL you already track is skipped as a duplicate rather than re-added.
+URL you already track is skipped as a duplicate rather than re-added. A posting whose title misses every
+target-role phrase can still be added on skill overlap: the candidate's own most-repeated CV/knowledge terms
+(services/text.terms, same tokenizer as the free keyword-match fallback) are compared against the posting's
+title plus whatever description text its connector already returns (free -- several connectors include it in
+the same list response, no extra request), and STILLOPEN_SKILL_MATCH_MIN_OVERLAP or more shared terms is
+enough. A skill-matched addition gets a plain Event note naming the overlap, and the dashboard shows a
+"Skill match" badge, so it's always clear why a role with no matching title showed up.
 
 Every posting fetched -- matched or not -- is also recorded as a `Posting` sighting (see record_sighting/
 repost_signal below), shared across everyone watching that source. This is what a repost/ghost-job pattern is
@@ -31,23 +37,49 @@ scan dates). This is an observation, never a verdict: a real company can legitim
 """
 import re
 import threading
+from collections import Counter
 from datetime import timedelta
 
 from django.conf import settings
 from django.db import connections
 from django.utils import timezone
 
-from tracker.models import Application, JobSource, Posting, PostingSighting, ScanLogEntry, ScanRun, Status, UserProfile
-from tracker.services import geo
+from tracker.models import (
+    Application, Event, JobSource, Posting, PostingSighting, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile,
+)
+from tracker.services import geo, knowledge
+from tracker.services.jobtext import html_to_text
 from tracker.services.netguard import FetchError, safe_get
+from tracker.services.text import terms as _terms
 
 STALE_AFTER = timedelta(minutes=20)
 TOKEN_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+SKILL_TERMS_KEPT = 80  # the candidate's own most-repeated skill-ish terms, same idea as ai.keyword_match's JD side
 
 
 def _roles(owner) -> list[str]:
     profile = UserProfile.for_user(owner)
     return [r.strip().lower() for r in profile.target_roles.splitlines() if r.strip()]
+
+
+def _skill_terms(owner) -> set[str]:
+    """The candidate's own most-repeated skill-ish terms (from their CV + knowledge docs), used to catch a
+    posting whose title doesn't literally contain one of their target-role phrases but whose content shares
+    real skill overlap -- e.g. target_roles="Backend Engineer" missing a posting titled "C# Developer" that
+    the candidate's own CV strongly matches. Free, zero-token, the same tokenizer as the keyword-match
+    fallback (services/text.terms). Empty for a candidate with no CV/knowledge text yet -- skill matching is
+    then simply a no-op and title matching alone still applies, no regression."""
+    config = SiteConfig.for_user(owner)
+    text_blob = knowledge.all_candidate_text(config, owner)
+    if not text_blob.strip():
+        return set()
+    return {w for w, _ in Counter(_terms(text_blob)).most_common(SKILL_TERMS_KEPT)}
+
+
+def _skill_overlap(text_blob: str, skill_terms: set[str]) -> set[str]:
+    if not text_blob or not skill_terms:
+        return set()
+    return set(_terms(text_blob)) & skill_terms
 
 
 def title_key(title: str) -> str:
@@ -96,8 +128,16 @@ def _matches(title: str, roles: list[str]) -> bool:
     return any(r in t for r in roles)
 
 
+def _blurb(raw_html: str, limit: int = 4000) -> str:
+    """Plain text from an HTML description field, trimmed -- only ever used for skill-term overlap, never
+    stored or shown, so a few KB of context is plenty and keeps per-posting parsing cheap."""
+    return html_to_text(raw_html or "")[:limit] if raw_html else ""
+
+
 def fetch_greenhouse(token: str) -> list[dict]:
-    resp = safe_get(f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=false", timeout=20)
+    # content=true costs nothing extra (still one request) and gives the posting's own description text,
+    # which is what makes skill-based matching possible beyond the title alone.
+    resp = safe_get(f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true", timeout=20)
     if resp.status_code != 200:
         raise FetchError(f"HTTP {resp.status_code}")
     out = []
@@ -106,6 +146,7 @@ def fetch_greenhouse(token: str) -> list[dict]:
             "title": j.get("title", ""),
             "url": j.get("absolute_url", ""),
             "location": (j.get("location") or {}).get("name", ""),
+            "description": _blurb(j.get("content", "")),
         })
     return out
 
@@ -121,6 +162,7 @@ def fetch_lever(token: str) -> list[dict]:
             "title": j.get("text", ""),
             "url": j.get("hostedUrl", ""),
             "location": cats.get("location", ""),
+            "description": _blurb(j.get("descriptionPlain") or j.get("description", "")),
         })
     return out
 
@@ -135,11 +177,14 @@ def fetch_ashby(token: str) -> list[dict]:
             "title": j.get("title", ""),
             "url": j.get("jobUrl") or j.get("applyUrl") or "",
             "location": j.get("location", ""),
+            "description": _blurb(j.get("descriptionHtml") or j.get("description", "")),
         })
     return out
 
 
 def fetch_smartrecruiters(token: str) -> list[dict]:
+    # The list endpoint has no description field (SmartRecruiters only returns it from a per-posting detail
+    # call) -- title-only matching, same as before, for this one connector.
     resp = safe_get(f"https://api.smartrecruiters.com/v1/companies/{token}/postings", timeout=20)
     if resp.status_code != 200:
         raise FetchError(f"HTTP {resp.status_code}")
@@ -165,6 +210,7 @@ def fetch_recruitee(token: str) -> list[dict]:
             "title": j.get("title", ""),
             "url": j.get("careers_apply_url") or j.get("careers_url") or "",
             "location": location,
+            "description": _blurb(j.get("description", "")),
         })
     return out
 
@@ -185,6 +231,7 @@ def fetch_remoteok(token: str) -> list[dict]:
             "url": j.get("url", ""),
             "location": j.get("location") or "Remote",
             "company": j.get("company", ""),
+            "description": _blurb(j.get("description", "")),
         })
     return out
 
@@ -218,6 +265,7 @@ def fetch_weworkremotely(token: str) -> list[dict]:
             "url": (item.findtext("link") or "").strip(),
             "location": (item.findtext("region") or "").strip(),
             "company": company.strip(),
+            "description": _blurb(item.findtext("description") or ""),
         })
     return out
 
@@ -237,6 +285,7 @@ def fetch_himalayas(token: str) -> list[dict]:
             "url": j.get("applicationLink", ""),
             "location": ", ".join(restrictions) if restrictions else "Remote",
             "company": j.get("companyName", ""),
+            "description": _blurb(j.get("description", "")),
         })
     return out
 
@@ -259,6 +308,8 @@ def _worker(run_id: int):
         run = ScanRun.objects.select_related("owner").get(pk=run_id)
         owner = run.owner
         roles = _roles(owner)
+        skill_terms = _skill_terms(owner)
+        min_overlap = settings.STILLOPEN_SKILL_MATCH_MIN_OVERLAP
         existing = _existing_urls(owner)
         default_status = Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first()
         room = max(0, settings.STILLOPEN_MAX_APPLICATIONS - Application.objects.filter(owner=owner).count())
@@ -277,7 +328,11 @@ def _worker(run_id: int):
                     # not of any one person's target roles, so it should build up even from scans that match
                     # nothing for this particular user.
                     posting = record_sighting(source, p["title"], p["url"], p.get("location") or "", company=p.get("company"))
-                    if not _matches(p["title"], roles):
+                    role_matched = _matches(p["title"], roles)
+                    overlap = set() if role_matched else _skill_overlap(
+                        f"{p['title']} {p.get('description', '')}", skill_terms,
+                    )
+                    if not role_matched and len(overlap) < min_overlap:
                         continue
                     entry.matched += 1
                     if p["url"] in existing:
@@ -298,6 +353,11 @@ def _worker(run_id: int):
                     )
                     app.save()
                     geo.fill_details(app)
+                    if not role_matched:
+                        Event.objects.create(
+                            application=app, kind="note",
+                            text=f"Found by skill match, not a listed target role -- shared: {', '.join(sorted(overlap)[:6])}",
+                        )
                     existing.add(p["url"])
                     entry.added += 1
                     run.added += 1

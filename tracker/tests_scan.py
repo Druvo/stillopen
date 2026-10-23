@@ -23,12 +23,12 @@ def user(name, **profile):
 
 GREENHOUSE_PAYLOAD = {
     "jobs": [
-        {"title": "Senior Backend Engineer", "absolute_url": "https://boards.greenhouse.io/acme/1", "location": {"name": "Remote"}},
+        {"title": "Senior Backend Engineer", "absolute_url": "https://boards.greenhouse.io/acme/1", "location": {"name": "Remote"}, "content": "<p>Build APIs in C# and SQL Server.</p>"},
         {"title": "Marketing Manager", "absolute_url": "https://boards.greenhouse.io/acme/2", "location": {"name": "NYC"}},
     ]
 }
 LEVER_PAYLOAD = [
-    {"text": "Backend Developer", "hostedUrl": "https://jobs.lever.co/acme/1", "categories": {"location": "Remote"}},
+    {"text": "Backend Developer", "hostedUrl": "https://jobs.lever.co/acme/1", "categories": {"location": "Remote"}, "descriptionPlain": "Docker and Kubernetes experience wanted."},
 ]
 ASHBY_PAYLOAD = {
     "jobs": [
@@ -78,19 +78,20 @@ class ConnectorTests(TestCase):
         get.return_value = mock.Mock(status_code=200, json=lambda: GREENHOUSE_PAYLOAD)
         out = scan.fetch_greenhouse("acme")
         self.assertEqual(len(out), 2)
-        self.assertEqual(out[0], {"title": "Senior Backend Engineer", "url": "https://boards.greenhouse.io/acme/1", "location": "Remote"})
+        self.assertEqual(out[0], {"title": "Senior Backend Engineer", "url": "https://boards.greenhouse.io/acme/1", "location": "Remote", "description": "Build APIs in C# and SQL Server."})
+        self.assertEqual(out[1]["description"], "")  # no content field on this one -- no crash, just empty
 
     @mock.patch("tracker.services.scan.safe_get")
     def test_lever_parses_postings(self, get):
         get.return_value = mock.Mock(status_code=200, json=lambda: LEVER_PAYLOAD)
         out = scan.fetch_lever("acme")
-        self.assertEqual(out, [{"title": "Backend Developer", "url": "https://jobs.lever.co/acme/1", "location": "Remote"}])
+        self.assertEqual(out, [{"title": "Backend Developer", "url": "https://jobs.lever.co/acme/1", "location": "Remote", "description": "Docker and Kubernetes experience wanted."}])
 
     @mock.patch("tracker.services.scan.safe_get")
     def test_ashby_parses_postings(self, get):
         get.return_value = mock.Mock(status_code=200, json=lambda: ASHBY_PAYLOAD)
         out = scan.fetch_ashby("acme")
-        self.assertEqual(out, [{"title": "Platform Engineer", "url": "https://jobs.ashbyhq.com/acme/1", "location": "Remote"}])
+        self.assertEqual(out, [{"title": "Platform Engineer", "url": "https://jobs.ashbyhq.com/acme/1", "location": "Remote", "description": ""}])
 
     @mock.patch("tracker.services.scan.safe_get")
     def test_smartrecruiters_parses_postings_and_builds_the_public_url(self, get):
@@ -102,7 +103,7 @@ class ConnectorTests(TestCase):
     def test_recruitee_parses_offers_and_falls_back_to_remote_label(self, get):
         get.return_value = mock.Mock(status_code=200, json=lambda: RECRUITEE_PAYLOAD)
         out = scan.fetch_recruitee("acme")
-        self.assertEqual(out[0], {"title": "Backend Engineer", "url": "https://jobs.acme.com/o/backend-engineer/c/new", "location": "Utrecht, Netherlands"})
+        self.assertEqual(out[0], {"title": "Backend Engineer", "url": "https://jobs.acme.com/o/backend-engineer/c/new", "location": "Utrecht, Netherlands", "description": ""})
         self.assertEqual(out[1]["location"], "Remote")  # no city/country, but remote=True
 
     @mock.patch("tracker.services.scan.safe_get")
@@ -116,7 +117,7 @@ class ConnectorTests(TestCase):
         get.return_value = mock.Mock(status_code=200, json=lambda: REMOTEOK_PAYLOAD)
         out = scan.fetch_remoteok("all")
         self.assertEqual(len(out), 2)  # the legal-notice element is not a job and must not appear
-        self.assertEqual(out[0], {"title": "Backend Engineer", "url": "https://remoteok.com/remote-jobs/1", "location": "Remote", "company": "Acme Corp"})
+        self.assertEqual(out[0], {"title": "Backend Engineer", "url": "https://remoteok.com/remote-jobs/1", "location": "Remote", "company": "Acme Corp", "description": ""})
         self.assertEqual(out[1]["location"], "Worldwide")  # a real location is kept, not overridden to "Remote"
 
     @mock.patch("tracker.services.scan.safe_get")
@@ -134,7 +135,7 @@ class ConnectorTests(TestCase):
         self.assertEqual(len(out), 2)
         self.assertEqual(out[0], {
             "title": "Backend Engineer", "url": "https://weworkremotely.com/remote-jobs/acme-backend-engineer",
-            "location": "Anywhere in the World", "company": "Acme Corp",
+            "location": "Anywhere in the World", "company": "Acme Corp", "description": "",
         })
         # No "Company: Role" split found -- the whole title is kept as the role, company left blank rather than guessed.
         self.assertEqual(out[1]["title"], "No Colon Here Just A Title")
@@ -152,7 +153,7 @@ class ConnectorTests(TestCase):
     def test_himalayas_parses_jobs(self, get):
         get.return_value = mock.Mock(status_code=200, json=lambda: HIMALAYAS_PAYLOAD)
         out = scan.fetch_himalayas("all")
-        self.assertEqual(out[0], {"title": "Backend Engineer", "url": "https://himalayas.app/jobs/1", "location": "Poland", "company": "Acme Corp"})
+        self.assertEqual(out[0], {"title": "Backend Engineer", "url": "https://himalayas.app/jobs/1", "location": "Poland", "company": "Acme Corp", "description": ""})
         self.assertEqual(out[1]["location"], "Remote")  # no locationRestrictions -- defaults to Remote, not blank
 
     def test_title_matching_is_case_insensitive_phrase_containment(self):
@@ -160,6 +161,18 @@ class ConnectorTests(TestCase):
         self.assertTrue(scan._matches("Senior Backend Engineer", roles))
         self.assertFalse(scan._matches("Marketing Manager", roles))
         self.assertFalse(scan._matches("Backend Engineer", []))
+
+    def test_skill_overlap_needs_the_candidate_to_have_a_cv_at_all(self):
+        u = user("noCv")
+        self.assertEqual(scan._skill_terms(u), set())
+        self.assertEqual(scan._skill_overlap("C# Docker Kubernetes SQL", set()), set())
+
+    def test_skill_terms_come_from_the_candidates_own_cv(self):
+        u = user("hasCv", profile_cv="Backend engineer with C#, Docker, Kubernetes and SQL Server experience.")
+        terms = scan._skill_terms(u)
+        self.assertIn("docker", terms)
+        self.assertIn("kubernetes", terms)
+        self.assertIn("c#", terms)
 
     def test_invalid_board_token_is_rejected_before_any_request(self):
         self.assertIsNone(scan.TOKEN_RE.match("acme/../../etc"))
@@ -238,6 +251,40 @@ class ScanRunTests(TestCase):
         self.assertEqual(Application.objects.filter(owner=self.u).count(), 3)
         self.assertEqual(run.added, 3)
         self.assertIn("tracker limit", run.error)
+
+    @mock.patch("tracker.services.scan.fetch_greenhouse")
+    def test_skill_overlap_adds_a_posting_whose_title_misses_every_target_role(self, fetch):
+        # "C# Developer" shares no phrase with target_roles="Senior Backend Engineer", but the candidate's
+        # own CV strongly overlaps the posting's blurb -- the skill-match path should still add it.
+        UserProfile.objects.filter(user=self.u).update(
+            profile_cv="Backend engineer with deep C# Docker Kubernetes SQL Server experience building REST APIs.",
+        )
+        fetch.return_value = [{
+            "title": "C# Developer", "url": "https://x.test/1", "location": "",
+            "description": "We need someone strong in C# Docker Kubernetes SQL Server REST APIs.",
+        }]
+        with override_settings(STILLOPEN_SKILL_MATCH_MIN_OVERLAP=4):
+            run = scan.start_run(self.u, background=False)
+        self.assertEqual(run.added, 1)
+        app = Application.objects.get(owner=self.u)
+        self.assertEqual(app.role, "C# Developer")
+        note = app.events.get(kind="note")
+        self.assertIn("skill match", note.text)
+
+    @mock.patch("tracker.services.scan.fetch_greenhouse")
+    def test_skill_overlap_below_the_threshold_does_not_add_it(self, fetch):
+        UserProfile.objects.filter(user=self.u).update(profile_cv="Backend engineer with C# experience.")
+        fetch.return_value = [{"title": "Marketing Manager", "url": "https://x.test/1", "location": "", "description": "Social media and brand campaigns."}]
+        with override_settings(STILLOPEN_SKILL_MATCH_MIN_OVERLAP=4):
+            run = scan.start_run(self.u, background=False)
+        self.assertEqual(run.added, 0)
+
+    @mock.patch("tracker.services.scan.fetch_greenhouse")
+    def test_role_title_match_never_gets_a_skill_match_note(self, fetch):
+        fetch.return_value = [{"title": "Senior Backend Engineer", "url": "https://x.test/1", "location": ""}]
+        scan.start_run(self.u, background=False)
+        app = Application.objects.get(owner=self.u)
+        self.assertFalse(app.events.filter(kind="note", text__icontains="skill match").exists())
 
     @mock.patch("tracker.services.scan.fetch_greenhouse")
     def test_second_scan_reuses_the_running_run_instead_of_starting_another(self, fetch):

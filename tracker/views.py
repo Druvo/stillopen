@@ -119,6 +119,7 @@ def card_for(app, config, bands, areas=None, profile=None):
         "fit_level": fit_service.summary_level(fit),
         "fit_text": " ".join(f["text"] for f in fit if f["level"] != "ok") or " ".join(f["text"] for f in fit),
         "repost": scan.repost_signal(app.posting) if app.posting_id else None,
+        "skill_matched": any(e.kind == "note" and "skill match" in e.text for e in app.events.all()),
     }
 
 
@@ -131,7 +132,7 @@ def dashboard(request):
     buckets = list(Bucket.objects.all())
     statuses = list(Status.objects.all())
     areas = list(request.user.search_areas.all())
-    apps = mine(request).select_related("status", "status__bucket", "source", "posting", "posting__source").prefetch_related("insights", "documents__kind", "cv_versions").select_related("applied_cv")
+    apps = mine(request).select_related("status", "status__bucket", "source", "posting", "posting__source").prefetch_related("insights", "documents__kind", "cv_versions", "events").select_related("applied_cv")
 
     tabs = {b.pk: [] for b in buckets}
     for app in apps:

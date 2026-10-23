@@ -30,10 +30,13 @@ exact-CV-version linkage, follow-up reminders surfaced on the dashboard (no emai
 
 **Job discovery** — zero-token connectors for Greenhouse/Lever/Ashby/SmartRecruiters/Recruitee (single
 company boards) + RemoteOK/We Work Remotely/Himalayas (aggregators), `ScanRun`/`ScanLogEntry` with a
-collapsible scan log, title-matched against target roles, shared `Posting`/`PostingSighting` records
-(company+title keyed, so aggregators never cross-contaminate), a browsable "All postings" page, and
-repost/ghost-job detection (2+ URLs across 2+ scan dates for the same company+title, flagged as an
-observation). Explicitly rejected after live verification: Workable (dead API), LinkedIn (ToS/anti-bot),
+collapsible scan log, title-matched against target roles **plus a skill-overlap fallback** (the candidate's
+own CV/knowledge terms vs. a posting's title+description -- several connectors already return description
+text in the same list response, no extra request -- `STILLOPEN_SKILL_MATCH_MIN_OVERLAP` shared terms is
+enough; surfaced as an Event note and a "Skill match" dashboard badge so it's never a silent guess), shared
+`Posting`/`PostingSighting` records (company+title keyed, so aggregators never cross-contaminate), a
+browsable "All postings" page, and repost/ghost-job detection (2+ URLs across 2+ scan dates for the same
+company+title, flagged as an observation). Explicitly rejected after live verification: Workable (dead API), LinkedIn (ToS/anti-bot),
 bdjobs.com (client-side SPA, no API), Canada Job Bank (44 MB monthly dump, server times out).
 
 **Liveness** — HTTP phrase-match or a Playwright-backed `node` mode (admin-only) for JS-rendered sites, auto-

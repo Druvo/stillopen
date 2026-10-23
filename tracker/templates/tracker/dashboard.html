@@ -128,6 +128,7 @@
       {% if a.decision %}<span class="badge bg-secondary-lt" title="{{ a.decision }}">{{ a.decision|truncatechars:28 }}</span>{% endif %}
       {% if a.risk %}<span class="badge bg-secondary-lt">Risk: {{ a.risk }}</span>{% endif %}
       {% if c.repost %}<span class="badge bg-warning-lt" title="Seen as {{ c.repost.distinct_urls }} different postings on {{ c.repost.distinct_dates }} separate days at this company, same title -- an observation, not a verdict. First seen {{ c.repost.first_seen|date:'j M' }}, last {{ c.repost.last_seen|date:'j M' }}.">Possible repost</span>{% endif %}
+      {% if c.skill_matched %}<span class="badge bg-info-lt" title="Found by overlap with your own CV's skills, not a listed target role -- see Details below for which terms matched.">Skill match</span>{% endif %}
       {% if c.fit_level == "warn" %}<a href="{% url 'job_edit' a.pk %}" class="badge bg-warning-lt" title="{{ c.fit_text }}">Check fit</a>{% elif c.fit_level == "ok" %}<a href="{% url 'job_edit' a.pk %}" class="badge bg-green-lt" title="{{ c.fit_text }}">Fits</a>{% elif has_areas %}<a href="{% url 'job_edit' a.pk %}" class="badge bg-secondary-lt" title="{{ c.fit_text }}">Fit unknown</a>{% endif %}
       <select data-status-for="{{ a.pk }}" aria-label="Change status" class="form-select form-select-sm" style="width:auto">
         {% for s in statuses %}<option value="{{ s.pk }}" {% if s.pk == a.status_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
