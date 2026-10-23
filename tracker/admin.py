@@ -15,6 +15,7 @@ from .models import (
     JobSource,
     KnowledgeSource,
     LivenessRun,
+    Posting,
     ScanLogEntry,
     ScanRun,
     ScoreBand,
@@ -24,7 +25,7 @@ from .models import (
     UserProfile,
 )
 from .forms import SecretKeysMixin
-from .services import ai, knowledge, liveness
+from .services import ai, knowledge, liveness, scan
 from .services.paperless import PaperlessClient, PaperlessError, push_document
 
 
@@ -395,6 +396,21 @@ class JobSourceAdmin(admin.ModelAdmin):
     list_editable = ("enabled",)
     list_filter = ("connector", "enabled")
     search_fields = ("name", "board_token")
+
+
+@admin.register(Posting)
+class PostingAdmin(admin.ModelAdmin):
+    list_display = ("title", "source", "location", "first_seen_at", "last_seen_at", "repost_flag")
+    list_filter = ("source",)
+    search_fields = ("title", "title_key", "url")
+    readonly_fields = [f.name for f in Posting._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description="Repost pattern", boolean=True)
+    def repost_flag(self, obj):
+        return bool(scan.repost_signal(obj))
 
 
 class ScanLogEntryInline(admin.TabularInline):

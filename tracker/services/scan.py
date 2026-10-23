@@ -7,6 +7,13 @@ tracker still goes through the normal (optional, BYOK) AI path -- this module on
 A posting is matched against your own UserProfile.target_roles (simple case-insensitive phrase containment,
 the same zero-token approach career-ops' own title_filter uses) before anything is saved, and a posting whose
 URL you already track is skipped as a duplicate rather than re-added.
+
+Every posting fetched -- matched or not -- is also recorded as a `Posting` sighting (see record_sighting/
+repost_signal below), shared across everyone watching that source. This is what a repost/ghost-job pattern is
+read from later: a company re-listing the same role under a new URL shows up as several Postings sharing one
+title_key at the same source, seen across more than one calendar day. Two concurrent openings posted the same
+day are not flagged -- same discipline as career-ops' own detect-reposts.mjs (2+ distinct URLs, 2+ distinct
+scan dates). This is an observation, never a verdict: a real company can legitimately re-post a role.
 """
 import re
 import threading
@@ -16,7 +23,7 @@ from django.conf import settings
 from django.db import connections
 from django.utils import timezone
 
-from tracker.models import Application, JobSource, ScanLogEntry, ScanRun, Status, UserProfile
+from tracker.models import Application, JobSource, Posting, PostingSighting, ScanLogEntry, ScanRun, Status, UserProfile
 from tracker.services import geo
 from tracker.services.netguard import FetchError, safe_get
 
@@ -27,6 +34,36 @@ TOKEN_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 def _roles(owner) -> list[str]:
     profile = UserProfile.for_user(owner)
     return [r.strip().lower() for r in profile.target_roles.splitlines() if r.strip()]
+
+
+def title_key(title: str) -> str:
+    return re.sub(r"\s+", " ", title.strip().lower())[:300]
+
+
+def record_sighting(source: JobSource, title: str, url: str, location: str, seen_date=None) -> Posting:
+    """Upsert the Posting for (source, url) and mark it seen today (or `seen_date`, for tests)."""
+    seen_date = seen_date or timezone.localdate()
+    posting, _ = Posting.objects.update_or_create(
+        source=source, url=url[:600],
+        defaults={"title": title[:300], "title_key": title_key(title), "location": (location or "")[:160]},
+    )
+    PostingSighting.objects.get_or_create(posting=posting, seen_date=seen_date)
+    return posting
+
+
+def repost_signal(posting: Posting) -> dict | None:
+    """None if `posting` shows no repost pattern; otherwise the evidence -- never a verdict on why."""
+    siblings = Posting.objects.filter(source_id=posting.source_id, title_key=posting.title_key)
+    distinct_urls = siblings.count()
+    dates = set(PostingSighting.objects.filter(posting__in=siblings).values_list("seen_date", flat=True))
+    if distinct_urls < 2 or len(dates) < 2:
+        return None
+    return {
+        "distinct_urls": distinct_urls,
+        "distinct_dates": len(dates),
+        "first_seen": siblings.order_by("first_seen_at").first().first_seen_at,
+        "last_seen": siblings.order_by("-last_seen_at").first().last_seen_at,
+    }
 
 
 def _matches(title: str, roles: list[str]) -> bool:
@@ -109,7 +146,13 @@ def _worker(run_id: int):
                 postings = _fetch(source.connector, source.board_token)
                 entry.found = len(postings)
                 for p in postings:
-                    if not p["url"] or not p["title"] or not _matches(p["title"], roles):
+                    if not p["url"] or not p["title"]:
+                        continue
+                    # Recorded regardless of match: a repost pattern is a property of the posting/company,
+                    # not of any one person's target roles, so it should build up even from scans that match
+                    # nothing for this particular user.
+                    posting = record_sighting(source, p["title"], p["url"], p.get("location") or "")
+                    if not _matches(p["title"], roles):
                         continue
                     entry.matched += 1
                     if p["url"] in existing:
@@ -126,6 +169,7 @@ def _worker(run_id: int):
                         location_text=(p.get("location") or "")[:160],
                         status=default_status,
                         found_date=timezone.localdate(),
+                        posting=posting,
                     )
                     app.save()
                     geo.fill_details(app)

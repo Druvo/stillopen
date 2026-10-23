@@ -164,6 +164,7 @@ a{color:var(--accent)}
       {% elif a.live_state == "uncertain" %}<span class="pill" style="color:var(--warn)" title="{{ a.live_detail }}">Unclear</span>{% endif %}
       {% if a.decision %}<span class="pill muted" title="{{ a.decision }}">{{ a.decision|truncatechars:28 }}</span>{% endif %}
       {% if a.risk %}<span class="pill muted">Risk: {{ a.risk }}</span>{% endif %}
+      {% if c.repost %}<span class="pill" style="color:var(--warn)" title="Seen as {{ c.repost.distinct_urls }} different postings on {{ c.repost.distinct_dates }} separate days at this company, same title -- an observation, not a verdict. First seen {{ c.repost.first_seen|date:'j M' }}, last {{ c.repost.last_seen|date:'j M' }}.">Possible repost</span>{% endif %}
       {% if c.fit_level == "warn" %}<a href="{% url 'job_edit' a.pk %}" class="pill" style="color:var(--warn)" title="{{ c.fit_text }}">Check fit</a>{% elif c.fit_level == "ok" %}<a href="{% url 'job_edit' a.pk %}" class="pill" style="color:var(--ok)" title="{{ c.fit_text }}">Fits</a>{% elif has_areas %}<a href="{% url 'job_edit' a.pk %}" class="pill muted" title="{{ c.fit_text }}">Fit unknown</a>{% endif %}
       <select data-status-for="{{ a.pk }}" aria-label="Change status">
         {% for s in statuses %}<option value="{{ s.pk }}" {% if s.pk == a.status_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}

@@ -6,7 +6,7 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from tracker.models import Application, JobSource, ScanLogEntry, ScanRun, Status, UserProfile
+from tracker.models import Application, JobSource, Posting, ScanLogEntry, ScanRun, Status, UserProfile
 from tracker.services import scan
 from tracker.services.netguard import FetchError
 
@@ -209,3 +209,81 @@ class ScanViewTests(TestCase):
         self.client.logout()
         r = self.client.post(reverse("scan_start"))
         self.assertEqual(r.status_code, 302)  # redirected to login
+
+
+class RepostDetectionTests(TestCase):
+    """career-ops' own detect-reposts.mjs requires 2+ distinct URLs seen on 2+ distinct scan dates for the same
+    title identity, so a same-day batch of genuinely concurrent openings is never mistaken for a repost. Same
+    discipline here, and it's an observation surfaced to the user, never a verdict."""
+
+    def setUp(self):
+        self.source = JobSource.objects.create(name="Acme", connector="greenhouse", board_token="acme", enabled=True)
+
+    def test_title_key_normalizes_case_and_whitespace(self):
+        self.assertEqual(scan.title_key("  Senior   Backend  Engineer "), "senior backend engineer")
+        self.assertEqual(scan.title_key("Senior Backend Engineer"), scan.title_key("SENIOR BACKEND ENGINEER"))
+
+    def test_a_single_sighting_is_not_a_repost(self):
+        p = scan.record_sighting(self.source, "Backend Engineer", "https://x.test/1", "Remote")
+        self.assertIsNone(scan.repost_signal(p))
+
+    def test_two_urls_seen_the_same_day_is_not_flagged(self):
+        # Two genuinely concurrent openings (different reqs, same title) posted on the same day.
+        import datetime
+        today = datetime.date(2026, 1, 1)
+        p1 = scan.record_sighting(self.source, "Backend Engineer", "https://x.test/1", "Remote", seen_date=today)
+        p2 = scan.record_sighting(self.source, "Backend Engineer", "https://x.test/2", "Remote", seen_date=today)
+        self.assertIsNone(scan.repost_signal(p1))
+        self.assertIsNone(scan.repost_signal(p2))
+
+    def test_two_urls_on_two_distinct_days_is_flagged(self):
+        import datetime
+        day1, day2 = datetime.date(2026, 1, 1), datetime.date(2026, 1, 15)
+        p1 = scan.record_sighting(self.source, "Backend Engineer", "https://x.test/1", "Remote", seen_date=day1)
+        # The old URL goes stale (its own last_seen_at stays at day1); a new req appears under a new URL later.
+        p2 = scan.record_sighting(self.source, "Backend Engineer", "https://x.test/2", "Remote", seen_date=day2)
+        signal = scan.repost_signal(p2)
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal["distinct_urls"], 2)
+        self.assertEqual(signal["distinct_dates"], 2)
+        # Both sibling postings carry the same signal -- it's a property of the title+source, not one URL.
+        self.assertEqual(scan.repost_signal(p1), signal)
+
+    def test_different_sources_never_cross_contaminate_the_signal(self):
+        other_source = JobSource.objects.create(name="Other", connector="lever", board_token="other", enabled=True)
+        import datetime
+        day1, day2 = datetime.date(2026, 1, 1), datetime.date(2026, 1, 15)
+        scan.record_sighting(self.source, "Backend Engineer", "https://x.test/1", "", seen_date=day1)
+        p = scan.record_sighting(other_source, "Backend Engineer", "https://y.test/1", "", seen_date=day2)
+        self.assertIsNone(scan.repost_signal(p))  # same title text, different company -- not a sibling
+
+    @mock.patch("tracker.services.scan.fetch_greenhouse")
+    def test_a_sighting_is_recorded_even_when_nothing_matches_the_users_roles(self, fetch):
+        user = User.objects.create_user("zahid2", password=PW)
+        fetch.return_value = [{"title": "Marketing Manager", "url": "https://x.test/1", "location": ""}]
+        scan.start_run(user, background=False)
+        self.assertEqual(Application.objects.filter(owner=user).count(), 0)  # no role matched it
+        self.assertTrue(Posting.objects.filter(source=self.source, url="https://x.test/1").exists())  # still recorded
+
+    @mock.patch("tracker.services.scan.fetch_greenhouse")
+    def test_matched_application_is_linked_to_its_posting(self, fetch):
+        user = User.objects.create_user("zahid3", password=PW)
+        UserProfile.objects.filter(user=user).update(target_roles="Backend Engineer")
+        fetch.return_value = [{"title": "Backend Engineer", "url": "https://x.test/1", "location": ""}]
+        scan.start_run(user, background=False)
+        app = Application.objects.get(owner=user)
+        self.assertIsNotNone(app.posting_id)
+        self.assertEqual(app.posting.url, "https://x.test/1")
+
+    @mock.patch("tracker.services.scan.fetch_greenhouse")
+    def test_dashboard_shows_the_repost_badge(self, fetch):
+        import datetime
+        user = User.objects.create_user("zahid4", password=PW)
+        UserProfile.objects.filter(user=user).update(target_roles="Backend Engineer")
+        self.client.force_login(user)
+        scan.record_sighting(self.source, "Backend Engineer", "https://x.test/old", "", seen_date=datetime.date(2026, 1, 1))
+        fetch.return_value = [{"title": "Backend Engineer", "url": "https://x.test/new", "location": ""}]
+        with mock.patch("django.utils.timezone.localdate", return_value=datetime.date(2026, 1, 15)):
+            scan.start_run(user, background=False)
+        r = self.client.get(reverse("dashboard"))
+        self.assertContains(r, "Possible repost")

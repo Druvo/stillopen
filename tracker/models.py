@@ -566,6 +566,10 @@ class Application(models.Model):
     role = models.CharField(max_length=200)
     url = models.URLField(max_length=600, blank=True)
     source = models.ForeignKey(Source, null=True, blank=True, on_delete=models.SET_NULL)
+    posting = models.ForeignKey(
+        "Posting", null=True, blank=True, on_delete=models.SET_NULL, related_name="applications",
+        help_text="The scanned posting this came from, if it was found by Search jobs. Blank for manually added or imported roles.",
+    )
     status = models.ForeignKey(Status, on_delete=models.PROTECT, related_name="applications")
 
     score = models.FloatField(null=True, blank=True, help_text="Evaluation score (0 to the configured scale).")
@@ -884,3 +888,35 @@ class ScanLogEntry(models.Model):
 
     class Meta:
         ordering = ["id"]
+
+
+class Posting(models.Model):
+    """One posting ever seen at a JobSource, recorded on every scan whether or not it matched anyone's roles.
+
+    This is what repost/ghost-job detection reads: a company re-listing the same role under a new URL shows up
+    as several Postings sharing one `title_key` at the same `source`. Shared across every user watching that
+    source -- a repost pattern is a property of the posting, not of any one person's search."""
+
+    source = models.ForeignKey(JobSource, on_delete=models.CASCADE, related_name="postings")
+    url = models.URLField(max_length=600)
+    title = models.CharField(max_length=300)
+    title_key = models.CharField(max_length=300, db_index=True, help_text="Normalized title, used to group reposts of the same role.")
+    location = models.CharField(max_length=160, blank=True)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-last_seen_at"]
+        constraints = [models.UniqueConstraint(fields=["source", "url"], name="uniq_source_url")]
+
+
+class PostingSighting(models.Model):
+    """One calendar day on which a Posting was seen in a scan. Distinct-day count (not raw scan count) is what
+    tells a same-day batch of concurrent openings apart from a role re-listed on separate days."""
+
+    posting = models.ForeignKey(Posting, on_delete=models.CASCADE, related_name="sightings")
+    seen_date = models.DateField()
+
+    class Meta:
+        ordering = ["seen_date"]
+        constraints = [models.UniqueConstraint(fields=["posting", "seen_date"], name="uniq_posting_seen_date")]
