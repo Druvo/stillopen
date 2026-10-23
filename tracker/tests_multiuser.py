@@ -156,6 +156,12 @@ class StaffOnly(TestCase):
         self.assertTrue('id="btn-import"' in page)
         self.assertTrue("Admin</a>" in page)
 
+    def test_ai_quick_setup_local_presets_are_admin_only(self):
+        self.client.force_login(user("boss2staff", staff=True))
+        page = self.client.get(reverse("profile_ai")).content.decode()
+        self.assertIn("Ollama -- local", page)
+        self.assertIn("LM Studio -- local", page)
+
 
 class PerUserConfig(TestCase):
     def test_overlay_and_read_only(self):
@@ -328,6 +334,14 @@ class ProfilePages(TestCase):
         page = self.client.get(reverse("profile_ai")).content.decode()
         self.assertNotIn("visible-secret", page)
         self.assertIn("saved", page)
+
+    def test_ai_page_offers_provider_quick_setup_presets(self):
+        page = self.client.get(reverse("profile_ai"))
+        self.assertContains(page, 'id="ai-preset"')
+        for name in ("Google Gemini", "Groq", "Mistral", "DeepSeek", "OpenRouter", "GLM / Zhipu AI"):
+            self.assertContains(page, name)
+        self.assertNotContains(page, "Ollama -- local")  # local-only presets are for site admins, not this user
+        self.assertNotContains(page, "LM Studio -- local")
 
     def test_ai_page_shows_no_usage_yet_then_this_months_total(self):
         page = self.client.get(reverse("profile_ai"))

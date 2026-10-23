@@ -18,9 +18,13 @@ dashboard with tabs/urgency sort/stats, job edit with manual-override protection
 regresses a status backward.
 
 **Evaluation** — 6 AI provider paths (off/keyword, Anthropic, OpenAI-compatible — covers
-OpenRouter/Groq/Gemini/DeepSeek/Ollama/LM Studio, generic Custom HTTP, Claude Code CLI, Claude Agent SDK),
-free keyword fallback that never overwrites a real score, SSRF-guarded outbound calls (`netguard.py`),
-encrypted BYOK keys, output clamping/validation, job text always treated as untrusted data.
+OpenRouter/Groq/Gemini/Mistral/DeepSeek/GLM/Ollama/LM Studio, generic Custom HTTP, Claude Code CLI, Claude
+Agent SDK), free keyword fallback that never overwrites a real score, SSRF-guarded outbound calls
+(`netguard.py`), encrypted BYOK keys, output clamping/validation, job text always treated as untrusted data.
+A "Quick setup" dropdown on Profile -> AI settings fills in the base URL and a starting model for 8 popular
+providers (OpenAI, Gemini, Groq, Mistral, DeepSeek, OpenRouter, GLM/Zhipu, plus Anthropic direct; Ollama/LM
+Studio for site admins only, since local URLs are admin-only by design) with no backend change needed --
+they're all the existing "openai" provider type under the hood, just pointed at a different base URL.
 
 **CV tailoring** — AI or keyword tailoring, immutable version history, full diff/restore, a fact-check gate
 that blocks export/print of a flagged-and-unapproved version, DOCX/Markdown/print export, per-hour quotas.

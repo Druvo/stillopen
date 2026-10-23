@@ -27,6 +27,25 @@
     {% csrf_token %}
     {{ form.non_field_errors }}
     <h3 class="mt-0">Provider</h3>
+    <div class="mb-3">
+      <label for="ai-preset" class="form-label">Quick setup</label>
+      <select id="ai-preset" class="form-select">
+        <option value="">Choose a provider to fill in the fields below...</option>
+        <option value="anthropic">Anthropic (Claude) -- direct</option>
+        <option value="openai">OpenAI</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="groq">Groq</option>
+        <option value="mistral">Mistral</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="openrouter">OpenRouter (routes to many models)</option>
+        <option value="glm">GLM / Zhipu AI (z.ai)</option>
+        {% if user.is_staff %}
+        <option value="ollama">Ollama -- local, free, this server only</option>
+        <option value="lmstudio">LM Studio -- local, free, this server only</option>
+        {% endif %}
+      </select>
+      <small class="form-hint">Picks the provider, base URL and a starting model for you -- paste your API key below (skip the key for a local option) and save. You can still edit any field afterwards.</small>
+    </div>
     {% for field in form %}
       {% if field.name in "ai_provider ai_model ai_base_url ai_api_key clear_ai_key ai_custom_headers ai_custom_body ai_custom_response_path" %}
         <div class="mb-3">
@@ -74,4 +93,32 @@
   </form>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Known OpenAI-compatible endpoints, verified 2026-10. Model names on fast-moving providers (Gemini, GLM)
+// drift often -- these are safe current picks, not guarantees; the Ai model field stays freely editable.
+const AI_PRESETS = {
+  anthropic: {provider: "anthropic", base_url: "", model: ""},
+  openai: {provider: "openai", base_url: "", model: "gpt-4o-mini"},
+  gemini: {provider: "openai", base_url: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash"},
+  groq: {provider: "openai", base_url: "https://api.groq.com/openai/v1", model: "openai/gpt-oss-120b"},
+  mistral: {provider: "openai", base_url: "https://api.mistral.ai/v1", model: "mistral-small-latest"},
+  deepseek: {provider: "openai", base_url: "https://api.deepseek.com", model: "deepseek-v4-flash"},
+  openrouter: {provider: "openai", base_url: "https://openrouter.ai/api/v1", model: "openrouter/auto"},
+  glm: {provider: "openai", base_url: "https://api.z.ai/api/paas/v4", model: "glm-4.6"},
+  ollama: {provider: "openai", base_url: "http://127.0.0.1:11434/v1", model: "llama3"},
+  lmstudio: {provider: "openai", base_url: "http://127.0.0.1:1234/v1", model: ""},
+};
+const presetSelect = document.getElementById("ai-preset");
+presetSelect.addEventListener("change", () => {
+  const preset = AI_PRESETS[presetSelect.value];
+  if (!preset) return;
+  document.getElementById("id_ai_provider").value = preset.provider;
+  document.getElementById("id_ai_base_url").value = preset.base_url;
+  document.getElementById("id_ai_model").value = preset.model;
+  presetSelect.value = "";  // one-shot helper, not a stored setting -- don't leave it looking "selected"
+});
+</script>
 {% endblock %}
