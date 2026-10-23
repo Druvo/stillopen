@@ -4,7 +4,7 @@
 {% block head_title %}Sign in{% endblock %}
 {% block content %}
 <h2 class="card-title">{{ site_config.site_title|default:"StillOpen" }}</h2>
-<p class="text-secondary mb-3">Sign in to see your job search.</p>
+<p class="text-secondary mb-3">Welcome back. Sign in to pick up where you left off.</p>
 
 {% get_providers as providers %}
 {% if google_login_on and providers %}

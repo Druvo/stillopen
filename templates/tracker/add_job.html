@@ -3,9 +3,9 @@
 {% block title %}Add job{% endblock %}
 {% block page_title %}Add a job{% endblock %}
 {% block content %}
-<p class="text-secondary">Paste a role you are considering. With the description in place you can evaluate how well it fits you.</p>
+<p class="text-secondary">Add a role you are curious about. With its description in place, we can tell you how well it fits you. Only the company and role are required.</p>
 {% if form.initial.description %}
-<div class="alert alert-info">Fetched from the link below -- check the role and company before saving (a page title does not always split cleanly).</div>
+<div class="alert alert-info">We read this from the link. Please check the company and role before saving, since page titles do not always split cleanly.</div>
 {% endif %}
 <div class="card">
   <div class="card-body">

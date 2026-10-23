@@ -3,7 +3,7 @@
 {% block title %}AI settings{% endblock %}
 {% block page_title %}AI settings{% endblock %}
 {% block content %}
-<p class="text-secondary">Choose how your jobs are scored. <strong>Off</strong> is free and uses a keyword match against your CV. Any other choice uses <em>your own</em> account with that provider: when you press Evaluate, the job text, your preferences and the relevant parts of your CV are sent to it.</p>
+<p class="text-secondary">You do not need to set anything up here. Without an AI, StillOpen does a quick keyword check of each job against your CV, and that is free. If you would like a more careful read, connect your own AI account below. When you press <em>Check my fit</em>, the job text and the relevant parts of your CV are sent to that provider, and only then.</p>
 
 <div class="card mb-3">
   <div class="card-body">
@@ -26,7 +26,7 @@
   <form method="post">
     {% csrf_token %}
     {{ form.non_field_errors }}
-    <h3 class="mt-0">Provider</h3>
+    <h3 class="mt-0">Connect an AI <span class="text-secondary fs-5 fw-normal">(optional)</span></h3>
     <div class="mb-3">
       <label for="ai-preset" class="form-label">Quick setup</label>
       <select id="ai-preset" class="form-select">
@@ -61,8 +61,9 @@
       {% endif %}
     {% endfor %}
 
-    <h3>Retrieval</h3>
-    <p class="text-secondary">Send the AI only the parts of your CV and documents relevant to each job.</p>
+    <details class="mb-3"><summary class="h3" style="cursor:pointer">Advanced options</summary>
+    <p class="text-secondary mt-2">Most people never need these. They control how much of your CV the AI sees and how long it may take.</p>
+    <h4>Which parts of your CV the AI sees</h4>
     {% for field in form %}
       {% if field.name in "rag_enabled rag_mode rag_top_k rag_chunk_chars rag_always_chars rag_embedding_base_url rag_embedding_model rag_embedding_key clear_rag_key" %}
         <div class="mb-3">
@@ -78,7 +79,7 @@
       {% endif %}
     {% endfor %}
 
-    <h3>Limits</h3>
+    <h4>Limits</h4>
     {% for field in form %}
       {% if field.name == "ai_timeout" or field.name == "ai_max_input_chars" %}
         <div class="mb-3">
@@ -89,6 +90,7 @@
         </div>
       {% endif %}
     {% endfor %}
+    </details>
     <div class="form-footer"><button class="btn btn-primary" type="submit">Save</button></div>
   </form>
   </div>

@@ -6,6 +6,7 @@ from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.contrib import messages
 from django.shortcuts import redirect
+from django.urls import reverse
 
 from .models import SiteConfig, UserProfile
 
@@ -19,6 +20,18 @@ class AccountAdapter(DefaultAccountAdapter):
         if commit:
             UserProfile.objects.update_or_create(user=user, defaults={"self_registered": True})
         return user
+
+    def _home(self, request):
+        """A person who has not yet seen the welcome questions starts there; everyone else goes to the dashboard."""
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated:
+            profile = UserProfile.objects.filter(user=user).first()
+            if profile is not None and not profile.onboarding_done:
+                return reverse("welcome")
+        return None
+
+    def get_login_redirect_url(self, request):
+        return self._home(request) or super().get_login_redirect_url(request)
 
     def pre_login(self, request, user, **kwargs):
         """People who registered themselves must confirm their email before they get in.

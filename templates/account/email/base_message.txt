@@ -1,0 +1,7 @@
+{% autoescape off %}Hi,
+
+{% block content %}{% endblock content %}
+
+Warmly,
+StillOpen
+{% endautoescape %}

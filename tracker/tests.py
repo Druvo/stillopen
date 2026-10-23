@@ -173,7 +173,7 @@ class ViewTests(TestCase):
         r = self.client.get(reverse("dashboard"))
         self.assertContains(r, "90%")
         self.assertContains(r, "Short summary")
-        self.assertContains(r, "Strong match")
+        self.assertContains(r, "Strong")
 
     def test_labels_come_from_config(self):
         config = SiteConfig.load()
@@ -187,7 +187,7 @@ class ViewTests(TestCase):
     def test_score_band_editable(self):
         ScoreBand.objects.all().delete()
         ScoreBand.objects.create(label="Great", min_percent=50, color="#00ff00")
-        self.assertContains(self.client.get(reverse("dashboard")), "Great match")
+        self.assertContains(self.client.get(reverse("dashboard")), "Great")
 
     def test_set_status_stamps_applied_date(self):
         applied = Status.objects.get(name="Applied")

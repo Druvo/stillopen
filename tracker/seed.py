@@ -19,7 +19,7 @@ STATUSES = [
     ("SKIP", "closed", 9, "#8b93a7", False, True),
 ]
 
-SCORE_BANDS = [("Strong", 80, "#3ecf8e"), ("Fair", 70, "#f5b642"), ("Weak", 0, "#f16565")]
+SCORE_BANDS = [("Strong", 80, "#3ecf8e"), ("Fair", 70, "#f5b642"), ("A stretch", 0, "#e8935a")]
 
 DOCUMENT_KINDS = [
     ("CV", "cv,resume", "CV", "CV / Resume", 1),

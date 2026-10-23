@@ -3,7 +3,7 @@
 {% block head_title %}Create account{% endblock %}
 {% block content %}
 <h2 class="card-title">Create your account</h2>
-<p class="text-secondary mb-3">Track your job search, see what is still open, and get a match score for every role.</p>
+<p class="text-secondary mb-3">An email and a password, that is all. Then tell us what you are looking for and we will check each job against it.</p>
 
 {% if google_login_on %}
   {% load socialaccount %}
@@ -28,7 +28,7 @@
   </div>
   {% endfor %}
   {{ redirect_field }}
-  <p class="text-secondary" style="font-size:12.5px">By creating an account you agree to the <a href="{% url 'terms' %}">terms</a> and <a href="{% url 'privacy' %}">privacy policy</a>. We email you a link to confirm your address.</p>
+  <p class="text-secondary" style="font-size:12.5px">By creating an account you agree to the <a href="{% url 'terms' %}">terms</a> and <a href="{% url 'privacy' %}">privacy policy</a>. We will email you a link to confirm your address, one tap and you are in.</p>
   <div class="form-footer"><button type="submit" class="btn btn-primary w-100">Create account</button></div>
 </form>
 <p class="text-secondary mt-3 mb-0">Already registered? <a href="{% url 'account_login' %}">Sign in</a></p>

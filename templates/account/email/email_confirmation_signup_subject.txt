@@ -1,0 +1,1 @@
+{% autoescape off %}Welcome to StillOpen: confirm your email{% endautoescape %}

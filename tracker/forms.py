@@ -169,6 +169,26 @@ class ProfileForm(forms.ModelForm):
         return cleaned
 
 
+class WelcomeForm(ProfileForm):
+    """The three things worth asking a new person: what they want, where they live, their CV."""
+
+    class Meta(ProfileForm.Meta):
+        fields = ["target_roles", "home_country", "profile_cv"]
+        labels = {"profile_cv": "Or paste your CV here"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in ("employment_types", "seniority_levels"):
+            self.fields.pop(name, None)
+        self.order_fields(["target_roles", "home_country", "cv_file", "profile_cv"])
+        self.fields["target_roles"].label = "What kind of work are you looking for?"
+        self.fields["target_roles"].help_text = "One role per line. It is fine to be rough, you can change it any time."
+        self.fields["home_country"].label = "Where do you live?"
+        self.fields["home_country"].help_text = "So we can tell you whether a job is open to someone there. A country name is enough."
+        self.fields["cv_file"].label = "Your CV"
+        self.fields["cv_file"].help_text = "PDF, .txt or .md. We read the text and keep that, not the file."
+
+
 MAX_AREAS = 20
 
 
@@ -251,9 +271,13 @@ class JobForm(forms.ModelForm):
     class Meta:
         model = Application
         fields = ["company", "role", "url", "deadline", "description", "notes"]
+        labels = {
+            "url": "Link to the posting", "deadline": "Apply by (if it says)", "description": "The job description",
+            "notes": "Your own notes",
+        }
         widgets = {
             "deadline": forms.DateInput(attrs={"type": "date"}),
-            "description": forms.Textarea(attrs={"rows": 10, "placeholder": "Paste the job description. Leave blank to fetch it from the link."}),
+            "description": forms.Textarea(attrs={"rows": 10, "placeholder": "Paste the text of the posting here. Or leave this empty and we will read it from the link."}),
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
 

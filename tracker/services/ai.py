@@ -18,7 +18,7 @@ from decimal import Decimal
 import requests
 from django.utils import timezone
 
-from tracker.models import AIUsageEvent, Application, Event, Insight, SiteConfig
+from tracker.models import AIUsageEvent, Application, Event, Insight, SiteConfig, Status
 from tracker.services import geo, knowledge
 from tracker.services.jobtext import fetch_description
 from tracker.services.netguard import FetchError, check_public_url
@@ -458,21 +458,24 @@ def keyword_match(description: str, cv: str) -> dict:
     """Share of the posting's most repeated terms that also appear in the CV. Rough, but free and deterministic."""
     wanted = [w for w, _ in Counter(_terms(description)).most_common(40)]
     if not wanted:
-        raise AIError("The job description has no readable text.")
+        raise AIError("This job has no description we can read yet. Paste the posting text into the job, then try again.")
     if not cv.strip():
-        raise AIError("Add your CV in Site configuration so a match can be calculated.")
+        raise AIError("Add your CV on your Profile page first, so there is something to compare the job with.")
     have = set(_terms(cv))
     hits = [w for w in wanted if w in have]
     missing = [w for w in wanted if w not in have]
     percent = round(100 * len(hits) / len(wanted))
     return {
         "match_percent": percent,
-        "verdict": "Apply" if percent >= 70 else "Consider" if percent >= 50 else "Research first",
-        "summary": f"Keyword match only: {len(hits)} of the posting's {len(wanted)} most repeated terms appear in your CV.",
+        "verdict": "Looks promising" if percent >= 70 else "Worth a look" if percent >= 50 else "Take a closer look",
+        "summary": (
+            f"A quick keyword check: your CV mentions {len(hits)} of the {len(wanted)} things this posting talks about most. "
+            "It is a rough guide, not a verdict on you."
+        ),
         "strengths": hits[:5],
-        "gaps": [f"Not in your CV: {w}" for w in missing[:5]],
+        "gaps": [f"Your CV doesn't mention: {w}" for w in missing[:5]],
         "risk": "",
-        "next_action": "Turn on an AI provider in Site configuration for a real evaluation." if percent >= 50 else "",
+        "next_action": "For a more careful read of how you fit, connect an AI in AI settings.",
     }
 
 
@@ -504,13 +507,17 @@ def _usage_suffix(usage_event: AIUsageEvent | None) -> str:
 
 
 def store_result(app: Application, result: dict, config: SiteConfig, method: str, note: str = "", usage_event: AIUsageEvent | None = None) -> None:
-    app.score = round(result["match_percent"] / 100 * config.score_scale, 1)
+    app.score = round(result["match_percent"] / 100 * config.score_scale, 2)  # 2 places: 45% must come back as 45%, not 44%
     app.decision = result["verdict"]
     app.summary = result["summary"] or app.summary
     app.risk = result["risk"] or app.risk
     app.next_action = result["next_action"] or app.next_action
     app.ai_evaluated_at = timezone.now()
     app.ai_method = method
+    if app.status.name == "Saved":  # a job you only just added has now had its fit checked
+        evaluated = Status.objects.filter(name="Evaluated").first()
+        if evaluated:
+            app.status = evaluated
     app.save()
     app.insights.all().delete()
     order = 0

@@ -57,7 +57,7 @@ def mark_applied(request, pk):
     except ApplyError as exc:
         messages.error(request, str(exc))
         return back
-    messages.success(request, f"Recorded. Follow-up reminder set for {app.follow_up_date:%d %b %Y}.")
+    messages.success(request, f"Good luck! We have noted it, and will remind you to follow up on {app.follow_up_date:%d %b %Y}.")
     return redirect("dashboard")
 
 

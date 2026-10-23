@@ -335,6 +335,10 @@ class UserProfile(PersonalSettings):
     salary_floor = models.CharField(max_length=60, blank=True, help_text="Your minimum, with currency and period (e.g. 100,000 BDT/month).")
     deal_breakers = models.TextField(blank=True, help_text="Things you will not accept, one per line.")
     about = models.TextField(blank=True, help_text="Anything else the AI should know when judging fit.")
+    onboarding_done = models.BooleanField(
+        default=False, editable=False,
+        help_text="The person has seen (or skipped) the short welcome questions after signing up.",
+    )
     self_registered = models.BooleanField(
         default=False, editable=False,
         help_text="Created through the public sign-up form. These accounts must confirm their email before they can sign in.",

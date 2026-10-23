@@ -21,7 +21,7 @@ from .models import (
 )
 from .services import ai, careerops, cvversions, jobtext, knowledge, liveness, scan
 from .services import apply as apply_service
-from .services import fit as fit_service, geo
+from .services import fit as fit_service, geo, guide
 from .services.cvversions import CVError
 from .services.files import resolve_document_path
 from .services.paperless import PaperlessClient, PaperlessError, push_document
@@ -167,6 +167,8 @@ def dashboard(request):
         "checked_at": apps.exclude(live_checked_at=None).order_by("-live_checked_at").values_list("live_checked_at", flat=True).first(),
         "scan_run": scan.current_run(request.user),
         "can_scan": JobSource.objects.filter(enabled=True).exists(),
+        "greeting": guide.greeting(request.user, timezone.localtime()),
+        "next_step": guide.next_step(profile, [c for t in tab_list for c in t["cards"]]),
     }
     return render(request, "tracker/dashboard.html", context)
 
@@ -344,11 +346,15 @@ def add_job(request):
     elif request.method == "POST" and form.is_valid():
         app = form.save(commit=False)
         app.owner = request.user
-        app.status = Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first()
+        app.status = (
+            Status.objects.filter(name="Saved").first()
+            or Status.objects.filter(bucket__is_closed=False).order_by("order").first()
+            or Status.objects.first()
+        )
         app.save()
         geo.fill_details(app)  # suggest location, arrangement, sponsorship and type from the posting
         Event.objects.create(application=app, kind="note", text="Added")
-        messages.success(request, f"Added {app.company} - {app.role}.")
+        messages.success(request, f"Saved {app.company} - {app.role}. Next, press Check my fit to see how well it suits you.")
         return redirect("dashboard")
     return render(request, "tracker/add_job.html", {"form": form, "config": SiteConfig.load()})
 
@@ -404,7 +410,11 @@ def add_posting(request, pk):
         url=posting.url,
         location_text=posting.location,
         posting=posting,
-        status=Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first(),
+        status=(
+            Status.objects.filter(name="Saved").first()
+            or Status.objects.filter(bucket__is_closed=False).order_by("order").first()
+            or Status.objects.first()
+        ),
         found_date=timezone.localdate(),
     )
     app.save()
@@ -412,6 +422,40 @@ def add_posting(request, pk):
     Event.objects.create(application=app, kind="note", text="Added from All postings")
     messages.success(request, f"Added {app.company} - {app.role}.")
     return redirect(target)
+
+
+def _save_cv_history(request, obj, form):
+    knowledge.sync_cv(SiteConfig.for_user(request.user), request.user)
+    if "profile_cv" in form.changed_data and obj.profile_cv.strip():
+        try:
+            cvversions.record_master(request.user, obj.profile_cv)  # every CV change is kept in the history
+        except CVError:
+            pass
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def welcome(request):
+    """A short, skippable first stop after sign-up."""
+    obj = UserProfile.for_user(request.user)
+    form = forms.WelcomeForm(request.POST or None, request.FILES or None, instance=obj)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        _save_cv_history(request, obj, form)
+        obj.onboarding_done = True
+        obj.save(update_fields=["onboarding_done"])
+        messages.success(request, "Lovely, that helps. Now add the first job you are curious about.")
+        return redirect("add_job")
+    return render(request, "tracker/welcome.html", {"form": form, "config": SiteConfig.load()})
+
+
+@login_required
+@require_POST
+def welcome_skip(request):
+    obj = UserProfile.for_user(request.user)
+    obj.onboarding_done = True
+    obj.save(update_fields=["onboarding_done"])
+    return redirect("dashboard")
 
 
 @login_required
@@ -427,13 +471,8 @@ def profile(request):
             forms.save_areas(areas, request.user)
             for place in areas.unrecognised_places:
                 messages.warning(request, f'"{place}" is not a place we recognise, so jobs are matched to it by name only.')
-        knowledge.sync_cv(SiteConfig.for_user(request.user), request.user)
-        if "profile_cv" in form.changed_data and obj.profile_cv.strip():
-            try:
-                cvversions.record_master(request.user, obj.profile_cv)  # every CV change is kept in the history
-            except CVError:
-                pass
-        messages.success(request, "Profile saved.")
+        _save_cv_history(request, obj, form)
+        messages.success(request, "Saved. Your next matches will use this.")
         return redirect("profile")
     return render(request, "tracker/profile.html", {
         "form": form, "areas": areas, "profile": obj, "config": SiteConfig.load(), "welcome": request.GET.get("welcome"),

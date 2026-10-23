@@ -176,7 +176,11 @@ LOGOUT_REDIRECT_URL = "/"
 # Open sign-up needs a verified email, so configure SMTP (EMAIL_HOST...) before opening it; without SMTP the
 # verification link is printed to the server console.
 ACCOUNT_LOGIN_METHODS = {"username", "email"}
-ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+# Email and a password is all we ask for; a username is made up from the email (it can still be used to sign in).
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True  # the link in the email is the whole confirmation, no second button
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True  # and it signs the person in
+ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 # "optional" globally so accounts made in the admin or by createsuperuser (no confirmed email) are never locked out;
 # tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
 ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional")

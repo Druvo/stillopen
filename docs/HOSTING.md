@@ -31,7 +31,7 @@ Without Docker: `pip install -r requirements-hosting.txt`, set `DATABASE_URL=pos
 2. In the admin, Site configuration > Registration, choose **Open**.
 3. Optional: add Google sign-in (see the README). With sign-up Open, any Google account with a verified email can register.
 
-People who register themselves must confirm their email before they can sign in. Accounts you create in the admin, or with `createsuperuser`, are never blocked by this. New accounts are never staff.
+People who register themselves only give an email and a password. They must confirm the email before they can sign in; clicking the link in that email confirms it, signs them in and opens a short welcome page. Accounts you create in the admin, or with `createsuperuser`, are never blocked by this. New accounts are never staff.
 
 ## How data is kept apart
 
