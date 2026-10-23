@@ -11,7 +11,7 @@ from django.urls import reverse
 from tracker import crypto
 from tracker.models import Application, SiteConfig, Status, UserProfile
 from tracker.services import ai
-from tracker.services.jobtext import FetchError, check_public_url, fetch_description, html_to_text
+from tracker.services.jobtext import FetchError, check_public_url, fetch_description, fetch_posting, guess_role_company, html_to_text
 
 GOOD_JSON = (
     '{"match_percent": 82, "verdict": "Apply", "summary": "Good fit.", "strengths": ["C#", "SQL"], '
@@ -311,6 +311,25 @@ class JobTextTests(TestCase):
         config.careerops_path = ""
         with self.assertRaises(FetchError):
             fetch_description("https://jobs.example.com/1", config)
+
+    def test_guess_role_company_splits_common_title_shapes(self):
+        self.assertEqual(guess_role_company("Backend Engineer at Globex"), ("Backend Engineer", "Globex"))
+        self.assertEqual(guess_role_company("Backend Engineer - Globex"), ("Backend Engineer", "Globex"))
+        self.assertEqual(guess_role_company("Backend Engineer | Globex Careers"), ("Backend Engineer", "Globex Careers"))
+        self.assertEqual(guess_role_company("Careers"), ("Careers", ""))
+
+    @mock.patch("tracker.services.netguard.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))])
+    @mock.patch("tracker.services.netguard.requests.get")
+    def test_fetch_posting_returns_title_and_description(self, get, _dns):
+        config = SiteConfig.load()
+        config.careerops_path = ""
+        get.return_value = mock.Mock(
+            status_code=200, is_redirect=False, headers={},
+            text="<html><head><title>Backend Engineer at Globex</title></head><body><p>" + "Real job text. " * 30 + "</p></body></html>",
+        )
+        posting = fetch_posting("https://jobs.example.com/1", config)
+        self.assertEqual(posting["title"], "Backend Engineer at Globex")
+        self.assertIn("Real job text", posting["description"])
 
 
 class EvaluateViewTests(TestCase):

@@ -21,6 +21,17 @@
 </div>
 {% endif %}
 
+<div class="card mb-3">
+  <div class="card-body">
+    <label for="quickadd-url" class="form-label">Paste a job URL</label>
+    <div class="input-group">
+      <input type="url" id="quickadd-url" class="form-control" placeholder="https://...">
+      <button id="quickadd-btn" class="btn btn-primary">Fetch &amp; review</button>
+    </div>
+    <small class="form-hint">Fetches the title and description from the link, then opens Add job prefilled for you to check and save. Nothing is added until you submit that form.</small>
+  </div>
+</div>
+
 {% if scan_run %}
 <div class="card mb-3" id="scan-log-card">
   <div class="card-body">
@@ -227,6 +238,19 @@ checkBtn.addEventListener('click', async () => {
   poll();
 });
 {% if run and run.running %}checkBtn.disabled = true; poll();{% endif %}
+
+const quickaddBtn = document.getElementById('quickadd-btn');
+const quickaddUrl = document.getElementById('quickadd-url');
+quickaddBtn.addEventListener('click', async () => {
+  const url = quickaddUrl.value.trim();
+  if (!url) { toast('Paste a job URL first'); return; }
+  quickaddBtn.disabled = true; quickaddBtn.textContent = 'Fetching...';
+  const r = await post('/api/jobs/quickadd/', {url});
+  quickaddBtn.disabled = false; quickaddBtn.textContent = 'Fetch & review';
+  if (!r.data.ok) { toast(r.data.error || 'Could not fetch that page'); return; }
+  location.href = "{% url 'add_job' %}";
+});
+quickaddUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); quickaddBtn.click(); } });
 
 const scanBtn = document.getElementById('btn-scan');
 function renderScanEntries(entries) {

@@ -19,7 +19,7 @@ from tracker.models import (
     Application, Document, DocumentKind, Event, JobSource, KnowledgeSource, LivenessRun, ScanRun, SiteConfig, Status,
     UserProfile,
 )
-from tracker.services import ai, claim, knowledge, scan, who
+from tracker.services import ai, claim, jobtext, knowledge, scan, who
 
 User = get_user_model()
 PW = "correct-horse-battery-staple"
@@ -384,6 +384,30 @@ class AddingJobsAndDocuments(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "limit of 2")
         self.assertFalse(Application.objects.filter(company="Third").exists())
+
+    @mock.patch("tracker.services.netguard.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))])
+    @mock.patch("tracker.services.netguard.requests.get")
+    def test_quickadd_prefills_add_job_via_session_not_querystring(self, get, _dns):
+        get.return_value = mock.Mock(
+            status_code=200, is_redirect=False, headers={},
+            text="<html><head><title>Backend Engineer at Globex</title></head><body><p>" + "Real job text. " * 30 + "</p></body></html>",
+        )
+        r = self.client.post(reverse("quickadd_fetch"), {"url": "https://jobs.example.com/1"})
+        self.assertEqual(r.json()["ok"], True)
+        form_page = self.client.get(reverse("add_job"))
+        self.assertContains(form_page, "Globex")
+        self.assertContains(form_page, "Real job text")
+        self.assertContains(form_page, "Fetched from the link")
+        # the prefill is one-shot: a second GET sees a blank form again
+        self.assertNotContains(self.client.get(reverse("add_job")), "Fetched from the link")
+
+    def test_quickadd_requires_a_url_and_is_throttled(self):
+        self.assertEqual(self.client.post(reverse("quickadd_fetch"), {}).status_code, 400)
+        with override_settings(STILLOPEN_QUICKADD_PER_HOUR=1):
+            cache.clear()
+            with mock.patch("tracker.views.jobtext.fetch_posting", side_effect=jobtext.FetchError("nope")):
+                self.assertEqual(self.client.post(reverse("quickadd_fetch"), {"url": "https://x.example.com"}).status_code, 400)
+                self.assertEqual(self.client.post(reverse("quickadd_fetch"), {"url": "https://x.example.com"}).status_code, 429)
 
     def test_knowledge_add_toggle_delete_and_no_file_kept(self):
         with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):

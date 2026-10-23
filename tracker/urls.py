@@ -8,6 +8,7 @@ urlpatterns = [
     path("terms/", views.terms, name="terms"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("jobs/add/", views.add_job, name="add_job"),
+    path("api/jobs/quickadd/", views.quickadd_fetch, name="quickadd_fetch"),
     path("postings/", views.all_postings, name="all_postings"),
     path("postings/<int:pk>/add/", views.add_posting, name="add_posting"),
     path("profile/", views.profile, name="profile"),

@@ -58,7 +58,7 @@ No TODO/FIXME markers anywhere in the Python source — gaps are tracked in pros
 | Capability | Teal | Huntr | Simplify | Jobscan/LoopCV | Self-hosted (JobSync/JobOps) | **StillOpen today** |
 |---|---|---|---|---|---|---|
 | Kanban/pipeline board | yes | yes | — | — | yes | tabs by bucket, no drag-reorder |
-| **One-click browser-extension capture** (any job site → tracker) | yes | yes | yes | — | some | **none** |
+| One-click browser-extension capture (any job site → tracker) | yes | yes | yes | — | some | **not wanted** — everything stays in-panel by decision (see Tier 1 #1 for the in-panel alternative) |
 | **Autofill into ATS application forms** | — | partial | yes (flagship) | — | — | **none** (by design: app never submits applications) |
 | Resume/JD match score | yes | yes | yes | yes (flagship) | yes | yes — keyword + optional AI, already competitive |
 | Generative resume rewrite / cover letter | yes (weak, per reviews) | yes | yes | — | some | tailoring yes, **cover letters: not built** |
@@ -74,9 +74,11 @@ No TODO/FIXME markers anywhere in the Python source — gaps are tracked in pros
 
 Takeaways:
 - StillOpen's match-scoring and CV-tailoring depth are already at or above commercial-tool quality.
-- The single highest-leverage, lowest-cost feature missing is a **browser-extension one-click capture**
-  (title/company/JD/URL → `add_job`/`add_posting`), which is what makes Teal/Huntr/Simplify sticky and is
-  fully buildable with no paid API (a small Manifest V3 extension + one REST/MCP endpoint).
+- Teal/Huntr/Simplify's stickiest feature is a browser-extension one-click capture — **deliberately not
+  wanted here**: everything stays inside the panel. The in-panel paste-URL quick-add (Tier 1 #1) and the
+  recurring/scheduled scan across the 8 existing connectors (Tier 1 #4) are the chosen substitutes, and
+  between them they cover most of the same "frictionless discovery" value without a second codebase to
+  maintain (an extension) or leaving the app.
 - "Still open" checking and referral tracking are both **whitespace** — no major competitor does them well.
   Positioning opportunity, not just a gap to close.
 - Generative rewriting (cover letters, free-text application answers) is the one area every competitor
@@ -90,10 +92,12 @@ Takeaways:
 
 ### Tier 1 — highest leverage, build first
 
-1. **Browser extension for one-click job capture.** Manifest V3, reads the current page's DOM (title,
-   company, URL, JD text), POSTs to a new lightweight authenticated endpoint (reuse the MCP `add_application`
-   pattern or a thin REST view + API token). No AI required. This is the single feature most responsible for
-   competitor stickiness and the biggest gap-closer relative to effort.
+1. **Everything-in-panel quick add, no extension — done.** Decision: no browser extension — all capture
+   stays inside the app. The dashboard has a "Paste a job URL" bar (`views.quickadd_fetch`,
+   `services/jobtext.fetch_posting`/`guess_role_company`) that fetches title+description in one step and
+   hands off to the add-job form via the session (prefilled, one-shot, never auto-saved -- the person still
+   reviews and submits). No AI required. Not yet done: running the match evaluation automatically right
+   after a quick-add save (currently still a separate "Evaluate match" click, same as a manually-added job).
 2. **Cost/token transparency.** Capture `usage` from Anthropic/OpenAI-compatible responses, append to the
    existing `Event` line, show a running "tokens used this month" per user, and a pre-click estimate (chars
    → rough token count, admin-editable per-model price table mirroring `ScoreBand`). No AI cost itself —
@@ -145,6 +149,9 @@ Takeaways:
 
 ### Deliberately out of scope (keep as non-goals, don't build)
 
+- **Browser extension** — explicit product decision: everything stays in one panel, no second codebase
+  (extension manifest, per-browser store listings, separate update cycle) to maintain alongside the app.
+  Tier 1 #1 (in-panel paste-URL quick add) and the recurring scan (Tier 1 #4) are the chosen substitutes.
 - **Auto-apply / bulk-submit across sites** (LoopCV-style) — ToS/ethics risk and conflicts with StillOpen's
   own "never submits an application" principle.
 - **Autofill across third-party ATS portals** (Simplify's flagship) — technically free but the highest
@@ -165,8 +172,9 @@ Takeaways:
 
 ## 5. One-line answer to "what does this need to be a complete, usable, helpful app"
 
-Ship the Tier 1 list (browser-extension capture, cost transparency, follow-up emails, scheduled scan) first —
-all four are buildable without any paid AI API and close the gap with Teal/Huntr/Simplify almost entirely.
-Then Tier 2 (contacts, interview prep, cover letters, offers, referrals) makes it a genuinely complete job-
-search product rather than "tracker + scorer." Tier 3 is what turns it from "fine for me and a few friends"
-into something safe to host for strangers at scale.
+Ship the Tier 1 list (in-panel paste-URL quick add, cost transparency, follow-up emails, scheduled scan)
+first — all four are buildable without any paid AI API, keep everything inside the panel (no extension), and
+close most of the practical gap with Teal/Huntr/Simplify. Then Tier 2 (contacts, interview prep, cover
+letters, offers, referrals) makes it a genuinely complete job-search product rather than "tracker + scorer."
+Tier 3 is what turns it from "fine for me and a few friends" into something safe to host for strangers at
+scale.

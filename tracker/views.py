@@ -19,7 +19,7 @@ from .models import (
     Application, Bucket, Document, Event, JobSource, KnowledgeSource, Posting, ScoreBand, SiteConfig, Status,
     UserProfile,
 )
-from .services import ai, careerops, cvversions, knowledge, liveness, scan
+from .services import ai, careerops, cvversions, jobtext, knowledge, liveness, scan
 from .services import apply as apply_service
 from .services import fit as fit_service, geo
 from .services.cvversions import CVError
@@ -306,9 +306,38 @@ def document_file(request, pk):
 # --- adding jobs, profile, knowledge -------------------------------------------------------------
 
 @login_required
+@require_POST
+def quickadd_fetch(request):
+    """Quick-add bar: given just a URL, best-effort fetch its title and description so the add-job form
+    arrives prefilled. Nothing is saved here -- the person still reviews and submits the normal add-job
+    form, same validation and the same limits as adding a job by hand."""
+    if throttled(request.user, "quickadd", settings.STILLOPEN_QUICKADD_PER_HOUR):
+        return too_many()
+    url = request.POST.get("url", "").strip()
+    if not url:
+        return JsonResponse({"ok": False, "error": "Paste a job URL first."}, status=400)
+    config = SiteConfig.for_user(request.user)
+    try:
+        posting = jobtext.fetch_posting(url, config)
+    except jobtext.FetchError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    role, company = jobtext.guess_role_company(posting["title"]) if posting["title"] else ("", "")
+    # Handed to add_job via the session, not a query string -- a full job description would routinely
+    # blow past the ~8KB URL length most servers accept.
+    request.session["quickadd_prefill"] = {
+        "url": url,
+        "role": role,
+        "company": company,
+        "description": posting["description"][:30000],
+    }
+    return JsonResponse({"ok": True})
+
+
+@login_required
 @require_http_methods(["GET", "POST"])
 def add_job(request):
-    form = forms.JobForm(request.POST or None)
+    initial = request.session.pop("quickadd_prefill", None) if request.method == "GET" else None
+    form = forms.JobForm(request.POST or None, initial=initial)
     if request.method == "POST" and mine(request).count() >= settings.STILLOPEN_MAX_APPLICATIONS:
         form.add_error(None, f"You have reached the limit of {settings.STILLOPEN_MAX_APPLICATIONS} tracked jobs. Delete some first.")
     elif request.method == "POST" and form.is_valid():
