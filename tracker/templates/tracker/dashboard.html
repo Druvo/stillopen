@@ -67,7 +67,7 @@ a{color:var(--accent)}
 {% for message in messages %}<div class="card" style="margin:12px 20px;border-color:{% if message.tags == 'error' %}var(--bad){% else %}var(--ok){% endif %}">{{ message }}</div>{% endfor %}
 {% if not profile.is_complete %}
 <div class="card" style="margin:12px 20px;border-color:var(--warn)">
-  <strong>Finish your profile.</strong> Add the roles you want and your CV so matches mean something.
+  <strong>Finish your profile.</strong> Still missing: {{ profile.missing_fields|join:" and " }} -- matches won't mean much until those are set.
   <a href="{% url 'profile' %}?welcome=1">Open profile</a>
 </div>
 {% endif %}

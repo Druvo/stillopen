@@ -255,6 +255,19 @@ class ProfilePages(TestCase):
         })
         self.assertNotContains(self.client.get(reverse("dashboard")), "Finish your profile")
 
+    def test_banner_names_exactly_what_is_missing(self):
+        # Neither set yet: both named.
+        self.assertContains(self.client.get(reverse("dashboard")), "the roles you want and your CV")
+        # Only target_roles set: banner should name just the CV, not both.
+        self.client.post(reverse("profile"), {"target_roles": "Backend Engineer"})
+        r = self.client.get(reverse("dashboard"))
+        self.assertContains(r, "Finish your profile")
+        self.assertContains(r, "your CV")
+        self.assertNotContains(r, "the roles you want")
+        # Both set: banner gone.
+        self.client.post(reverse("profile"), {"target_roles": "Backend Engineer", "profile_cv": CV})
+        self.assertNotContains(self.client.get(reverse("dashboard")), "Finish your profile")
+
     def test_profile_saves_roles_and_cv(self):
         r = self.client.post(reverse("profile"), {
             "target_roles": "Backend Engineer\nSolutions Architect",

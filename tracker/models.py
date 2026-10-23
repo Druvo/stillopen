@@ -388,7 +388,17 @@ class UserProfile(PersonalSettings):
 
     @property
     def is_complete(self) -> bool:
-        return bool(self.profile_cv.strip() and self.target_roles.strip())
+        return not self.missing_fields
+
+    @property
+    def missing_fields(self) -> list[str]:
+        """Which of the two things a real match needs are still blank, so the dashboard banner can say which."""
+        missing = []
+        if not self.target_roles.strip():
+            missing.append("the roles you want")
+        if not self.profile_cv.strip():
+            missing.append("your CV")
+        return missing
 
 
 class SearchArea(models.Model):
