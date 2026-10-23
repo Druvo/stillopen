@@ -1,197 +1,149 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ config.site_title }}</title>
-<style>
-:root{--bg:#0f1218;--panel:#171b24;--line:#262c3a;--text:#e6e9f0;--muted:#8b93a7;--accent:#5b9dff;--ok:#3ecf8e;--warn:#f5b642;--bad:#f16565}
-@media (prefers-color-scheme:light){:root{--bg:#f5f6f9;--panel:#fff;--line:#dfe3ec;--text:#1a1f2b;--muted:#5d667a}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,sans-serif}
-header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
-h1{font-size:18px;margin:0}
-.muted{color:var(--muted)}
-.actions{display:flex;gap:8px;flex-wrap:wrap}
-button,.btn{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer;text-decoration:none;display:inline-block}
-button:hover,.btn:hover{border-color:var(--accent)}
-button:disabled{opacity:.5;cursor:default}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:16px 20px}
-.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
-.stat b{display:block;font-size:24px}
-nav.tabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--line);overflow-x:auto}
-nav.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 14px}
-nav.tabs button[aria-selected=true]{border-bottom-color:var(--accent);color:var(--accent)}
-main{padding:16px 20px;display:grid;gap:12px}
-section[hidden]{display:none}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:8px}
-.card.urgent{border-color:var(--warn)}
-.top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
-.title{font-weight:600;font-size:15px}
-.pill{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;border:1px solid currentColor}
-.match{font-size:22px;font-weight:700;text-align:right;line-height:1}
-.match small{display:block;font-size:11px;font-weight:500;color:var(--muted)}
-.bar{height:6px;background:var(--line);border-radius:4px;overflow:hidden}
-.bar i{display:block;height:100%}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-details summary{cursor:pointer;color:var(--accent)}
-ul{margin:4px 0;padding-left:18px}
-select{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font:inherit}
-.empty{padding:30px;text-align:center;color:var(--muted)}
-#toast{position:fixed;bottom:16px;right:16px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;display:none}
-a{color:var(--accent)}
-</style>
-</head>
-<body>
-<header>
-  <div>
-    <h1>{{ config.site_title }}</h1>
-    <div class="muted">
-      {% if checked_at %}Open/closed checked {{ checked_at|timesince }} ago{% else %}Open/closed not checked yet{% endif %}
-    </div>
-  </div>
-  <div class="actions">
-    <a class="btn" href="{% url 'add_job' %}" style="background:var(--accent);border-color:var(--accent);color:#fff">Add job</a>
-    {% if can_scan %}<button id="btn-scan" title="Searches every enabled job board for postings matching your target roles. Free -- no AI used.">Search jobs</button>{% endif %}
-    <button id="btn-check">Check open/closed</button>
-    {% if can_import %}<button id="btn-import">Import from career-ops</button>{% endif %}
-    {% if paperless_on %}<a class="btn" href="{{ paperless_url }}" target="_blank" rel="noopener">Paperless</a>{% endif %}
-    <a class="btn" href="{% url 'all_postings' %}">All postings</a>
-    <a class="btn" href="{% url 'profile' %}">Profile</a>
-    <a class="btn" href="{% url 'cv_list' %}">CVs</a>
-    <a class="btn" href="{% url 'knowledge' %}">Documents</a>
-    <a class="btn" href="{% url 'profile_ai' %}">AI</a>
-    {% if user.is_staff %}<a class="btn" href="{% url 'admin:index' %}">Admin</a>{% endif %}
-    <form method="post" action="{% url 'account_logout' %}" style="display:inline">{% csrf_token %}<button type="submit">Sign out</button></form>
-  </div>
-</header>
-{% for message in messages %}<div class="card" style="margin:12px 20px;border-color:{% if message.tags == 'error' %}var(--bad){% else %}var(--ok){% endif %}">{{ message }}</div>{% endfor %}
+{% extends "tracker/base_app.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}
+<div class="text-secondary mt-1">
+  {% if checked_at %}Open/closed checked {{ checked_at|timesince }} ago{% else %}Open/closed not checked yet{% endif %}
+</div>
+{% endblock %}
+{% block page_actions %}
+<a class="btn btn-primary" href="{% url 'add_job' %}">Add job</a>
+{% if can_scan %}<button id="btn-scan" class="btn btn-outline-secondary" title="Searches every enabled job board for postings matching your target roles. Free -- no AI used.">Search jobs</button>{% endif %}
+<button id="btn-check" class="btn btn-outline-secondary">Check open/closed</button>
+{% if can_import %}<button id="btn-import" class="btn btn-outline-secondary">Import from career-ops</button>{% endif %}
+{% if paperless_on %}<a class="btn btn-outline-secondary" href="{{ paperless_url }}" target="_blank" rel="noopener">Paperless</a>{% endif %}
+{% endblock %}
+{% block content %}
 {% if not profile.is_complete %}
-<div class="card" style="margin:12px 20px;border-color:var(--warn)">
+<div class="alert alert-warning">
   <strong>Finish your profile.</strong> Still missing: {{ profile.missing_fields|join:" and " }} -- matches won't mean much until those are set.
   <a href="{% url 'profile' %}?welcome=1">Open profile</a>
 </div>
 {% endif %}
 
 {% if scan_run %}
-<div class="card" style="margin:12px 20px;gap:6px" id="scan-log-card">
-  <div class="row" style="justify-content:space-between">
+<div class="card mb-3" id="scan-log-card">
+  <div class="card-body">
     <strong id="scan-log-title">
       {% if scan_run.running %}Searching... {{ scan_run.done }}/{{ scan_run.total }} sources{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- {{ scan_run.found }} found, {{ scan_run.added }} new{% if scan_run.error %}, error{% endif %}{% endif %}
     </strong>
-  </div>
-  {% if scan_run.error %}<div class="muted" style="color:var(--bad)">{{ scan_run.error }}</div>{% endif %}
-  <details id="scan-log-details" {% if not scan_run.running %}open{% endif %}>
-    <summary>Scan log -- where it searched and what it found</summary>
-    <div id="scan-log-entries">
-      {% for e in scan_run.entries.all %}
-      <div class="row" style="justify-content:space-between;font-size:13px">
-        <span>{{ e.source_name }} <span class="muted">({{ e.get_connector_display }})</span></span>
-        <span class="muted">
-          {% if e.error %}<span style="color:var(--bad)">{{ e.error }}</span>{% else %}{{ e.found }} found, {{ e.matched }} matched, {{ e.added }} new, {{ e.duplicates }} already tracked{% endif %}
-        </span>
+    {% if scan_run.error %}<div class="text-danger mt-1">{{ scan_run.error }}</div>{% endif %}
+    <details id="scan-log-details" class="mt-2" {% if not scan_run.running %}open{% endif %}>
+      <summary style="cursor:pointer">Scan log -- where it searched and what it found</summary>
+      <div id="scan-log-entries" class="mt-2">
+        {% for e in scan_run.entries.all %}
+        <div class="d-flex justify-content-between" style="font-size:13px">
+          <span>{{ e.source_name }} <span class="text-secondary">({{ e.get_connector_display }})</span></span>
+          <span class="text-secondary">
+            {% if e.error %}<span class="text-danger">{{ e.error }}</span>{% else %}{{ e.found }} found, {{ e.matched }} matched, {{ e.added }} new, {{ e.duplicates }} already tracked{% endif %}
+          </span>
+        </div>
+        {% empty %}
+        <div class="text-secondary">No sources checked yet.</div>
+        {% endfor %}
       </div>
-      {% empty %}
-      <div class="muted">No sources checked yet.</div>
-      {% endfor %}
-    </div>
-  </details>
+    </details>
+  </div>
 </div>
 {% endif %}
 
 {% if followups %}
-<div class="card" style="margin:12px 20px;border-color:var(--warn);gap:6px">
-  <strong>Follow-ups due</strong>
-  {% for f in followups %}
-  <div class="row" style="justify-content:space-between">
-    <span>{{ f.company }} — {{ f.role }} <span class="muted">(due {{ f.follow_up_date|date:"j M" }}{% if f.applied_date %}, applied {{ f.applied_date|date:"j M" }}{% endif %})</span></span>
-    <span class="row">
-      <form method="post" action="{% url 'followup_action' f.pk 'done' %}" style="display:inline">{% csrf_token %}<button type="submit">Done</button></form>
-      <form method="post" action="{% url 'followup_action' f.pk 'snooze' %}" style="display:inline">{% csrf_token %}<input type="hidden" name="days" value="3"><button type="submit">In 3 days</button></form>
-    </span>
+<div class="card mb-3">
+  <div class="card-body">
+    <strong>Follow-ups due</strong>
+    {% for f in followups %}
+    <div class="d-flex justify-content-between align-items-center mt-2">
+      <span>{{ f.company }} — {{ f.role }} <span class="text-secondary">(due {{ f.follow_up_date|date:"j M" }}{% if f.applied_date %}, applied {{ f.applied_date|date:"j M" }}{% endif %})</span></span>
+      <span class="btn-list">
+        <form method="post" action="{% url 'followup_action' f.pk 'done' %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-secondary">Done</button></form>
+        <form method="post" action="{% url 'followup_action' f.pk 'snooze' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="days" value="3"><button type="submit" class="btn btn-sm btn-outline-secondary">In 3 days</button></form>
+      </span>
+    </div>
+    {% endfor %}
   </div>
-  {% endfor %}
 </div>
 {% endif %}
-<div class="stats">
-  <div class="stat"><b>{{ stats.total }}</b><span class="muted">Tracked roles</span></div>
-  <div class="stat"><b>{{ stats.submitted }}</b><span class="muted">CV submitted</span></div>
-  <div class="stat"><b>{% if stats.average_match is None %}N/A{% else %}{{ stats.average_match }}%{% endif %}</b><span class="muted">Average match</span></div>
-  <div class="stat"><b>{{ stats.urgent }}</b><span class="muted">Deadline within {{ config.urgent_days }} days</span></div>
+
+<div class="row row-deck row-cards mb-3">
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{{ stats.total }}</div><div class="text-secondary">Tracked roles</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{{ stats.submitted }}</div><div class="text-secondary">CV submitted</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{% if stats.average_match is None %}N/A{% else %}{{ stats.average_match }}%{% endif %}</div><div class="text-secondary">Average match</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{{ stats.urgent }}</div><div class="text-secondary">Deadline within {{ config.urgent_days }} days</div></div></div></div>
 </div>
 
-<nav class="tabs" role="tablist">
+<ul class="nav nav-tabs mb-3" role="tablist">
   {% for tab in tabs %}
-    <button role="tab" data-tab="{{ tab.bucket.key }}" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}" title="{{ tab.bucket.description }}">{{ tab.bucket.label }} ({{ tab.cards|length }})</button>
+    <li class="nav-item"><button class="nav-link {% if forloop.first %}active{% endif %}" role="tab" data-tab="{{ tab.bucket.key }}" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}" title="{{ tab.bucket.description }}">{{ tab.bucket.label }} ({{ tab.cards|length }})</button></li>
   {% endfor %}
-</nav>
+</ul>
 
-<main>
 {% csrf_token %}
 {% for tab in tabs %}
 <section data-panel="{{ tab.bucket.key }}" {% if not forloop.first %}hidden{% endif %}>
   {% for c in tab.cards %}
   {% with a=c.app %}
-  <article class="card {% if c.urgent %}urgent{% endif %}">
-    <div class="top">
-      <div>
-        <div class="title">{{ a.company }} <span class="muted">— {{ a.role }}</span></div>
-        <div class="row muted">
+  <article class="card mb-3 {% if c.urgent %}border-warning{% endif %}">
+    <div class="card-body">
+    <div class="row">
+      <div class="col">
+        <div class="fw-bold">{{ a.company }} <span class="text-secondary fw-normal">— {{ a.role }}</span></div>
+        <div class="d-flex gap-2 flex-wrap text-secondary mt-1">
           {% if a.source %}<span>{{ a.source.name }}</span>{% endif %}
           {% if a.advertised_pay %}<span>{{ a.advertised_pay }}</span>{% endif %}
           {% if a.applied_date %}<span>Applied {{ a.applied_date|date:"j M Y" }}</span>{% endif %}
           {% if a.deadline %}
-            <span style="color:{% if c.overdue %}var(--bad){% elif c.urgent %}var(--warn){% endif %}">
+            <span class="{% if c.overdue %}text-danger{% elif c.urgent %}text-warning{% endif %}">
               Deadline {{ a.deadline|date:"j M Y" }}
               {% if c.overdue %}(passed){% elif c.days_left == 0 %}(today){% else %}({{ c.days_left }}d left){% endif %}
             </span>
           {% endif %}
         </div>
       </div>
-      <div class="match" {% if c.band %}style="color:{{ c.band.color }}"{% endif %}>
-        {% if c.percent is None %}N/A{% else %}{{ c.percent }}%{% endif %}
-        <small>{% if c.band %}{{ c.band.label }} match{% else %}match{% endif %}</small>
+      <div class="col-auto text-end">
+        <div class="h2 mb-0" {% if c.band %}style="color:{{ c.band.color }}"{% endif %}>{% if c.percent is None %}N/A{% else %}{{ c.percent }}%{% endif %}</div>
+        <small class="text-secondary">{% if c.band %}{{ c.band.label }} match{% else %}match{% endif %}</small>
       </div>
     </div>
 
     {% if c.percent is not None %}
-    <div class="bar"><i style="width:{{ c.percent }}%;background:{{ c.band.color|default:'var(--accent)' }}"></i></div>
+    <div class="progress progress-sm mt-2"><div class="progress-bar" style="width:{{ c.percent }}%;background:{{ c.band.color|default:'var(--tblr-primary)' }}"></div></div>
     {% endif %}
 
-    <div class="row">
-      <span class="pill" style="color:{{ a.status.color }}">{{ a.status.name }}</span>
-      {% if a.live_state == "active" %}<span class="pill" style="color:var(--ok)" title="{{ a.live_detail }}">Open</span>
-      {% elif a.live_state == "expired" %}<span class="pill" style="color:var(--bad)" title="{{ a.live_detail }}">Closed</span>
-      {% elif a.live_state == "uncertain" %}<span class="pill" style="color:var(--warn)" title="{{ a.live_detail }}">Unclear</span>{% endif %}
-      {% if a.decision %}<span class="pill muted" title="{{ a.decision }}">{{ a.decision|truncatechars:28 }}</span>{% endif %}
-      {% if a.risk %}<span class="pill muted">Risk: {{ a.risk }}</span>{% endif %}
-      {% if c.repost %}<span class="pill" style="color:var(--warn)" title="Seen as {{ c.repost.distinct_urls }} different postings on {{ c.repost.distinct_dates }} separate days at this company, same title -- an observation, not a verdict. First seen {{ c.repost.first_seen|date:'j M' }}, last {{ c.repost.last_seen|date:'j M' }}.">Possible repost</span>{% endif %}
-      {% if c.fit_level == "warn" %}<a href="{% url 'job_edit' a.pk %}" class="pill" style="color:var(--warn)" title="{{ c.fit_text }}">Check fit</a>{% elif c.fit_level == "ok" %}<a href="{% url 'job_edit' a.pk %}" class="pill" style="color:var(--ok)" title="{{ c.fit_text }}">Fits</a>{% elif has_areas %}<a href="{% url 'job_edit' a.pk %}" class="pill muted" title="{{ c.fit_text }}">Fit unknown</a>{% endif %}
-      <select data-status-for="{{ a.pk }}" aria-label="Change status">
+    <div class="d-flex gap-2 flex-wrap align-items-center mt-3">
+      <span class="badge" style="color:{{ a.status.color }}">{{ a.status.name }}</span>
+      {% if a.live_state == "active" %}<span class="badge bg-green-lt" title="{{ a.live_detail }}">Open</span>
+      {% elif a.live_state == "expired" %}<span class="badge bg-red-lt" title="{{ a.live_detail }}">Closed</span>
+      {% elif a.live_state == "uncertain" %}<span class="badge bg-warning-lt" title="{{ a.live_detail }}">Unclear</span>{% endif %}
+      {% if a.decision %}<span class="badge bg-secondary-lt" title="{{ a.decision }}">{{ a.decision|truncatechars:28 }}</span>{% endif %}
+      {% if a.risk %}<span class="badge bg-secondary-lt">Risk: {{ a.risk }}</span>{% endif %}
+      {% if c.repost %}<span class="badge bg-warning-lt" title="Seen as {{ c.repost.distinct_urls }} different postings on {{ c.repost.distinct_dates }} separate days at this company, same title -- an observation, not a verdict. First seen {{ c.repost.first_seen|date:'j M' }}, last {{ c.repost.last_seen|date:'j M' }}.">Possible repost</span>{% endif %}
+      {% if c.fit_level == "warn" %}<a href="{% url 'job_edit' a.pk %}" class="badge bg-warning-lt" title="{{ c.fit_text }}">Check fit</a>{% elif c.fit_level == "ok" %}<a href="{% url 'job_edit' a.pk %}" class="badge bg-green-lt" title="{{ c.fit_text }}">Fits</a>{% elif has_areas %}<a href="{% url 'job_edit' a.pk %}" class="badge bg-secondary-lt" title="{{ c.fit_text }}">Fit unknown</a>{% endif %}
+      <select data-status-for="{{ a.pk }}" aria-label="Change status" class="form-select form-select-sm" style="width:auto">
         {% for s in statuses %}<option value="{{ s.pk }}" {% if s.pk == a.status_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
       </select>
       {% if a.url %}<a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">Job post</a>{% endif %}
       <a href="{% url 'job_edit' a.pk %}">Details</a>
-      {% if a.description or a.url %}<button data-eval="{{ a.pk }}" title="Provider: {{ config.get_ai_provider_display }}">{% if a.ai_evaluated_at %}Re-evaluate{% else %}Evaluate match{% endif %}</button>{% endif %}
-      {% if a.description or a.url %}<form method="post" action="{% url 'tailor_cv' a.pk %}" style="display:inline">{% csrf_token %}<button type="submit" title="Make a CV tailored to this job from your own CV. Nothing is invented.">Tailor CV</button></form>{% endif %}
-      {% if c.cv %}<a href="{% url 'cv_detail' c.cv.pk %}" class="pill" style="color:{% if c.cv.flagged and not c.cv.approved %}var(--warn){% else %}var(--ok){% endif %}">CV v{{ c.cv.pk }}{% if c.cv.flagged and not c.cv.approved %} · review{% endif %}</a>{% endif %}
-      <a class="btn" href="{% url 'apply_page' a.pk %}">{% if a.applied_date and a.applied_cv_id %}Application{% else %}Apply{% endif %}</a>
-      {% if a.ai_method %}<span class="muted" style="font-size:12px">{% if a.ai_method == "keywords" %}keyword match{% else %}AI-evaluated{% endif %}</span>{% endif %}
+      {% if a.description or a.url %}<button data-eval="{{ a.pk }}" class="btn btn-sm btn-outline-secondary" title="Provider: {{ config.get_ai_provider_display }}">{% if a.ai_evaluated_at %}Re-evaluate{% else %}Evaluate match{% endif %}</button>{% endif %}
+      {% if a.description or a.url %}<form method="post" action="{% url 'tailor_cv' a.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-secondary" title="Make a CV tailored to this job from your own CV. Nothing is invented.">Tailor CV</button></form>{% endif %}
+      {% if c.cv %}<a href="{% url 'cv_detail' c.cv.pk %}" class="badge {% if c.cv.flagged and not c.cv.approved %}bg-warning-lt{% else %}bg-green-lt{% endif %}">CV v{{ c.cv.pk }}{% if c.cv.flagged and not c.cv.approved %} · review{% endif %}</a>{% endif %}
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'apply_page' a.pk %}">{% if a.applied_date and a.applied_cv_id %}Application{% else %}Apply{% endif %}</a>
+      {% if a.ai_method %}<span class="text-secondary" style="font-size:12px">{% if a.ai_method == "keywords" %}keyword match{% else %}AI-evaluated{% endif %}</span>{% endif %}
     </div>
 
-    {% if a.summary %}<div>{{ a.summary }}</div>{% endif %}
-    {% if a.next_action %}<div class="muted">Next: {{ a.next_action }}</div>{% endif %}
+    {% if a.summary %}<div class="mt-2">{{ a.summary }}</div>{% endif %}
+    {% if a.next_action %}<div class="text-secondary mt-1">Next: {{ a.next_action }}</div>{% endif %}
 
     {% if a.applied_date and a.status.counts_as_applied %}
-    <div class="muted" style="font-size:13px">Applied {{ a.applied_date|date:"j M Y" }}{% if a.applied_channel %} via {{ a.get_applied_channel_display }}{% endif %}{% if a.applied_cv_id %} · sent <a href="{% url 'cv_detail' a.applied_cv_id %}">CV v{{ a.applied_cv_id }}</a>{% endif %}{% if a.follow_up_date %} · follow up {{ a.follow_up_date|date:"j M" }}{% endif %}</div>
+    <div class="text-secondary mt-2" style="font-size:13px">Applied {{ a.applied_date|date:"j M Y" }}{% if a.applied_channel %} via {{ a.get_applied_channel_display }}{% endif %}{% if a.applied_cv_id %} · sent <a href="{% url 'cv_detail' a.applied_cv_id %}">CV v{{ a.applied_cv_id }}</a>{% endif %}{% if a.follow_up_date %} · follow up {{ a.follow_up_date|date:"j M" }}{% endif %}</div>
     {% endif %}
 
     {% if c.strengths or c.gaps or a.notes or c.documents %}
-    <details>
-      <summary>Details</summary>
+    <details class="mt-2">
+      <summary style="cursor:pointer">Details</summary>
+      <div class="mt-2">
       {% if c.strengths %}<strong>Strengths</strong><ul>{% for i in c.strengths %}<li>{{ i.text }}</li>{% endfor %}</ul>{% endif %}
       {% if c.gaps %}<strong>Gaps and risks</strong><ul>{% for i in c.gaps %}<li>{{ i.text }}</li>{% endfor %}</ul>{% endif %}
-      {% if a.notes %}<p class="muted">{{ a.notes }}</p>{% endif %}
+      {% if a.notes %}<p class="text-secondary">{{ a.notes }}</p>{% endif %}
       {% if c.documents %}
       <strong>Documents</strong>
       <ul>
@@ -200,33 +152,37 @@ a{color:var(--accent)}
           {{ d.kind.name }}: <a href="{% url 'document_file' d.pk %}" target="_blank" rel="noopener">{{ d.title }}</a>
           {% if paperless_on %}
             {% if d.paperless_id %}<a href="{{ paperless_url }}/documents/{{ d.paperless_id }}/details" target="_blank" rel="noopener">in Paperless</a>
-            {% else %}<button data-push="{{ d.pk }}">Send to Paperless</button>{% endif %}
+            {% else %}<button data-push="{{ d.pk }}" class="btn btn-sm btn-outline-secondary">Send to Paperless</button>{% endif %}
           {% endif %}
-          {% if d.paperless_error %}<span class="muted" title="{{ d.paperless_error }}">(!)</span>{% endif %}
+          {% if d.paperless_error %}<span class="text-secondary" title="{{ d.paperless_error }}">(!)</span>{% endif %}
         </li>
         {% endfor %}
       </ul>
       {% endif %}
+      </div>
     </details>
     {% endif %}
+    </div>
   </article>
   {% endwith %}
   {% empty %}
-  <div class="empty">Nothing here.</div>
+  <div class="text-center text-secondary py-5">Nothing here.</div>
   {% endfor %}
 </section>
 {% endfor %}
-</main>
-<div id="toast" role="status"></div>
+<div id="toast" role="status" class="toast align-items-center position-fixed" style="bottom:16px;right:16px;display:none"><div class="d-flex"><div class="toast-body"></div></div></div>
+{% endblock %}
 
+{% block extra_scripts %}
 <script>
 const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
-const toast = (msg) => { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 4000); };
+const toastEl = document.getElementById('toast');
+const toast = (msg) => { toastEl.querySelector('.toast-body').textContent = msg; toastEl.style.display = 'block'; setTimeout(() => toastEl.style.display = 'none', 4000); };
 const post = (url, body) => fetch(url, {method: 'POST', headers: {'X-CSRFToken': csrf}, body: body ? new URLSearchParams(body) : undefined}).then(async r => ({ok: r.ok, data: await r.json().catch(() => ({}))}));
 
-const tabs = document.querySelectorAll('nav.tabs button');
+const tabs = document.querySelectorAll('.nav-tabs button[data-tab]');
 const show = (key) => {
-  tabs.forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === key)));
+  tabs.forEach(b => { b.setAttribute('aria-selected', String(b.dataset.tab === key)); b.classList.toggle('active', b.dataset.tab === key); });
   document.querySelectorAll('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== key);
   try { sessionStorage.setItem('tab', key); } catch (e) {}
 };
@@ -276,11 +232,11 @@ const scanBtn = document.getElementById('btn-scan');
 function renderScanEntries(entries) {
   const box = document.getElementById('scan-log-entries');
   if (!box) return;
-  if (!entries.length) { box.innerHTML = '<div class="muted">No sources checked yet.</div>'; return; }
+  if (!entries.length) { box.innerHTML = '<div class="text-secondary">No sources checked yet.</div>'; return; }
   box.innerHTML = entries.map(e => `
-    <div class="row" style="justify-content:space-between;font-size:13px">
-      <span>${e.source} <span class="muted">(${e.connector})</span></span>
-      <span class="muted">${e.error ? `<span style="color:var(--bad)">${e.error}</span>` : `${e.found} found, ${e.matched} matched, ${e.added} new, ${e.duplicates} already tracked`}</span>
+    <div class="d-flex justify-content-between" style="font-size:13px">
+      <span>${e.source} <span class="text-secondary">(${e.connector})</span></span>
+      <span class="text-secondary">${e.error ? `<span class="text-danger">${e.error}</span>` : `${e.found} found, ${e.matched} matched, ${e.added} new, ${e.duplicates} already tracked`}</span>
     </div>`).join('');
 }
 async function scanPoll() {
@@ -303,5 +259,4 @@ if (scanBtn) scanBtn.addEventListener('click', async () => {
 });
 {% if scan_run and scan_run.running %}if (scanBtn) { scanBtn.disabled = true; } scanPoll();{% endif %}
 </script>
-</body>
-</html>
+{% endblock %}

@@ -22,6 +22,7 @@ python mcp_server.py                       # MCP server over stdio
 - `tracker/mcp_tools.py`: plain functions behind the MCP tools; `mcp_server.py` registers them
 - `tracker/auth.py`: allauth adapters (Google sign-in gated by an allowlist)
 - `.claude/skills/stillopen/SKILL.md`: how an AI should use the MCP tools
+- UI is Tabler (Bootstrap 5, CDN, no build step) via `templates/tracker/base_app.html` (sidebar) and `templates/allauth/layouts/base.html` (sign-in pages). `tracker/templatetags/form_tags.py`'s `bootstrap_field` filter adds `form-control`/`form-select`/`form-check-input` to bare `{{ field }}` renders. `FORM_RENDERER = TemplatesSetting` in settings.py (plus `django.forms` in INSTALLED_APPS) makes Django's own widget templates resolvable under project `TEMPLATES[0]["DIRS"]` -- needed for the `templates/django/forms/widgets/multiple_input.html`/`input_option.html` overrides, which wrap each CheckboxSelectMultiple/RadioSelect option in Bootstrap's required `.form-check` div (the default renderer ignores DIRS entirely and Bootstrap's checkbox/radio CSS breaks without that wrapper).
 
 ## Rules
 

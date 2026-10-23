@@ -1,50 +1,61 @@
 {% extends "tracker/base_app.html" %}
+{% load form_tags %}
 {% block title %}AI settings{% endblock %}
+{% block page_title %}AI settings{% endblock %}
 {% block content %}
-<h1>AI settings</h1>
-<p class="muted">Choose how your jobs are scored. <strong>Off</strong> is free and uses a keyword match against your CV. Any other choice uses <em>your own</em> account with that provider: when you press Evaluate, the job text, your preferences and the relevant parts of your CV are sent to it.</p>
+<p class="text-secondary">Choose how your jobs are scored. <strong>Off</strong> is free and uses a keyword match against your CV. Any other choice uses <em>your own</em> account with that provider: when you press Evaluate, the job text, your preferences and the relevant parts of your CV are sent to it.</p>
 
-<form method="post" class="card">
-  {% csrf_token %}
-  {{ form.non_field_errors }}
-  <h2 style="margin-top:0">Provider</h2>
-  {% for field in form %}
-    {% if field.name in "ai_provider ai_model ai_base_url ai_api_key clear_ai_key ai_custom_headers ai_custom_body ai_custom_response_path" %}
-      {% if field.name == "ai_api_key" %}
-        <label for="{{ field.id_for_label }}">{{ field.label }} {% if has_key %}<span class="pill">saved</span>{% endif %}</label>
-      {% else %}
-        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+<div class="card">
+  <div class="card-body">
+  <form method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <h3 class="mt-0">Provider</h3>
+    {% for field in form %}
+      {% if field.name in "ai_provider ai_model ai_base_url ai_api_key clear_ai_key ai_custom_headers ai_custom_body ai_custom_response_path" %}
+        <div class="mb-3">
+          {% if field.name == "ai_api_key" %}
+            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }} {% if has_key %}<span class="badge">saved</span>{% endif %}</label>
+          {% else %}
+            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+          {% endif %}
+          {{ field|bootstrap_field }}
+          {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+          {{ field.errors }}
+        </div>
       {% endif %}
-      {{ field }}
-      {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
-      {{ field.errors }}
-    {% endif %}
-  {% endfor %}
+    {% endfor %}
 
-  <h2>Retrieval</h2>
-  <p class="muted" style="margin-top:0">Send the AI only the parts of your CV and documents relevant to each job.</p>
-  {% for field in form %}
-    {% if field.name in "rag_enabled rag_mode rag_top_k rag_chunk_chars rag_always_chars rag_embedding_base_url rag_embedding_model rag_embedding_key clear_rag_key" %}
-      {% if field.name == "rag_embedding_key" %}
-        <label for="{{ field.id_for_label }}">{{ field.label }} {% if has_rag_key %}<span class="pill">saved</span>{% endif %}</label>
-      {% else %}
-        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    <h3>Retrieval</h3>
+    <p class="text-secondary">Send the AI only the parts of your CV and documents relevant to each job.</p>
+    {% for field in form %}
+      {% if field.name in "rag_enabled rag_mode rag_top_k rag_chunk_chars rag_always_chars rag_embedding_base_url rag_embedding_model rag_embedding_key clear_rag_key" %}
+        <div class="mb-3">
+          {% if field.name == "rag_embedding_key" %}
+            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }} {% if has_rag_key %}<span class="badge">saved</span>{% endif %}</label>
+          {% else %}
+            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+          {% endif %}
+          {{ field|bootstrap_field }}
+          {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+          {{ field.errors }}
+        </div>
       {% endif %}
-      {{ field }}
-      {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
-      {{ field.errors }}
-    {% endif %}
-  {% endfor %}
+    {% endfor %}
 
-  <h2>Limits</h2>
-  {% for field in form %}
-    {% if field.name == "ai_timeout" or field.name == "ai_max_input_chars" %}
-      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-      {{ field }}
-      {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
-      {{ field.errors }}
-    {% endif %}
-  {% endfor %}
-  <div class="row" style="margin-top:16px"><button class="primary" type="submit">Save</button></div>
-</form>
+    <h3>Limits</h3>
+    {% for field in form %}
+      {% if field.name == "ai_timeout" or field.name == "ai_max_input_chars" %}
+        <div class="mb-3">
+          <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+          {{ field|bootstrap_field }}
+          {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+          {{ field.errors }}
+        </div>
+      {% endif %}
+    {% endfor %}
+    <div class="form-footer"><button class="btn btn-primary" type="submit">Save</button></div>
+  </form>
+  </div>
+</div>
 {% endblock %}

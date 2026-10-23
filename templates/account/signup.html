@@ -1,18 +1,19 @@
 {% extends "account/base_entrance.html" %}
+{% load form_tags %}
 {% block head_title %}Create account{% endblock %}
 {% block content %}
-<h1>Create your account</h1>
-<p class="muted" style="margin:0">Track your job search, see what is still open, and get a match score for every role.</p>
+<h2 class="card-title">Create your account</h2>
+<p class="text-secondary mb-3">Track your job search, see what is still open, and get a match score for every role.</p>
 
 {% if google_login_on %}
   {% load socialaccount %}
   {% get_providers as providers %}
   {% if providers %}
-  <form method="post" action="{% provider_login_url 'google' process='login' %}">
+  <form method="post" action="{% provider_login_url 'google' process='login' %}" class="mb-3">
     {% csrf_token %}
-    <button type="submit">Continue with Google</button>
+    <button type="submit" class="btn btn-outline-secondary w-100">Continue with Google</button>
   </form>
-  <div class="or">or</div>
+  <div class="hr-text">or</div>
   {% endif %}
 {% endif %}
 
@@ -20,15 +21,15 @@
   {% csrf_token %}
   {{ form.non_field_errors }}
   {% for field in form.visible_fields %}
-  <div>
-    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-    {{ field }}
+  <div class="mb-3">
+    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+    {{ field|bootstrap_field }}
     {{ field.errors }}
   </div>
   {% endfor %}
   {{ redirect_field }}
-  <p class="muted" style="margin:0;font-size:12.5px">By creating an account you agree to the <a href="{% url 'terms' %}">terms</a> and <a href="{% url 'privacy' %}">privacy policy</a>. We email you a link to confirm your address.</p>
-  <button type="submit" class="alt">Create account</button>
+  <p class="text-secondary" style="font-size:12.5px">By creating an account you agree to the <a href="{% url 'terms' %}">terms</a> and <a href="{% url 'privacy' %}">privacy policy</a>. We email you a link to confirm your address.</p>
+  <div class="form-footer"><button type="submit" class="btn btn-primary w-100">Create account</button></div>
 </form>
-<p class="muted" style="margin:0">Already registered? <a href="{% url 'account_login' %}">Sign in</a></p>
+<p class="text-secondary mt-3 mb-0">Already registered? <a href="{% url 'account_login' %}">Sign in</a></p>
 {% endblock %}

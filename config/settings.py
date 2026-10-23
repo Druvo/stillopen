@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     "tracker",
+    "django.forms",  # needed for FORM_RENDERER = TemplatesSetting to find Django's own built-in widget templates
 ]
 
 SITE_ID = 1
@@ -84,6 +85,11 @@ TEMPLATES = [
         },
     },
 ]
+
+# Django's default form renderer uses its own template engine scoped to django.forms' own
+# templates, ignoring TEMPLATES[0]["DIRS"] above -- so templates/django/forms/widgets/*.html
+# (the Tabler/Bootstrap checkbox-list markup override) would silently never be found without this.
+FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 
 WSGI_APPLICATION = "config.wsgi.application"
 
