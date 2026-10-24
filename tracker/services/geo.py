@@ -181,7 +181,11 @@ def _first_place_slow(text: str):
 
 
 def country_name(code: str) -> str:
-    return COUNTRIES.get((code or "").upper(), (code or "",))[0]
+    code = (code or "").upper()
+    if code in COUNTRIES:
+        return COUNTRIES[code][0]
+    from .countries import name
+    return name(code)
 
 
 # --- detection from posting text ---------------------------------------------------------------------------------
@@ -267,23 +271,12 @@ _SENIORITY = [
 ]
 
 
-def detect(title: str, text: str) -> dict:
-    """Best guesses; only fields that were actually found are returned."""
+def detect_terms(title: str, text: str) -> dict:
+    """Visa sponsorship, relocation help, kind of contract and seniority, only when the posting says so."""
     text = text or ""
     title = title or ""
     whole = f"{title}\n{text}"
     found = {}
-    arrangement = _arrangement(whole)
-    if arrangement:
-        found["arrangement"] = arrangement
-    place, code = _location(whole)
-    anywhere = arrangement == "remote" and _positive(r"\b(?:worldwide|anywhere in the world|work from anywhere|global(?:ly)?)\b", whole)
-    if anywhere and not code:
-        found["location_text"] = "Remote (worldwide)"
-    elif place:
-        found["location_text"] = place[:160]
-    if code and not anywhere:
-        found["country"] = code
     if re.search(r"\b(?:no (?:visa )?sponsorship|unable to sponsor|cannot sponsor|can't sponsor|not (?:able to )?sponsor|without (?:visa )?sponsorship|"
                  r"must (?:already )?(?:have|hold|possess) (?:the |valid )?(?:right|authori[sz]ation|work permit)|right to work in)\b", whole, re.I):
         found["sponsorship"] = "no"
@@ -302,6 +295,27 @@ def detect(title: str, text: str) -> dict:
         if re.search(pattern, title, re.I):
             found["seniority"] = level
             break
+    return found
+
+
+def detect(title: str, text: str) -> dict:
+    """Best guesses; only fields that were actually found are returned."""
+    text = text or ""
+    title = title or ""
+    whole = f"{title}\n{text}"
+    found = {}
+    arrangement = _arrangement(whole)
+    if arrangement:
+        found["arrangement"] = arrangement
+    place, code = _location(whole)
+    anywhere = arrangement == "remote" and _positive(r"\b(?:worldwide|anywhere in the world|work from anywhere|global(?:ly)?)\b", whole)
+    if anywhere and not code:
+        found["location_text"] = "Remote (worldwide)"
+    elif place:
+        found["location_text"] = place[:160]
+    if code and not anywhere:
+        found["country"] = code
+    found.update(detect_terms(title, text))
     return found
 
 

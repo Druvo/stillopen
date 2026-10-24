@@ -1135,6 +1135,10 @@ class Posting(models.Model):
     country = models.CharField(max_length=2, blank=True, db_index=True, help_text="Two-letter country when the location names exactly one.")
     remote = models.BooleanField(default=False, help_text="The location or title says remote or worldwide.")
     excerpt = models.TextField(blank=True, help_text="The first few lines of the posting, for the public board. The full text stays at the employer.")
+    sponsorship = models.CharField(max_length=3, blank=True, db_index=True, help_text="'yes' only when the posting says the employer sponsors visas; 'no' when it says it cannot; blank = not stated.")
+    relocation = models.CharField(max_length=3, blank=True, help_text="'yes' when the posting offers relocation help, 'no' when it says none; blank = not stated.")
+    employment_type = models.CharField(max_length=12, blank=True, choices=UserProfile.EMPLOYMENT, help_text="Kind of contract, when the posting says.")
+    seniority = models.CharField(max_length=10, blank=True, help_text="Level read from the title (junior, senior, lead...), when it says.")
     first_seen_at = models.DateTimeField(auto_now_add=True)
     last_seen_at = models.DateTimeField(auto_now=True)
 
