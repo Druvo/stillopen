@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_apply, views_cover, views_cv, views_mcp, views_pipeline, views_public, views_sources
+from . import views, views_apply, views_cover, views_cv, views_mcp, views_pipeline, views_prep, views_public, views_sources
 
 urlpatterns = [
     path("", views_public.landing, name="landing"),
@@ -20,6 +20,13 @@ urlpatterns = [
     path("postings/<int:pk>/add/", views.add_posting, name="add_posting"),
     path("profile/", views.profile, name="profile"),
     path("profile/ai/", views.profile_ai, name="profile_ai"),
+    path("prep/", views_prep.prep_list, name="prep_list"),
+    path("prep/<int:pk>/", views_prep.prep_plan, name="prep_plan"),
+    path("prep/<int:pk>/start/", views_prep.prep_activate, name="prep_activate"),
+    path("prep/<int:pk>/discard/", views_prep.prep_discard, name="prep_discard"),
+    path("prep/remove/<str:kind>/<int:pk>/", views_prep.prep_remove, name="prep_remove"),
+    path("prep/tick/<str:kind>/<int:pk>/", views_prep.prep_tick, name="prep_tick"),
+    path("jobs/<int:pk>/prep/", views_prep.prep_create, name="prep_create"),
     path("tools/email-test/", views.email_test, name="email_test"),
     path("profile/assistant/", views_mcp.assistant, name="assistant"),
     path("profile/assistant/new/", views_mcp.assistant_create, name="assistant_create"),

@@ -1,0 +1,22 @@
+{% extends "tracker/base_app.html" %}
+{% block title %}Prep plans{% endblock %}
+{% block page_title %}Prep plans{% endblock %}
+{% block content %}
+<p class="text-secondary">A prep plan is a short study plan that closes the gaps a job showed: a few weeks of lessons with links to the official documentation, and quiz questions that cite their source. It is written from your CV and the job by your own AI account, and nothing starts until you have read it and said yes.</p>
+
+{% for plan in plans %}
+<div class="card mb-3"><div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+  <div>
+    <h3 class="card-title mb-1"><a href="{% url 'prep_plan' plan.pk %}">{{ plan.title|default:"Prep plan" }}</a></h3>
+    <div class="text-secondary">{% if plan.application %}For {{ plan.application.role }} at {{ plan.application.company }} &middot; {% endif %}{{ plan.get_status_display }}{% if plan.lessons_total %} &middot; {{ plan.lessons_done }} of {{ plan.lessons_total }} lessons done{% endif %}</div>
+  </div>
+  <a class="btn btn-outline-secondary" href="{% url 'prep_plan' plan.pk %}">{% if plan.status == "draft" %}Review the draft{% else %}Open{% endif %}</a>
+</div></div>
+{% empty %}
+<div class="card"><div class="card-body text-center py-5">
+  <h3>No prep plans yet</h3>
+  <p class="text-secondary mb-3">Check how well a job fits you on your dashboard. If it shows skills you are missing, press <em>Prepare for this job</em> on its card.</p>
+  <a class="btn btn-primary" href="{% url 'dashboard' %}">Go to my dashboard</a>
+</div></div>
+{% endfor %}
+{% endblock %}

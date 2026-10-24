@@ -76,7 +76,7 @@ def email_test(request):
                 result = ("success", f"Sent to {request.user.email}. Check that inbox, and the spam folder.")
             except Exception as exc:  # noqa: BLE001 - the reason is the point of this page
                 result = ("error", f"Sending failed: {exc.__class__.__name__}: {exc}")
-    return render(request, "tracker/email_test.html", {"cfg": cfg, "result": result})
+    return render(request, "tracker/email_test.html", {"config": SiteConfig.load(), "cfg": cfg, "result": result})
 
 
 def too_many():
@@ -600,6 +600,15 @@ def export_data(request):
         "knowledge": [
             {"title": s.title, "kind": s.kind, "enabled": s.enabled, "text": s.text}
             for s in KnowledgeSource.objects.filter(owner=user).exclude(key__in=["profile-cv", "careerops:cv.md"])
+        ],
+        "prep_plans": [
+            {"title": p.title, "summary": p.summary, "status": p.status, "weeks": p.weeks_count, "hours_per_week": p.hours_per_week,
+             "for_job": f"{p.application.company} - {p.application.role}" if p.application else None, "gaps": p.gap_skills,
+             "lessons": [{"week": w.order, "title": le.title, "gap": le.gap, "sources": le.sources, "done": bool(le.done_at)}
+                         for w in p.weeks.all() for le in w.lessons.all()],
+             "questions": [{"prompt": q.prompt, "choices": q.choices, "correct": q.correct, "explanation": q.explanation, "sources": q.sources}
+                           for q in p.questions.filter(removed=False)]}
+            for p in user.prep_plans.select_related("application").prefetch_related("weeks__lessons")
         ],
         "cv_versions": [
             {"label": v.label, "kind": v.kind, "source": v.source, "created": v.created_at.isoformat(),

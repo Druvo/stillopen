@@ -185,7 +185,7 @@ def _config_or_404() -> SiteConfig:
 
 def _page(request, extra=None):
     context = {
-        "tokens": request.user.api_tokens.all(), "endpoint": request.build_absolute_uri("/mcp/"),
+        "config": SiteConfig.load(), "tokens": request.user.api_tokens.all(), "endpoint": request.build_absolute_uri("/mcp/"),
         "expiry_choices": ApiToken.EXPIRY_CHOICES, "limit": settings.STILLOPEN_MAX_API_TOKENS,
     }
     context.update(extra or {})

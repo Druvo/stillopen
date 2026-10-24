@@ -1,6 +1,12 @@
 # Design: prep plans (close the gaps for a job you want)
 
-Status: proposal, nothing built. Decisions taken: it lives in StillOpen (Django); this document covers the design and the prompts only.
+Status: **phase 1 built** (plans are written, checked, reviewed and started; the daily quiz is phase 2). Decisions taken by the owner:
+
+- It lives in StillOpen (Django).
+- Defaults: 4 weeks, 6 hours a week, 3 questions a day (all admin settings).
+- Finished lessons feed the fit check, as study in progress and never as work experience (built in phase 1: `<study_completed>` in the evaluation prompt).
+- Sources are official documentation only (enforced in code by `prep.clean_source`, which refuses blogs, forums, videos, encyclopedias, non-https and private addresses).
+- MCP draft submission is **not** in v1 (section 10 is the later design).
 
 ## 1. The idea
 
@@ -201,7 +207,7 @@ Owner isolation for every view, tool and the export; a posting containing "ignor
 3. **Quality**: source read-back check, mock interview (graded written answers against a model answer, always labelled as an AI opinion), milestone ticking on the job timeline.
 4. **Later, only if wanted**: a shared library of reviewed plans (needs admin approval and the public-board style rules), plan templates per role.
 
-## 14. Open questions for the owner
+## 14. Open questions for the owner (answered, kept for the record)
 
 1. Default length: 4 weeks, 6 hours a week, 3 questions a day?
 2. Should a finished plan feed back into the fit check (a "prepared for" note on the job and CV tailoring input)? Recommended, but only from what the person has actually completed.
