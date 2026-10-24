@@ -54,7 +54,7 @@ from django.utils import timezone
 from tracker.models import (
     Application, Event, JobSource, Posting, PostingSighting, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile,
 )
-from tracker.services import ai, fit, geo, knowledge
+from tracker.services import ai, fit, geo, integrations, knowledge
 from tracker.services.jobtext import html_to_text
 from tracker.services.netguard import FetchError, safe_get
 from tracker.services.text import terms as _terms
@@ -933,7 +933,7 @@ def send_scan_digest(owner, run: ScanRun) -> bool:
     send_mail(
         subject=f"StillOpen: {count} new job{'s' if count != 1 else ''} for you",
         message=scan_digest_text(apps),
-        from_email=settings.DEFAULT_FROM_EMAIL,
+        from_email=integrations.from_email(),
         recipient_list=[owner.email],
         fail_silently=False,
     )

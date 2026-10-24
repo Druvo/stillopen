@@ -211,25 +211,30 @@ MFA_TOTP_ISSUER = os.environ.get("STILLOPEN_TOTP_ISSUER", "StillOpen")
 MFA_ALLOW_UNVERIFIED_EMAIL = True
 MFA_PASSKEY_LOGIN_ENABLED = False
 MFA_PASSKEY_SIGNUP_ENABLED = False
-if os.environ.get("EMAIL_HOST"):
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = os.environ["EMAIL_HOST"]
-    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
-    EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
-    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-    EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
-else:
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# Email goes through whatever is set up at the moment of sending: these environment variables if EMAIL_HOST is set, otherwise the
+# admin's Site configuration > Email sending, otherwise the server console (tracker/email_backend.py, services/integrations.py).
+EMAIL_BACKEND = "tracker.email_backend.ConfiguredBackend"
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "StillOpen <noreply@localhost>")
 EMAIL_CONFIGURED = bool(os.environ.get("EMAIL_HOST"))
 # People who register themselves must click an emailed link before they get in -- but only where that email can actually
 # arrive. With no SMTP the link would only be printed to the server console and nobody could ever sign up, so a fresh
 # self-hosted install lets people straight in and tells the admin (see the dashboard notice). Set to 1 to insist anyway.
-STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = os.environ.get("STILLOPEN_REQUIRE_EMAIL_CONFIRMATION", "1" if (EMAIL_CONFIGURED or "test" in sys.argv) else "0") == "1"
+# None means "decide at the moment": on once email is set up (here or in the admin), off while it is not.
+if os.environ.get("STILLOPEN_REQUIRE_EMAIL_CONFIRMATION") is not None:
+    STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = os.environ["STILLOPEN_REQUIRE_EMAIL_CONFIRMATION"] == "1"
+elif EMAIL_CONFIGURED or "test" in sys.argv:
+    STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = True
+else:
+    STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = None
 # "optional" globally so accounts made in the admin or by createsuperuser (no confirmed email) are never locked out;
 # tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
 # "none" when confirmation is not required, so no email is sent (or claimed to be sent) from a server that cannot send it.
-ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional" if STILLOPEN_REQUIRE_EMAIL_CONFIRMATION else "none")
+ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "none" if STILLOPEN_REQUIRE_EMAIL_CONFIRMATION is False else "optional")
 
 # Per-person limits on a shared server.
 STILLOPEN_MAX_APPLICATIONS = int(os.environ.get("STILLOPEN_MAX_APPLICATIONS", "500"))

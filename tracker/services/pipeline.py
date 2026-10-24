@@ -7,6 +7,7 @@ from django.core.mail import send_mail
 from django.utils import timezone
 
 from tracker.models import Application, Interview
+from tracker.services import integrations
 
 REMINDER_HOURS = 24
 
@@ -46,7 +47,7 @@ def send_interview_reminders(owner, items) -> bool:
     send_mail(
         subject=f"StillOpen: {len(items)} interview{'s' if len(items) != 1 else ''} in the next day",
         message=reminder_text(items),
-        from_email=settings.DEFAULT_FROM_EMAIL,
+        from_email=integrations.from_email(),
         recipient_list=[owner.email],
         fail_silently=False,
     )

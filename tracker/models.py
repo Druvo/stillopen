@@ -228,6 +228,22 @@ class SiteConfig(PersonalSettings):
     facebook_login_enabled = models.BooleanField(
         default=False, help_text="Allow signing in with Facebook. Also needs a Facebook app under Social applications.",
     )
+    # Sign-in providers: the app's id and secret from Google, GitHub or Facebook. The environment (GOOGLE_CLIENT_ID...) takes precedence.
+    google_client_id = models.CharField(max_length=200, blank=True)
+    google_secret_encrypted = models.CharField(max_length=500, blank=True)
+    github_client_id = models.CharField(max_length=200, blank=True)
+    github_secret_encrypted = models.CharField(max_length=500, blank=True)
+    facebook_client_id = models.CharField(max_length=200, blank=True)
+    facebook_secret_encrypted = models.CharField(max_length=500, blank=True)
+
+    # Email sending (Brevo, Mailgun, any SMTP). The EMAIL_HOST environment variable takes precedence.
+    email_host = models.CharField(max_length=200, blank=True, help_text="SMTP server, e.g. smtp-relay.brevo.com. Blank = email is not set up.")
+    email_port = models.PositiveIntegerField(default=587)
+    email_username = models.CharField(max_length=200, blank=True)
+    email_password_encrypted = models.CharField(max_length=500, blank=True)
+    email_use_tls = models.BooleanField(default=True, help_text="Leave on for port 587 (STARTTLS).")
+    email_from = models.CharField(max_length=200, blank=True, help_text="The sender people see, e.g. StillOpen <jobs@yourdomain.com>. Use an address your provider has verified.")
+
     google_allowed_emails = models.TextField(
         blank=True,
         verbose_name="Allowed emails for social sign-in",
@@ -300,6 +316,19 @@ class SiteConfig(PersonalSettings):
             if config.ai_provider in ("claude_cli", "agent_sdk"):
                 config.ai_provider = "none"
         return config
+
+    @property
+    def email_password(self) -> str:
+        return crypto.decrypt(self.email_password_encrypted)
+
+    def set_email_password(self, plain: str) -> None:
+        self.email_password_encrypted = crypto.encrypt(plain.strip())
+
+    def social_secret(self, provider: str) -> str:
+        return crypto.decrypt(getattr(self, f"{provider}_secret_encrypted"))
+
+    def set_social_secret(self, provider: str, plain: str) -> None:
+        setattr(self, f"{provider}_secret_encrypted", crypto.encrypt(plain.strip()))
 
     def social_enabled(self, provider: str) -> bool:
         return bool(getattr(self, f"{provider}_login_enabled", False))

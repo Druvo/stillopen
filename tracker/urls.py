@@ -20,6 +20,7 @@ urlpatterns = [
     path("postings/<int:pk>/add/", views.add_posting, name="add_posting"),
     path("profile/", views.profile, name="profile"),
     path("profile/ai/", views.profile_ai, name="profile_ai"),
+    path("tools/email-test/", views.email_test, name="email_test"),
     path("profile/assistant/", views_mcp.assistant, name="assistant"),
     path("profile/assistant/new/", views_mcp.assistant_create, name="assistant_create"),
     path("profile/assistant/<int:pk>/revoke/", views_mcp.assistant_revoke, name="assistant_revoke"),

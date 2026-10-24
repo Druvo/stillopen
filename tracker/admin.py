@@ -43,9 +43,29 @@ class SiteConfigForm(forms.ModelForm):
         help_text="Free key from jooble.org/api/about. Leave blank to keep the saved key. The JOOBLE_API_KEY environment variable takes precedence.",
     )
 
+    # write-only secrets: blank keeps what is saved
+    email_password = forms.CharField(
+        required=False, widget=forms.PasswordInput(render_value=False),
+        help_text="The SMTP password or key (for Brevo, the SMTP key). Stored encrypted and never shown again. Leave blank to keep the saved one.",
+    )
+    google_secret = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), help_text="Client secret. Stored encrypted. Leave blank to keep the saved one.")
+    github_secret = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), help_text="Client secret. Stored encrypted. Leave blank to keep the saved one.")
+    facebook_secret = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), help_text="App secret. Stored encrypted. Leave blank to keep the saved one.")
+
     class Meta:
         model = SiteConfig
         fields = "__all__"
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        if self.cleaned_data.get("email_password"):
+            obj.set_email_password(self.cleaned_data["email_password"])
+        for provider in ("google", "github", "facebook"):
+            if self.cleaned_data.get(f"{provider}_secret"):
+                obj.set_social_secret(provider, self.cleaned_data[f"{provider}_secret"])
+        if commit:
+            obj.save()
+        return obj
 
     def clean_jooble_api_key(self):
         key = self.cleaned_data.get("jooble_api_key", "")
@@ -54,6 +74,14 @@ class SiteConfigForm(forms.ModelForm):
     def clean_paperless_token(self):
         token = self.cleaned_data.get("paperless_token", "")
         return token or (self.instance.paperless_token if self.instance else "")
+
+
+def _public_base() -> str:
+    """The site's public address for the redirect URLs shown in the admin, from the allowed hosts (never a guess at a local one)."""
+    from django.conf import settings
+
+    hosts = [h for h in settings.ALLOWED_HOSTS if h not in ("localhost", "127.0.0.1", "*", "[::1]") and not h.startswith(".")]
+    return f"https://{hosts[0]}" if hosts else "https://your-site"
 
 
 @admin.register(SiteConfig)
@@ -90,16 +118,34 @@ class SiteConfigAdmin(admin.ModelAdmin):
         ("career-ops import (site admins only)", {"fields": ("careerops_path", "node_command")}),
         ("Open / closed check", {"fields": ("liveness_mode", "liveness_timeout")}),
         (
-            "Social sign-in (Google, GitHub, Facebook)",
+            "Email sending (Brevo, Mailgun, any SMTP)",
             {
-                "fields": ("google_login_enabled", "github_login_enabled", "facebook_login_enabled", "google_allowed_emails"),
+                "fields": ("email_host", "email_port", "email_username", "email_password", "email_use_tls", "email_from"),
                 "description": (
-                    "All three are free. Create an OAuth app with the provider, using the redirect address "
-                    "<code>&lt;your site&gt;/accounts/google/login/callback/</code> (or <code>github</code>, <code>facebook</code> "
-                    "in place of <code>google</code>). Then add it under <strong>Social applications</strong> (choose the provider and "
-                    "your Site), or set <code>GOOGLE_CLIENT_ID</code>/<code>_SECRET</code> (and the GITHUB_ and FACEBOOK_ ones) in the "
-                    "environment, and tick the box. See docs/SELF-HOSTING.md."
+                    "Needed for sign-up confirmation links, interview reminders, follow-up digests and job alerts. "
+                    "<strong>Brevo (free, 300 a day):</strong> host <code>smtp-relay.brevo.com</code>, port <code>587</code>, TLS on, "
+                    "username = your Brevo SMTP login, password = an SMTP key from Brevo, sender = an address you verified in Brevo. "
+                    "Save, then <a href=\"/tools/email-test/\">send yourself a test email</a>. "
+                    "The EMAIL_HOST environment variable, if set, takes precedence over this section."
                 ),
+            },
+        ),
+        (
+            "Sign-in with Google, GitHub or Facebook",
+            {
+                "fields": (
+                    "google_login_enabled", "google_client_id", "google_secret",
+                    "github_login_enabled", "github_client_id", "github_secret",
+                    "facebook_login_enabled", "facebook_client_id", "facebook_secret",
+                    "google_allowed_emails",
+                ),
+                "description": (
+                    "All three are free. For each one you want, create an OAuth app with the provider, give it the redirect address "
+                    "below, paste its client ID and secret here, and tick the box. Changes apply at once. "
+                    "Redirect addresses: <code>{base}/accounts/google/login/callback/</code>, "
+                    "<code>{base}/accounts/github/login/callback/</code>, <code>{base}/accounts/facebook/login/callback/</code>. "
+                    "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (and the GITHUB_ and FACEBOOK_ ones) in the environment take precedence."
+                ).format(base=_public_base()),
             },
         ),
         (
