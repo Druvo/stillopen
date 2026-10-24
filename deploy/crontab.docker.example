@@ -1,0 +1,24 @@
+# StillOpen scheduled jobs for the Docker setup. Install with:  crontab -e   (paste, fixing APP if you cloned elsewhere)
+# Nothing here is needed to use the app; the emails only go out once email is set up (admin > Site configuration > Email).
+APP=$HOME/stillopen
+FILES="-f docker-compose.selfhost.yml -f docker-compose.postgres.yml -f docker-compose.caddy.yml"
+RUN="docker compose $FILES exec -T stillopen python manage.py"
+LOG=$HOME/stillopen-cron.log
+
+# Every night 02:30: back up the database (keeps 14 days; see deploy/backup-postgres.sh).
+30 2 * * *   cd $APP && deploy/backup-postgres.sh >> $LOG 2>&1
+
+# Every hour: remind people of interviews in the next 24 hours.
+5 * * * *    cd $APP && $RUN send_interview_reminders >> $LOG 2>&1
+
+# Every morning 08:00: follow-ups that have just become due (one digest per person).
+0 8 * * *    cd $APP && $RUN send_followup_emails >> $LOG 2>&1
+
+# Every morning 07:00: search for people who turned on Job alerts, and email what was found.
+0 7 * * *    cd $APP && $RUN scheduled_scan >> $LOG 2>&1
+
+# Every 6 hours: refresh the public job board.
+15 */6 * * * cd $APP && $RUN refresh_postings >> $LOG 2>&1
+
+# Weekly, Sunday 03:00: add any new default job sources (never changes or removes yours).
+0 3 * * 0    cd $APP && $RUN seed_sources >> $LOG 2>&1
