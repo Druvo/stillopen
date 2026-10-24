@@ -1,8 +1,8 @@
 # StillOpen scheduled jobs for the Docker setup. Install with:  crontab -e   (paste, fixing APP if you cloned elsewhere)
 # Nothing here is needed to use the app; the emails only go out once email is set up (admin > Site configuration > Email).
 APP=$HOME/stillopen
-FILES="-f docker-compose.selfhost.yml -f docker-compose.postgres.yml -f docker-compose.caddy.yml"
-RUN="docker compose $FILES exec -T stillopen python manage.py"
+# (cron does not expand variables inside variable values, so the compose files are written out in full)
+RUN="docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml -f docker-compose.caddy.yml exec -T stillopen python manage.py"
 LOG=$HOME/stillopen-cron.log
 
 # Every night 02:30: back up the database (keeps 14 days; see deploy/backup-postgres.sh).
