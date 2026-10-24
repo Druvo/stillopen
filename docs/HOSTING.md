@@ -53,7 +53,7 @@ Set in `.env`: `STILLOPEN_MAX_APPLICATIONS` (500), `STILLOPEN_MAX_KNOWLEDGE` (40
 
 Be honest with yourself about these before a public launch:
 
-- **Bots and abuse:** there is no CAPTCHA and no per-IP rate limiting. Put Cloudflare Turnstile or similar in front of sign-up, or rate limit at the proxy.
+- **Bots and abuse:** sign-up has a hidden trap field, a minimum fill time and per-IP rate limits (`STILLOPEN_SIGNUP_MIN_SECONDS`, `STILLOPEN_SIGNUP_RATE` default `5/h/ip`, `STILLOPEN_LOGIN_FAILED_RATE`). There is deliberately no CAPTCHA: Turnstile and similar would load a third-party script, which this app never does. Behind a reverse proxy set `ALLAUTH_TRUSTED_PROXY_COUNT=1` (and make the proxy set `X-Forwarded-For`), or every visitor shares the proxy's address and one limit. A determined human or a distributed bot network is still not stopped; add proxy-level limits if you see abuse.
 - **Network isolation:** the private-address check happens before the request, so a hostile DNS server could still answer differently the second time (DNS rebinding). For hostile multi-tenant use, run the app with restricted egress (a network policy, or an egress proxy that blocks private ranges).
 - **Job search sources:** there is no shared job feed or auto-scraping yet. People add roles themselves.
 - **Staff access:** site admins can read the database and therefore everyone's data. Keep the number of admins small.

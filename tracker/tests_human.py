@@ -1,11 +1,13 @@
 """The first-run experience: a short sign-up, a warm welcome, plain-language guidance, no dead ends."""
 import re
+import time
 from datetime import datetime
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.cache import cache
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from tracker.models import Application, SiteConfig, Status, UserProfile
@@ -17,6 +19,7 @@ CV = "Backend engineer. C#, SQL Server, REST APIs, Docker."
 JD = "We need a backend engineer with C#, SQL Server and Docker experience. " * 6
 
 
+@override_settings(STILLOPEN_SIGNUP_MIN_SECONDS=0, ACCOUNT_RATE_LIMITS={"signup": "1000/m/ip"})
 class SignUpAndWelcome(TestCase):
     def setUp(self):
         cache.clear()
@@ -215,3 +218,49 @@ class Wording(TestCase):
         self.assertNotIn("Self-hosted", page)
         self.assertNotIn("Paperless", page)
         self.assertNotIn("Configurable from the admin", page)
+
+
+class SignupBotTraps(TestCase):
+    def setUp(self):
+        cache.clear()
+        SiteConfig.objects.filter(pk=1).update(signup_mode="open")
+        self.url = reverse("account_signup")
+
+    def token(self):
+        tag = re.search(r"<input[^>]*name=\"form_started\"[^>]*>", self.client.get(self.url).content.decode()).group(0)
+        return re.search(r'value="([^"]+)"', tag).group(1)
+
+    def post(self, **extra):
+        data = {"email": "kim@example.com", "password1": PW}
+        data.update(extra)
+        return self.client.post(self.url, data)
+
+    @override_settings(STILLOPEN_SIGNUP_MIN_SECONDS=0)
+    def test_honeypot_filled_creates_no_account(self):
+        self.post(website="http://spam.example")
+        self.assertFalse(User.objects.filter(email="kim@example.com").exists())
+
+    @override_settings(STILLOPEN_SIGNUP_MIN_SECONDS=3)
+    def test_missing_or_tampered_token_is_refused(self):
+        self.post()
+        self.post(form_started="garbage")
+        self.assertFalse(User.objects.filter(email="kim@example.com").exists())
+
+    @override_settings(STILLOPEN_SIGNUP_MIN_SECONDS=3)
+    def test_instant_submit_is_refused_then_a_patient_one_works(self):
+        token = self.token()
+        self.post(form_started=token)
+        self.assertFalse(User.objects.filter(email="kim@example.com").exists())
+        with mock.patch("tracker.forms.time.time", return_value=time.time() + 10):
+            self.post(form_started=token)
+        self.assertTrue(User.objects.filter(email="kim@example.com").exists())
+
+    @override_settings(STILLOPEN_SIGNUP_MIN_SECONDS=0, ACCOUNT_RATE_LIMITS={"signup": "2/m/ip"})
+    def test_signup_is_rate_limited_per_address(self):
+        codes = [self.post(email=f"p{i}@example.com").status_code for i in range(4)]
+        self.assertIn(429, codes)
+
+    def test_honeypot_box_is_hidden_from_people(self):
+        page = self.client.get(self.url).content.decode()
+        self.assertIn("left:-10000px", page)
+        self.assertIn('aria-hidden="true"', page)

@@ -185,6 +185,16 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 # tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
 ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional")
 ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_FORMS = {"signup": "tracker.forms.SignupForm"}
+# Bot protection without any third-party service (the no-CDN rule): a hidden trap field, a minimum time to fill the
+# sign-up form (0 turns the timing check off), and per-IP rate limits. Behind a reverse proxy set
+# ALLAUTH_TRUSTED_PROXY_COUNT (e.g. 1) so the limits see the visitor's address and not the proxy's.
+STILLOPEN_SIGNUP_MIN_SECONDS = int(os.environ.get("STILLOPEN_SIGNUP_MIN_SECONDS", "3"))
+ACCOUNT_RATE_LIMITS = {
+    "signup": os.environ.get("STILLOPEN_SIGNUP_RATE", "5/h/ip"),
+    "login_failed": os.environ.get("STILLOPEN_LOGIN_FAILED_RATE", "10/10m/ip,5/5m/key"),
+}
+ALLAUTH_TRUSTED_PROXY_COUNT = int(os.environ.get("ALLAUTH_TRUSTED_PROXY_COUNT", "0"))
 ACCOUNT_PASSWORD_MIN_LENGTH = 10
 if os.environ.get("EMAIL_HOST"):
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"

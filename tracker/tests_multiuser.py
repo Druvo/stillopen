@@ -522,6 +522,7 @@ class Throttling(TestCase):
         self.assertNotEqual(self.client.post(reverse("evaluate", args=[jb.pk])).status_code, 429)
 
 
+@override_settings(STILLOPEN_SIGNUP_MIN_SECONDS=0, ACCOUNT_RATE_LIMITS={"signup": "1000/m/ip"})
 class Registration(TestCase):
     def signup(self, name="newbie", email="newbie@example.com"):
         return self.client.post(reverse("account_signup"), {"email": email, "username": name, "password1": PW, "password2": PW})

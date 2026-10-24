@@ -20,13 +20,17 @@
 <form method="post" action="{% url 'account_signup' %}">
   {% csrf_token %}
   {{ form.non_field_errors }}
-  {% for field in form.visible_fields %}
+  {% for field in form.visible_fields %}{% if field.name != "website" %}
   <div class="mb-3">
     <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
     {{ field|bootstrap_field }}
     {{ field.errors }}
   </div>
-  {% endfor %}
+  {% endif %}{% endfor %}
+  {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+  <div style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+    <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>{{ form.website }}
+  </div>
   {{ redirect_field }}
   <p class="text-secondary" style="font-size:12.5px">By creating an account you agree to the <a href="{% url 'terms' %}">terms</a> and <a href="{% url 'privacy' %}">privacy policy</a>. We will email you a link to confirm your address, one tap and you are in.</p>
   <div class="form-footer"><button type="submit" class="btn btn-primary w-100">Create account</button></div>

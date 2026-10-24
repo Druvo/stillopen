@@ -1,12 +1,47 @@
 import re
+import time
 
+from allauth.account.forms import SignupForm as AllauthSignupForm
 from django import forms
+from django.conf import settings
+from django.core import signing
 from django.contrib.auth import get_user_model
 from django.forms import inlineformset_factory
 
 from .models import Application, KnowledgeSource, PersonalSettings, SearchArea, UserProfile
 from .services import geo, knowledge
 from .services.netguard import FetchError, check_public_url
+
+SIGNUP_SALT = "tracker.signup-form"
+SIGNUP_MAX_AGE = 2 * 24 * 3600  # a sign-up page left open longer than this has to be reloaded
+
+
+class SignupForm(AllauthSignupForm):
+    """Sign-up with two invisible bot traps and no third-party service: a text box real people never see (bots fill
+    every box), and a signed timestamp so a form submitted faster than a person could type it is refused."""
+
+    website = forms.CharField(required=False, label="Leave this empty", widget=forms.TextInput(attrs={"tabindex": "-1", "autocomplete": "off"}))
+    form_started = forms.CharField(required=False, widget=forms.HiddenInput)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            self.initial["form_started"] = signing.dumps(time.time(), salt=SIGNUP_SALT)
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("website"):
+            raise forms.ValidationError("We could not create this account. Please try again.")
+        minimum = settings.STILLOPEN_SIGNUP_MIN_SECONDS
+        if minimum > 0:
+            try:
+                started = signing.loads(cleaned.get("form_started") or "", salt=SIGNUP_SALT, max_age=SIGNUP_MAX_AGE)
+            except signing.BadSignature:
+                raise forms.ValidationError("This page expired. Please reload it and try again.") from None
+            if time.time() - started < minimum:
+                raise forms.ValidationError("That was very quick. Please check your details and press the button again.")
+        return cleaned
+
 
 RESTRICTED_PROVIDERS = {"claude_cli", "agent_sdk"}  # these run commands on the server: site admins only
 
