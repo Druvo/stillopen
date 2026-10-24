@@ -43,6 +43,21 @@ Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboar
 
 Import is idempotent: new tracker rows are created, existing rows refresh only evaluation data (score, summary, strengths, gaps, deadline, PDFs). Your local status, notes and URL are never overwritten unless you run `import_careerops --sync-status`.
 
+## Jobs found for you, with no setup and no AI
+
+A new install already knows where to look: it ships with about 100 job sources (8 remote-job feeds such as Remotive, RemoteOK, We Work Remotely, Himalayas, Jobicy, Working Nomads, Arbeitnow and The Muse, plus the public hiring boards of ~90 well-known companies on Greenhouse, Lever, Ashby, SmartRecruiters and Recruitee). All of them are open, documented, key-free endpoints. They are added by the migration, or by `python manage.py seed_sources` on an existing install, and the admin can pause or remove any.
+
+Candidates do nothing. When someone opens their dashboard and their last search is older than `auto_scan_hours` (Site configuration > Dashboard, default 12; 0 turns it off), a search starts in the background and the jobs appear. No cron, no button, no AI key. What a search does:
+
+1. Reads every source at once (a slow one is skipped after `STILLOPEN_SCAN_DEADLINE_SECONDS`, 90, and finishes into a shared cache for next time; each source is read at most once per `STILLOPEN_SCAN_CACHE_SECONDS`, 6 hours, however many people search).
+2. Keeps postings whose title fits a target role (the role's words in any order, with developer/engineer treated alike: "Backend Engineer" matches "Senior Software Engineer, Back-end"), or that share real skills with the CV.
+3. Leaves out postings that clearly cannot work for the person's search areas (stated to be in another country, or on-site where they only accept remote). A posting that does not say enough is never excluded. Everything seen stays under **All postings**.
+4. Skips what is already tracked, including the same job on two sites.
+5. Gives each new job a free keyword match against the CV and saves the posting text, so the dashboard already shows a percentage and a fit label.
+6. Adds at most `STILLOPEN_SCAN_MAX_NEW` (40) per search, the best first (clear fits, then listed roles, then CV match). Search again later for the next batch.
+
+Not included on purpose: LinkedIn, Indeed, Glassdoor and bdjobs. Their terms forbid automated reading or they publish no feed. Paste one of their links into **Add job** instead.
+
 ## Your own company job boards
 
 Under **Job sources** in the sidebar, anyone can add the companies they care about. Pick the hiring system the company uses (Greenhouse, Lever, Ashby, SmartRecruiters or Recruitee), then type the company's name from its careers page address or paste the address itself (`jobs.lever.co/acme` gives `acme`). The app reads that company's public job list once to make sure it works, and only then saves it. Your boards are searched only for you and are invisible to everyone else; the boards the site owner added are searched for everyone. Limits per person: `STILLOPEN_MAX_OWN_SOURCES` (20) boards and `STILLOPEN_SOURCE_ADDS_PER_HOUR` (20) additions an hour.

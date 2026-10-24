@@ -42,17 +42,17 @@
 <div class="card mb-3" id="scan-log-card">
   <div class="card-body">
     <strong id="scan-log-title">
-      {% if scan_run.running %}Searching... {{ scan_run.done }}/{{ scan_run.total }} sources{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- {{ scan_run.found }} found, {{ scan_run.added }} new{% if scan_run.error %}, error{% endif %}{% endif %}
+      {% if scan_run.running %}Searching for jobs that fit you... {{ scan_run.done }}/{{ scan_run.total }} sources{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- looked through {{ scan_run.found }} openings, {{ scan_run.added }} new for you{% endif %}
     </strong>
     {% if scan_run.error %}<div class="text-danger mt-1">{{ scan_run.error }}</div>{% endif %}
-    <details id="scan-log-details" class="mt-2" {% if not scan_run.running %}open{% endif %}>
+    <details id="scan-log-details" class="mt-2" {% if scan_run.running %}open{% endif %}>
       <summary style="cursor:pointer">Scan log -- where it searched and what it found</summary>
       <div id="scan-log-entries" class="mt-2">
         {% for e in scan_run.entries.all %}
         <div class="d-flex justify-content-between" style="font-size:13px">
           <span>{{ e.source_name }} <span class="text-secondary">({{ e.get_connector_display }})</span></span>
           <span class="text-secondary">
-            {% if e.error %}<span class="text-danger">{{ e.error }}</span>{% else %}{{ e.found }} found, {{ e.matched }} matched, {{ e.added }} new, {{ e.duplicates }} already tracked{% endif %}
+            {% if e.error %}<span class="text-danger">{{ e.error }}</span>{% else %}{{ e.found }} found, {{ e.matched }} matched, {{ e.added }} new, {{ e.duplicates }} already tracked{% if e.outside %}, {{ e.outside }} outside your areas{% endif %}{% endif %}
           </span>
         </div>
         {% empty %}
@@ -198,7 +198,7 @@
   {% endwith %}
   {% empty %}
   <div class="text-center text-secondary py-5">
-    {% if not stats.total %}No jobs yet. Paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% else %}Nothing here right now. That is fine.{% endif %}
+    {% if not stats.total %}{% if scan_run and scan_run.running %}We are searching {{ scan_run.total }} job sources for roles that fit you. They will appear here in a minute, with nothing for you to do.{% elif scan_run and not scan_run.added %}Nothing new matched yet. Check your roles and places in <a href="{% url 'profile' %}">Profile</a>, paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% else %}No jobs yet. Paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% endif %}{% else %}Nothing here right now. That is fine.{% endif %}
   </div>
   {% endfor %}
 </section>
@@ -282,7 +282,7 @@ function renderScanEntries(entries) {
   box.innerHTML = entries.map(e => `
     <div class="d-flex justify-content-between" style="font-size:13px">
       <span>${e.source} <span class="text-secondary">(${e.connector})</span></span>
-      <span class="text-secondary">${e.error ? `<span class="text-danger">${e.error}</span>` : `${e.found} found, ${e.matched} matched, ${e.added} new, ${e.duplicates} already tracked`}</span>
+      <span class="text-secondary">${e.error ? `<span class="text-danger">${e.error}</span>` : `${e.found} found, ${e.matched} matched, ${e.added} new, ${e.duplicates} already tracked${e.outside ? `, ${e.outside} outside your areas` : ''}`}</span>
     </div>`).join('');
 }
 async function scanPoll() {

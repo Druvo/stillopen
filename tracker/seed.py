@@ -49,3 +49,17 @@ EXPIRED_PHRASES = [
     ("job is closed", ""),
     ("vacancy has been filled", ""),
 ]
+
+
+def ensure_default_sources(job_source_model) -> int:
+    """Add every default job source that is missing (matched on connector + token among the site-wide ones). Returns how
+    many were added. Existing rows are left exactly as they are, so an admin's pause or rename survives."""
+    from tracker.seed_sources import DEFAULT_SOURCES
+
+    added = 0
+    for name, connector, token in DEFAULT_SOURCES:
+        _, created = job_source_model.objects.get_or_create(
+            owner=None, connector=connector, board_token=token, defaults={"name": name, "enabled": True},
+        )
+        added += int(created)
+    return added

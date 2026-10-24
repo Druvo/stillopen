@@ -3,7 +3,7 @@
 {% block title %}Job sources{% endblock %}
 {% block page_title %}Where we look for jobs{% endblock %}
 {% block content %}
-<p class="text-secondary">When you press Search jobs, we read the public job lists of the companies below and keep the openings that match what you are looking for. Add the companies you care about. Your own list is private to you.</p>
+<p class="text-secondary">You do not need to set anything up. We already search {{ shared|length }} job sources for you automatically, whenever you open your dashboard, and keep the openings that match what you are looking for and where you would work. Add a company below only if you want one we do not cover. Your own list is private to you.</p>
 
 <div class="card mb-3"><div class="card-body">
   <h3 class="mt-0">Add a company</h3>
@@ -41,7 +41,8 @@
 {% endif %}
 
 {% if shared %}
-<h3>Included for everyone</h3>
-<p class="text-secondary">{% for s in shared %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+<h3>Already searched for everyone ({{ shared|length }})</h3>
+<details><summary style="cursor:pointer" class="text-secondary">Show the list</summary>
+<p class="text-secondary mt-2">{% for s in shared %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</p></details>
 {% endif %}
 {% endblock %}

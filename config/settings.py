@@ -1,6 +1,7 @@
 """Django settings. Everything environment-specific comes from env vars or .env."""
 import os
 import secrets
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -218,6 +219,21 @@ STILLOPEN_QUICKADD_PER_HOUR = int(os.environ.get("STILLOPEN_QUICKADD_PER_HOUR", 
 # title doesn't literally contain one of their target-role phrases. Higher = fewer false positives.
 STILLOPEN_SKILL_MATCH_MIN_OVERLAP = int(os.environ.get("STILLOPEN_SKILL_MATCH_MIN_OVERLAP", "4"))
 # Interviews, contacts, referrals and offers: most any one person may save of each.
+# Job search engine. Reading each source's public list is shared between everyone's searches for this long (public
+# feeds ask for few requests a day), sources are read this many at a time, and one search adds at most this many
+# new jobs (the best matches first; the rest stay under All postings). Tests turn the cache and the seeded default
+# sources off so they stay deterministic.
+RUNNING_TESTS = "test" in sys.argv
+STILLOPEN_SCAN_CACHE_SECONDS = int(os.environ.get("STILLOPEN_SCAN_CACHE_SECONDS", "0" if RUNNING_TESTS else "21600"))
+STILLOPEN_SCAN_FETCH_THREADS = int(os.environ.get("STILLOPEN_SCAN_FETCH_THREADS", "8"))
+# Longest a search waits for the job sources (a slow one is skipped, not waited for).
+STILLOPEN_SCAN_DEADLINE_SECONDS = int(os.environ.get("STILLOPEN_SCAN_DEADLINE_SECONDS", "90"))
+STILLOPEN_SCAN_MAX_NEW = int(os.environ.get("STILLOPEN_SCAN_MAX_NEW", "40"))
+STILLOPEN_AUTO_SCAN = os.environ.get("STILLOPEN_AUTO_SCAN", "0" if RUNNING_TESTS else "1") == "1"
+STILLOPEN_SEED_SOURCES = os.environ.get("STILLOPEN_SEED_SOURCES", "0" if RUNNING_TESTS else "1") == "1"
+# Company job boards one person may add for their own searches, and how many they may add per hour.
+STILLOPEN_MAX_OWN_SOURCES = int(os.environ.get("STILLOPEN_MAX_OWN_SOURCES", "20"))
+STILLOPEN_SOURCE_ADDS_PER_HOUR = int(os.environ.get("STILLOPEN_SOURCE_ADDS_PER_HOUR", "20"))
 STILLOPEN_MAX_PIPELINE = int(os.environ.get("STILLOPEN_MAX_PIPELINE", "500"))
 STILLOPEN_MAX_CV_VERSIONS = int(os.environ.get("STILLOPEN_MAX_CV_VERSIONS", "200"))
 STILLOPEN_CVGEN_PER_HOUR = int(os.environ.get("STILLOPEN_CVGEN_PER_HOUR", "20"))

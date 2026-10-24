@@ -268,7 +268,7 @@ class ScanRunTests(TestCase):
         self.assertEqual(run.added, 1)
         app = Application.objects.get(owner=self.u)
         self.assertEqual(app.role, "C# Developer")
-        note = app.events.get(kind="note")
+        note = app.events.get(kind="note", text__icontains="skill match")
         self.assertIn("skill match", note.text)
 
     @mock.patch("tracker.services.scan.fetch_greenhouse")

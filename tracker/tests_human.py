@@ -69,7 +69,7 @@ class SignUpAndWelcome(TestCase):
         u = User.objects.create_user("sam", email="sam@example.com", password=PW)
         self.client.force_login(u)
         r = self.client.post(reverse("welcome"), {"target_roles": "Backend Engineer", "home_country": "Bangladesh", "profile_cv": CV})
-        self.assertRedirects(r, reverse("add_job"), fetch_redirect_response=False)
+        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)  # the search starts there; no empty "add a job" detour
         profile = UserProfile.objects.get(user=u)
         self.assertTrue(profile.onboarding_done)
         self.assertEqual(profile.target_roles, "Backend Engineer")

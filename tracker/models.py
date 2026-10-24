@@ -183,6 +183,11 @@ class SiteConfig(PersonalSettings):
         "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
     )
 
+    auto_scan_hours = models.PositiveIntegerField(
+        default=12,
+        help_text="Search for new jobs on a person's behalf when they open the dashboard and their last search is older than this many hours. "
+        "0 turns automatic searching off (people can still press Search jobs). No cron needed, no AI used.",
+    )
     scan_emails_enabled = models.BooleanField(
         default=False,
         help_text="Allow the scheduled job search to email people who opted in (Profile > Job alerts). Needs SMTP configured -- "
@@ -1009,6 +1014,11 @@ class JobSource(models.Model):
         ("remoteok", "RemoteOK"),
         ("weworkremotely", "We Work Remotely"),
         ("himalayas", "Himalayas"),
+        ("remotive", "Remotive"),
+        ("arbeitnow", "Arbeitnow"),
+        ("jobicy", "Jobicy"),
+        ("workingnomads", "Working Nomads"),
+        ("themuse", "The Muse"),
     ]
 
     name = models.CharField(max_length=120, help_text="Shown in the scan log. The company name for a single-company connector; a label like 'RemoteOK' for an aggregator.")
@@ -1081,6 +1091,7 @@ class ScanLogEntry(models.Model):
     matched = models.PositiveIntegerField(default=0, help_text="Postings whose title matched one of your target roles.")
     added = models.PositiveIntegerField(default=0, help_text="New applications created from this source.")
     duplicates = models.PositiveIntegerField(default=0, help_text="Matched postings already in your tracker.")
+    outside = models.PositiveIntegerField(default=0, help_text="Matched postings left out because they are clearly outside your search areas.")
     error = models.CharField(max_length=300, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

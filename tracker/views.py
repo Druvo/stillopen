@@ -132,6 +132,7 @@ def dashboard(request):
     buckets = list(Bucket.objects.all())
     statuses = list(Status.objects.all())
     areas = list(request.user.search_areas.all())
+    scan.maybe_auto_start(request.user)  # jobs simply appear: no button, no cron, no AI
     apps = mine(request).select_related("status", "status__bucket", "source", "posting", "posting__source").prefetch_related("insights", "documents__kind", "cv_versions", "events").select_related("applied_cv")
 
     tabs = {b.pk: [] for b in buckets}
@@ -247,6 +248,7 @@ def scan_status(request):
             "matched": e.matched,
             "added": e.added,
             "duplicates": e.duplicates,
+            "outside": e.outside,
             "error": e.error,
         }
         for e in run.entries.all()
@@ -445,8 +447,8 @@ def welcome(request):
         _save_cv_history(request, obj, form)
         obj.onboarding_done = True
         obj.save(update_fields=["onboarding_done"])
-        messages.success(request, "Lovely, that helps. Now add the first job you are curious about.")
-        return redirect("add_job")
+        messages.success(request, "Lovely, that helps. We are searching for jobs that fit you now; they will appear here in a minute.")
+        return redirect("dashboard")
     return render(request, "tracker/welcome.html", {"form": form, "config": SiteConfig.load()})
 
 
