@@ -155,3 +155,10 @@ JOOBLE = [
 ]
 
 DEFAULT_SOURCES = FEEDS + COMPANIES + REGIONAL + JOOBLE
+
+# Sources whose own published terms allow showing their jobs on a public site (with a visible credit link to the original):
+# RemoteOK, Himalayas, Jobicy and Arbeitnow ask exactly that, and an employer's own hiring board exists to be seen.
+# NOT here, on purpose: Remotive (forbids sending its jobs to third-party sites and showing them to collect signups),
+# We Work Remotely, Working Nomads, The Muse (terms not verified) and Jooble (results belong to Jooble's partners).
+# An admin can change any of it per source (Job sources > "Show publicly").
+PUBLIC_OK_CONNECTORS = {"greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "remoteok", "himalayas", "jobicy", "arbeitnow"}

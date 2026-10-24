@@ -17,6 +17,9 @@
 {% if user.is_staff and email_unverified_signups %}
 <div class="alert alert-warning">Sign-up is open, but this server has no email set up, so new people are let in without confirming their address. Set <code>EMAIL_HOST</code> (see docs/HOSTING.md) to turn confirmation back on.</div>
 {% endif %}
+{% if user.is_staff and legal_needs_attention %}
+<div class="alert alert-warning">Sign-up is open, but your privacy policy or terms still have <code>[bracketed parts]</code> to fill in. Complete them under <a href="{% url 'admin:tracker_siteconfig_changelist' %}">Site configuration &gt; Legal</a> before real people sign up. Run <code>python manage.py update_legal_text</code> first if you are still on the old placeholder text.</div>
+{% endif %}
 {% if next_step %}
 <div class="card mb-3 border-primary">
   <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -41,12 +44,18 @@
   </div>
 </div>
 
-{% if scan_run %}
-<div class="card mb-3" id="scan-log-card">
+<div class="card mb-3" id="scan-log-card" {% if not scan_run %}hidden{% endif %}>
   <div class="card-body">
+    <div class="d-flex align-items-center gap-2">
+      <span id="scan-spinner" class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true" {% if not scan_run.running %}hidden{% endif %}></span>
     <strong id="scan-log-title">
-      {% if scan_run.running %}{% if scan_run.done >= scan_run.total %}Sorting out the best matches for you...{% else %}Reading job sources... {{ scan_run.done }}/{{ scan_run.total }}{% endif %}{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- looked through {{ scan_run.found }} openings, {{ scan_run.added }} new for you{% endif %}
+      {% if scan_run.running %}{% if scan_run.done >= scan_run.total %}Sorting out the best matches for you...{% else %}Reading job sources... {{ scan_run.done }}/{{ scan_run.total }}{% endif %}{% elif scan_run %}Last search: {{ scan_run.started_at|timesince }} ago -- looked through {{ scan_run.found }} openings, {{ scan_run.added }} new for you{% endif %}
     </strong>
+    </div>
+    <div id="scan-progress" class="progress mt-2" style="height:6px" role="progressbar" aria-label="Search progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if scan_run.total %}{% widthratio scan_run.done scan_run.total 100 %}{% else %}0{% endif %}" {% if not scan_run.running %}hidden{% endif %}>
+      <div id="scan-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:{% if scan_run.total %}{% widthratio scan_run.done scan_run.total 100 %}{% else %}0{% endif %}%"></div>
+    </div>
+    <div id="scan-hint" class="text-secondary mt-1" style="font-size:13px" {% if not scan_run.running %}hidden{% endif %}>Usually about a minute. You can keep using StillOpen: the first jobs show up here by themselves as soon as they are ready.</div>
     {% if scan_run.note %}<div class="text-secondary mt-1">{{ scan_run.note }}</div>{% endif %}
     {% if scan_run.error %}<div class="text-danger mt-1">{{ scan_run.error }}</div>{% endif %}
     <details id="scan-log-details" class="mt-2">
@@ -66,7 +75,6 @@
     </details>
   </div>
 </div>
-{% endif %}
 
 {% if upcoming_interviews %}
 <div class="card mb-3">
@@ -105,18 +113,45 @@
 </div>
 {% endif %}
 
-<ul class="nav nav-tabs mb-3" role="tablist">
-  {% for tab in tabs %}
-    <li class="nav-item"><button class="nav-link {% if forloop.first %}active{% endif %}" role="tab" data-tab="{{ tab.bucket.key }}" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}" title="{{ tab.bucket.description }}">{{ tab.bucket.label }} ({{ tab.cards|length }})</button></li>
-  {% endfor %}
-</ul>
+<div class="card mb-3" id="job-filters">
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2 mb-3" id="stage-chips" role="group" aria-label="Show jobs by stage">
+      <button type="button" class="btn btn-sm btn-primary" data-stage="" aria-pressed="true">All ({{ all_cards|length }})</button>
+      {% for tab in tabs %}<button type="button" class="btn btn-sm btn-outline-secondary" data-stage="{{ tab.bucket.key }}" aria-pressed="false" title="{{ tab.bucket.description }}">{{ tab.bucket.label }} ({{ tab.cards|length }})</button>{% endfor %}
+    </div>
+    <div class="row g-2 align-items-end">
+      <div class="col-12 col-md-4 col-lg-3"><label class="form-label mb-1" for="f-q">Search</label><input type="search" id="f-q" class="form-control form-control-sm" placeholder="Company, role or place" autocomplete="off"></div>
+      <div class="col-6 col-md-4 col-lg-2"><label class="form-label mb-1" for="f-fit">Fits your places</label>
+        <select id="f-fit" class="form-select form-select-sm"><option value="">Any</option><option value="fits">Fits</option><option value="check">Check fit</option><option value="unknown">Fit unknown</option></select></div>
+      <div class="col-6 col-md-4 col-lg-2"><label class="form-label mb-1" for="f-band">How well you match</label>
+        <select id="f-band" class="form-select form-select-sm"><option value="">Any</option>{% for label in band_options %}<option value="{{ label }}">{{ label }}</option>{% endfor %}<option value="__none">Not checked yet</option></select></div>
+      <div class="col-6 col-md-4 col-lg-2"><label class="form-label mb-1" for="f-work">Work</label>
+        <select id="f-work" class="form-select form-select-sm"><option value="">Any</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">On-site</option><option value="__none">Not stated</option></select></div>
+      <div class="col-6 col-md-4 col-lg-3"><label class="form-label mb-1" for="f-country">Country</label>
+        <select id="f-country" class="form-select form-select-sm"><option value="">Anywhere</option>{% for code, name in country_options %}<option value="{{ code }}">{{ name }}</option>{% endfor %}<option value="?">Not stated</option></select></div>
+      <div class="col-6 col-md-4 col-lg-3"><label class="form-label mb-1" for="f-live">Posting</label>
+        <select id="f-live" class="form-select form-select-sm"><option value="">Any</option><option value="active">Open</option><option value="expired">Closed</option><option value="unknown">Not checked</option></select></div>
+      <div class="col-6 col-md-4 col-lg-3"><label class="form-label mb-1" for="f-found">Found</label>
+        <select id="f-found" class="form-select form-select-sm"><option value="">Any time</option><option value="today">Today</option><option value="week">Last 7 days</option></select></div>
+      <div class="col-6 col-md-4 col-lg-3"><label class="form-label mb-1" for="f-sort">Sort by</label>
+        <select id="f-sort" class="form-select form-select-sm"><option value="best">Best match first</option><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="company">Company A to Z</option><option value="deadline">Closing soonest</option></select></div>
+    </div>
+    <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+      <span class="text-secondary" id="filter-count" aria-live="polite">Showing all {{ all_cards|length }}</span>
+      <button type="button" class="btn btn-sm btn-link" id="filter-reset" hidden>Clear filters</button>
+    </div>
+  </div>
+</div>
 
 {% csrf_token %}
-{% for tab in tabs %}
-<section data-panel="{{ tab.bucket.key }}" {% if not forloop.first %}hidden{% endif %}>
-  {% for c in tab.cards %}
+<section id="job-list">
+  {% for c in all_cards %}
   {% with a=c.app %}
-  <article id="job-{{ a.pk }}" class="card mb-3 {% if c.urgent %}border-warning{% endif %}">
+  <article id="job-{{ a.pk }}" class="card mb-3 {% if c.urgent %}border-warning{% endif %}"
+    data-bucket="{{ c.bucket_key }}" data-fit="{% if c.fit_level == 'ok' %}fits{% elif c.fit_level == 'warn' %}check{% else %}unknown{% endif %}"
+    data-percent="{% if c.percent is not None %}{{ c.percent }}{% endif %}" data-band="{{ c.band.label|default:'' }}" data-work="{{ a.arrangement }}"
+    data-country="{{ a.country }}" data-live="{{ a.live_state }}" data-found="{{ a.found_date|date:'Y-m-d' }}" data-deadline="{{ a.deadline|date:'Y-m-d' }}"
+    data-company="{{ a.company|lower }}" data-text="{{ a.company|lower }} {{ a.role|lower }} {{ a.location_text|lower }}" data-order="{{ forloop.counter0 }}" data-id="{{ a.pk }}">
     <div class="card-body">
     <div class="row">
       <div class="col">
@@ -201,12 +236,12 @@
   </article>
   {% endwith %}
   {% empty %}
-  <div class="text-center text-secondary py-5">
-    {% if not stats.total %}{% if scan_run and scan_run.running %}We are searching {{ scan_run.total }} job sources for roles that fit you. They will appear here in a minute, with nothing for you to do.{% elif scan_run and not scan_run.added %}Nothing new matched yet. Check your roles and places in <a href="{% url 'profile' %}">Profile</a>, paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% else %}No jobs yet. Paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% endif %}{% else %}Nothing here right now. That is fine.{% endif %}
+  <div class="text-center text-secondary py-5" id="job-list-empty">
+    {% if not stats.total %}{% if scan_run and scan_run.running %}<span class="spinner-border spinner-border-sm text-primary me-2" aria-hidden="true"></span>We are searching {{ scan_run.total }} job sources for roles that fit you. They will appear here in a minute, with nothing for you to do.{% elif scan_run and not scan_run.added %}Nothing new matched yet. Check your roles and places in <a href="{% url 'profile' %}">Profile</a>, paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% else %}No jobs yet. Paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% endif %}{% else %}Nothing here right now. That is fine.{% endif %}
   </div>
   {% endfor %}
+  <div class="text-center text-secondary py-5" id="no-matches" hidden>No jobs match these filters. <button type="button" class="btn btn-link p-0 align-baseline" id="no-matches-reset">Show everything again</button></div>
 </section>
-{% endfor %}
 <div id="toast" role="status" class="toast align-items-center position-fixed" style="bottom:16px;right:16px;display:none"><div class="d-flex"><div class="toast-body"></div></div></div>
 {% endblock %}
 
@@ -217,14 +252,69 @@ const toastEl = document.getElementById('toast');
 const toast = (msg) => { toastEl.querySelector('.toast-body').textContent = msg; toastEl.style.display = 'block'; setTimeout(() => toastEl.style.display = 'none', 4000); };
 const post = (url, body) => fetch(url, {method: 'POST', headers: {'X-CSRFToken': csrf}, body: body ? new URLSearchParams(body) : undefined}).then(async r => ({ok: r.ok, data: await r.json().catch(() => ({}))}));
 
-const tabs = document.querySelectorAll('.nav-tabs button[data-tab]');
-const show = (key) => {
-  tabs.forEach(b => { b.setAttribute('aria-selected', String(b.dataset.tab === key)); b.classList.toggle('active', b.dataset.tab === key); });
-  document.querySelectorAll('[data-panel]').forEach(p => p.hidden = p.dataset.panel !== key);
-  try { sessionStorage.setItem('tab', key); } catch (e) {}
+// ---- everything is shown first; these filters narrow it down (and are remembered for this browser tab) ----
+const jobList = document.getElementById('job-list');
+const jobCards = Array.from(jobList.querySelectorAll('article[data-bucket]'));
+const controls = {q: 'f-q', fit: 'f-fit', band: 'f-band', work: 'f-work', country: 'f-country', live: 'f-live', found: 'f-found', sort: 'f-sort'};
+const defaults = {stage: '', q: '', fit: '', band: '', work: '', country: '', live: '', found: '', sort: 'best'};
+let state = {...defaults};
+try { Object.assign(state, JSON.parse(sessionStorage.getItem('jobfilters') || '{}')); } catch (e) {}
+const localDay = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() - offset); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const sorters = {
+  best: (a, b) => a.dataset.order - b.dataset.order,
+  newest: (a, b) => (b.dataset.found || '').localeCompare(a.dataset.found || '') || b.dataset.id - a.dataset.id,
+  oldest: (a, b) => (a.dataset.found || '9999').localeCompare(b.dataset.found || '9999') || a.dataset.id - b.dataset.id,
+  company: (a, b) => a.dataset.company.localeCompare(b.dataset.company) || a.dataset.order - b.dataset.order,
+  deadline: (a, b) => (a.dataset.deadline || '9999').localeCompare(b.dataset.deadline || '9999') || a.dataset.order - b.dataset.order,
 };
-tabs.forEach(b => b.addEventListener('click', () => show(b.dataset.tab)));
-try { const saved = sessionStorage.getItem('tab'); if (saved && document.querySelector(`[data-tab="${saved}"]`)) show(saved); } catch (e) {}
+function applyFilters() {
+  const words = state.q.toLowerCase().split(/\s+/).filter(Boolean), today = localDay(), weekAgo = localDay(7);
+  let shown = 0;
+  jobCards.forEach(card => {
+    const d = card.dataset;
+    const ok = (!state.stage || d.bucket === state.stage)
+      && words.every(w => d.text.includes(w))
+      && (!state.fit || d.fit === state.fit)
+      && (!state.band || (state.band === '__none' ? d.percent === '' : d.band === state.band))
+      && (!state.work || (state.work === '__none' ? d.work === '' : d.work === state.work))
+      && (!state.country || (state.country === '?' ? d.country === '' : d.country === state.country))
+      && (!state.live || d.live === state.live)
+      && (!state.found || (state.found === 'today' ? d.found === today : d.found !== '' && d.found >= weekAgo));
+    card.hidden = !ok;
+    if (ok) shown++;
+  });
+  jobCards.slice().sort(sorters[state.sort] || sorters.best).forEach(card => jobList.insertBefore(card, document.getElementById('no-matches')));
+  const filtered = Object.keys(defaults).some(k => k !== 'sort' && state[k] !== defaults[k]);
+  document.getElementById('filter-count').textContent = filtered ? `Showing ${shown} of ${jobCards.length}` : `Showing all ${jobCards.length}`;
+  document.getElementById('filter-reset').hidden = !filtered;
+  const none = document.getElementById('no-matches'); if (none) none.hidden = !(jobCards.length && shown === 0);
+  const empty = document.getElementById('job-list-empty'); if (empty) empty.hidden = jobCards.length > 0 ? true : false;
+  document.querySelectorAll('#stage-chips button').forEach(b => {
+    const on = b.dataset.stage === state.stage;
+    b.classList.toggle('btn-primary', on); b.classList.toggle('btn-outline-secondary', !on); b.setAttribute('aria-pressed', String(on));
+  });
+  try { sessionStorage.setItem('jobfilters', JSON.stringify(state)); } catch (e) {}
+}
+function resetFilters() {
+  state = {...defaults};
+  Object.entries(controls).forEach(([key, id]) => { document.getElementById(id).value = state[key]; });
+  applyFilters();
+}
+Object.entries(controls).forEach(([key, id]) => {
+  const el = document.getElementById(id);
+  el.value = state[key];
+  if (el.value !== state[key]) state[key] = el.value;  // an option that no longer exists (e.g. a country with no jobs left)
+  el.addEventListener(key === 'q' ? 'input' : 'change', () => { state[key] = el.value; applyFilters(); });
+});
+document.querySelectorAll('#stage-chips button').forEach(b => b.addEventListener('click', () => { state.stage = b.dataset.stage; applyFilters(); }));
+document.getElementById('filter-reset').addEventListener('click', resetFilters);
+document.getElementById('no-matches-reset').addEventListener('click', resetFilters);
+applyFilters();
+if (location.hash.startsWith('#job-')) {  // a link to one job (the "next step" card) must never land on a filtered-out job
+  const target = document.querySelector(location.hash);
+  if (target && target.hidden) { resetFilters(); }
+  if (target) target.scrollIntoView();
+}
 
 document.querySelectorAll('[data-status-for]').forEach(sel => sel.addEventListener('change', async () => {
   const r = await post(`/api/application/${sel.dataset.statusFor}/status/`, {status: sel.value});
@@ -289,22 +379,42 @@ function renderScanEntries(entries) {
       <span class="text-secondary">${e.error ? `<span class="text-danger">${e.error}</span>` : `${e.found} found, ${e.matched} matched, ${e.added} new, ${e.duplicates} already tracked${e.outside ? `, ${e.outside} outside your areas` : ''}`}</span>
     </div>`).join('');
 }
+const spinnerHtml = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>';
+const renderedAdded = {{ scan_run.added|default:0 }};
+function showProgress(label, percent, indeterminate) {
+  const card = document.getElementById('scan-log-card');
+  if (card) card.hidden = false;
+  const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+  set('scan-spinner', el => el.hidden = false);
+  set('scan-progress', el => { el.hidden = false; el.setAttribute('aria-valuenow', String(percent)); });
+  set('scan-progress-bar', el => el.style.width = percent + '%');
+  set('scan-hint', el => el.hidden = false);
+  set('scan-log-title', el => el.textContent = label);
+}
 async function scanPoll() {
   const s = await fetch('/api/scan/status/').then(r => r.json());
   renderScanEntries(s.entries || []);
-  const title = document.getElementById('scan-log-title');
   if (s.running) {
-    if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = s.done >= s.total ? 'Sorting...' : `Reading ${s.done}/${s.total}...`; }
-    if (title) title.textContent = s.done >= s.total ? 'Sorting out the best matches for you...' : `Reading job sources... ${s.done}/${s.total}`;
+    const sorting = s.total > 0 && s.done >= s.total;
+    const percent = s.total ? Math.min(100, Math.round(100 * s.done / s.total)) : 0;
+    const label = sorting ? 'Sorting out the best matches for you...' : s.total ? `Reading job sources... ${s.done}/${s.total}` : 'Starting the search...';
+    showProgress(label, sorting ? 100 : percent);
+    if (scanBtn) { scanBtn.disabled = true; scanBtn.innerHTML = spinnerHtml + (sorting ? 'Sorting...' : s.total ? `Reading ${s.done}/${s.total}` : 'Starting...'); }
+    if (s.added > renderedAdded) { location.reload(); return; }  // the first jobs are ready: show them now, the search carries on
     setTimeout(scanPoll, 1500);
   } else if (scanBtn && scanBtn.disabled) {
     location.reload();
   }
 }
 if (scanBtn) scanBtn.addEventListener('click', async () => {
-  scanBtn.disabled = true; scanBtn.textContent = 'Starting...';
+  scanBtn.disabled = true; scanBtn.innerHTML = spinnerHtml + 'Starting...';
+  showProgress('Starting the search...', 3);  // something moves the instant it is pressed
   const r = await post('/api/scan/start/');
-  if (!r.ok) { toast(r.data.error || 'Could not start search'); scanBtn.disabled = false; scanBtn.textContent = 'Search jobs'; return; }
+  if (!r.ok) {
+    toast(r.data.error || 'Could not start search'); scanBtn.disabled = false; scanBtn.textContent = 'Search jobs';
+    const card = document.getElementById('scan-log-card'); if (card && !{{ scan_run|yesno:"1,0" }}) card.hidden = true;
+    return;
+  }
   scanPoll();
 });
 {% if scan_run and scan_run.running %}if (scanBtn) { scanBtn.disabled = true; } scanPoll();{% endif %}

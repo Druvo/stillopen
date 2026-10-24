@@ -80,6 +80,17 @@ mcp.tool(annotations=WRITE, description="Store your own evaluation of a role (ma
 mcp.tool(annotations=WRITE, description="Change a role's status. Confirm with the user first for Applied, Rejected or Discarded.")(_friendly(t.update_status))
 mcp.tool(annotations=WRITE, description="Add a short note to a role's timeline.")(_friendly(t.add_note))
 mcp.tool(annotations=NETWORK, description="Check whether a role's posting is still open. Visits the posting URL.")(_friendly(t.check_open))
+mcp.tool(annotations=READ, description="The person's interviews, soonest first (upcoming only unless upcoming_only=false).")(_friendly(t.list_interviews))
+mcp.tool(annotations=WRITE, description="Record an interview the PERSON was invited to (when as ISO date-time, kind, where, notes). Schedules nothing and contacts no one.")(_friendly(t.add_interview))
+mcp.tool(annotations=WRITE, description="Set how an interview went: pending, done, passed, rejected or cancelled. Confirm with the person before rejected.")(_friendly(t.set_interview_outcome))
+mcp.tool(annotations=READ, description="People the person knows at or near companies, with their referrals. Optional query on name or company. Personal data.")(_friendly(t.list_contacts))
+mcp.tool(annotations=WRITE, description="Save a contact the person told you about. Never contacts them.")(_friendly(t.add_contact))
+mcp.tool(annotations=WRITE, description="Note that a contact might refer the person for a job (status thinking/asked/agreed/submitted/declined). Records only what the person says happened.")(_friendly(t.add_referral))
+mcp.tool(annotations=WRITE, description="Update a referral's status.")(_friendly(t.set_referral_status))
+mcp.tool(annotations=READ, description="The person's job offers in plain numbers with yearly totals.")(_friendly(t.list_offers))
+mcp.tool(annotations=WRITE, description="Record an offer the person received: base pay per year or month, yearly bonus, equity value and benefits, one-off signing bonus, 3-letter currency. Never converts currencies.")(_friendly(t.add_offer))
+mcp.tool(annotations=WRITE, description="Set an offer's status: open, accepted or declined. Confirm with the person first.")(_friendly(t.set_offer_status))
+mcp.tool(annotations=READ, description="Offers ranked by yearly total, one group per currency, with the gap to the best.")(_friendly(t.compare_offers))
 
 if __name__ == "__main__":
     mcp.run("stdio")

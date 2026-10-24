@@ -19,8 +19,9 @@ EXPECTED = {
     "tabler.min.js": "5f3b9d83904b49cceba984aaa4f6babc67ddbda8de09045d6a5de5a65854a65d",
 }
 # anything that makes the browser fetch from another host without a click: stylesheets, scripts, images, fonts, imports
+# (a rel="canonical" link only names the page's own address and fetches nothing, so it is not counted)
 EXTERNAL_ASSET = re.compile(
-    r"""(<link[^>]+href=["'](?:https?:)?//|<script[^>]+src=["'](?:https?:)?//|<img[^>]+src=["'](?:https?:)?//|"""
+    r"""(<link(?![^>]+rel=["']canonical["'])[^>]+href=["'](?:https?:)?//|<script[^>]+src=["'](?:https?:)?//|<img[^>]+src=["'](?:https?:)?//|"""
     r"""@import\s+(?:url\()?["']?(?:https?:)?//|url\(["']?(?:https?:)?//|<iframe[^>]+src=["'](?:https?:)?//)""",
     re.I,
 )
@@ -71,10 +72,10 @@ class NoThirdPartyAssets(TestCase):
         return html
 
     def test_public_pages(self):
-        for name in ("landing", "privacy", "terms", "account_login", "account_signup"):
+        for name in ("landing", "openings", "privacy", "terms", "account_login", "account_signup"):
             html = self.assert_self_hosted(reverse(name))
-            if name in ("landing", "privacy", "terms", "account_login", "account_signup"):
-                self.assertIn("/static/vendor/tabler/tabler.min.css", html, name)
+            self.assertIn("/static/vendor/tabler/tabler.min.css", html, name)
+            self.assertIn("/static/css/stillopen.css", html, name)
 
     def test_signed_in_pages(self):
         self.client.force_login(self.user)

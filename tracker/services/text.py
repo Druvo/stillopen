@@ -14,11 +14,5 @@ _TOKEN = re.compile(r"\.net|[a-z][a-z0-9+#.]*")
 
 def terms(text: str) -> list[str]:
     """Lower-case skill-ish tokens: keeps c#, c++, .net, node.js; drops trailing full stops and stop words."""
-    out = []
-    for raw in _TOKEN.findall(text.lower()):
-        word = raw.rstrip(".")
-        if word in STOPWORDS or not word:
-            continue
-        if len(word) > 2 or word in SHORT_KEEP:
-            out.append(word)
-    return out
+    words = (raw.rstrip(".") for raw in _TOKEN.findall(text.lower()))
+    return [w for w in words if w and w not in STOPWORDS and (len(w) > 2 or w in SHORT_KEEP)]

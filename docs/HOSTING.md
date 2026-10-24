@@ -25,6 +25,23 @@ The app runs as one process on purpose: the per-person rate limits live in proce
 
 Without Docker: `pip install -r requirements-hosting.txt`, set `DATABASE_URL=postgres://user:pass@host:5432/stillopen`, run `python manage.py migrate`, then run gunicorn the way the Dockerfile does.
 
+## Before you open the doors: a checklist
+
+1. `python manage.py check_email --to you@example.com`: confirms SMTP really delivers.
+2. Fill in Site configuration > Legal (privacy and terms): the `[bracketed parts]`, then have it reviewed. The admin dashboard warns until they are filled.
+3. Schedule the emails: `deploy/crontab.example` or `deploy/windows/schedule-stillopen.ps1`.
+4. Optional: a Jooble key for Bangladesh, Malaysia and the Gulf (`python manage.py check_jooble` proves it works).
+5. Put a TLS reverse proxy in front and set `ALLAUTH_TRUSTED_PROXY_COUNT=1` so the per-IP limits see visitors, not the proxy.
+
+## The public job board
+
+`/openings/` shows openings from sources you mark **Show publicly** (Site configuration > Job sources). Before launch:
+
+1. Read `README.md` > "The public site" for the rules, and look at each public source's terms yourself: they can change. The defaults are conservative (Remotive and others off).
+2. Set a **contact email** in Site configuration > Public job board: it is shown to employers who want a listing removed. Remove a source by unticking Show publicly; its openings disappear from the board on the next page load.
+3. Keep `public_details_indexable` off unless you have reviewed the search-engine implications of republishing excerpts.
+4. Schedule `refresh_postings` (see `deploy/`), or rely on the on-visit refresh.
+
 ## Open registration
 
 1. Configure SMTP (`EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`). Confirmation links are emailed. **Without SMTP, email confirmation is switched off** (a link that is only printed to the server log would lock every new person out), so people are signed straight in and admins see a warning on their dashboard; set `STILLOPEN_REQUIRE_EMAIL_CONFIRMATION=1` to insist anyway. Open registration without confirmed addresses invites fake accounts, so configure email before a public launch.
