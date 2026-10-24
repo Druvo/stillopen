@@ -167,7 +167,7 @@ def dashboard(request):
         "run": liveness.current_run(request.user),
         "checked_at": apps.exclude(live_checked_at=None).order_by("-live_checked_at").values_list("live_checked_at", flat=True).first(),
         "scan_run": scan.current_run(request.user),
-        "can_scan": JobSource.objects.filter(enabled=True).exists(),
+        "can_scan": JobSource.for_user(request.user, enabled=True).exists(),
         "greeting": guide.greeting(request.user, timezone.localtime()),
         "next_step": guide.next_step(profile, [c for t in tab_list for c in t["cards"]]),
     }
@@ -367,7 +367,7 @@ def all_postings(request):
     fact about the job market, not about any one person's search (same reasoning as the repost signal itself).
     This is the answer to "it found 586 but only tracked 11 -- where did the rest go?": nowhere, they were
     never hidden, just never auto-added because they didn't match your target roles."""
-    qs = Posting.objects.select_related("source").order_by("-last_seen_at")
+    qs = Posting.objects.filter(source__in=JobSource.for_user(request.user)).select_related("source").order_by("-last_seen_at")
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(company__icontains=q))
@@ -385,7 +385,7 @@ def all_postings(request):
         "rows": rows,
         "q": q,
         "source_id": source_id,
-        "sources": JobSource.objects.order_by("name"),
+        "sources": JobSource.for_user(request.user).order_by("name"),
         "qs": qs_no_page.urlencode(),
     })
 
@@ -393,7 +393,7 @@ def all_postings(request):
 @login_required
 @require_POST
 def add_posting(request, pk):
-    posting = get_object_or_404(Posting, pk=pk)
+    posting = get_object_or_404(Posting, pk=pk, source__in=JobSource.for_user(request.user))
     target = reverse("all_postings")
     qs = request.POST.get("qs", "")
     if qs:

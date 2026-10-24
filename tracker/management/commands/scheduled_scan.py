@@ -19,9 +19,6 @@ class Command(BaseCommand):
         if not config.scan_emails_enabled:
             self.stdout.write("Scheduled job alerts are off (Site configuration > Dashboard). Nothing run.")
             return
-        if not JobSource.objects.filter(enabled=True).exists():
-            self.stdout.write("No enabled job sources. Nothing run.")
-            return
         people = get_user_model().objects.filter(is_active=True, profile__scan_digest_enabled=True)
         if opts["user"]:
             try:
@@ -30,6 +27,8 @@ class Command(BaseCommand):
                 raise CommandError(str(exc)) from exc
         searched = emailed = 0
         for owner in people:
+            if not JobSource.for_user(owner, enabled=True).exists():
+                continue
             run = scan.start_run(owner, background=False)
             searched += 1
             if scan.send_scan_digest(owner, run):

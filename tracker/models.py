@@ -1025,13 +1025,32 @@ class JobSource(models.Model):
         validators=[RegexValidator(r"^[A-Za-z0-9._-]+$", "Only letters, digits, dot, dash and underscore.")],
     )
     enabled = models.BooleanField(default=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="job_sources",
+        help_text="Empty: a site-wide source the admin manages, searched for everyone. Set: one person's own board, "
+        "searched only for them and invisible to everyone else.",
+    )
+
+    # What a person may add for themselves: single-company boards only. Aggregators stay admin-managed.
+    OWN_CONNECTORS = ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"]
 
     class Meta:
         ordering = ["name"]
-        constraints = [models.UniqueConstraint(fields=["connector", "board_token"], name="uniq_connector_token")]
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "connector", "board_token"], name="uniq_owner_connector_token"),
+            models.UniqueConstraint(
+                fields=["connector", "board_token"], condition=models.Q(owner__isnull=True), name="uniq_sitewide_connector_token",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.get_connector_display()})"
+
+    @classmethod
+    def for_user(cls, user, enabled: bool | None = None):
+        """The sources a person's searches may use and see: the site-wide ones plus their own, never anyone else's."""
+        qs = cls.objects.filter(models.Q(owner__isnull=True) | models.Q(owner=user))
+        return qs if enabled is None else qs.filter(enabled=enabled)
 
 
 class ScanRun(models.Model):

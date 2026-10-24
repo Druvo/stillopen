@@ -399,9 +399,9 @@ class LivenessRunAdmin(admin.ModelAdmin):
 
 @admin.register(JobSource)
 class JobSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "connector", "board_token", "enabled")
+    list_display = ("name", "connector", "board_token", "owner", "enabled")
     list_editable = ("enabled",)
-    list_filter = ("connector", "enabled")
+    list_filter = ("connector", "enabled", "owner")
     search_fields = ("name", "board_token")
 
 

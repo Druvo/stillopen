@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.forms import inlineformset_factory
 
 from .models import (
-    Application, Contact, Interview, KnowledgeSource, Offer, PersonalSettings, Referral, SearchArea, UserProfile,
+    Application, Contact, Interview, JobSource, KnowledgeSource, Offer, PersonalSettings, Referral, SearchArea, UserProfile,
 )
 from .services import geo, knowledge
 from .services.netguard import FetchError, check_public_url
@@ -456,3 +456,57 @@ class OfferForm(OwnedFormMixin, forms.ModelForm):
         if not re.fullmatch(r"[A-Z]{3}", value):
             raise forms.ValidationError("Use a three-letter code such as USD, BDT or MYR.")
         return value
+
+
+# --- a person's own company job boards ---------------------------------------------------------------
+
+_OWN_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}")
+_BOARD_HOSTS = {
+    "greenhouse": ("boards.greenhouse.io", "job-boards.greenhouse.io"),
+    "lever": ("jobs.lever.co",),
+    "ashby": ("jobs.ashbyhq.com",),
+    "smartrecruiters": ("jobs.smartrecruiters.com", "careers.smartrecruiters.com"),
+}
+
+
+def board_token_from(connector: str, raw: str) -> str:
+    """Accept the token itself, or a careers-page address pasted from the browser. Only text is parsed: the pasted
+    address is never fetched, and only the token is kept (the app always builds the real URL itself)."""
+    raw = (raw or "").strip()
+    if not raw.lower().startswith(("http://", "https://")):
+        return raw
+    from urllib.parse import urlparse
+
+    parsed = urlparse(raw)
+    host = (parsed.hostname or "").lower()
+    if connector == "recruitee" and host.endswith(".recruitee.com"):
+        return host[: -len(".recruitee.com")]
+    if host in _BOARD_HOSTS.get(connector, ()):
+        return next((p for p in parsed.path.split("/") if p), "")
+    return ""
+
+
+class OwnSourceForm(forms.Form):
+    connector = forms.ChoiceField(
+        choices=[(c, label) for c, label in JobSource.CONNECTORS if c in JobSource.OWN_CONNECTORS],
+        label="Which hiring system does the company use?",
+        help_text="Check the address of the company's careers page: boards.greenhouse.io/..., jobs.lever.co/..., jobs.ashbyhq.com/..., jobs.smartrecruiters.com/... or ....recruitee.com.",
+    )
+    board_token = forms.CharField(
+        max_length=300, label="The company's name in that address, or paste the careers page address",
+        help_text="For jobs.lever.co/acme the name is acme.",
+    )
+    name = forms.CharField(max_length=120, required=False, label="Company name (optional)", help_text="Shown in your search log. Defaults to the name from the address.")
+
+    def clean(self):
+        cleaned = super().clean()
+        connector = cleaned.get("connector")
+        if not connector or "board_token" not in cleaned:
+            return cleaned
+        token = board_token_from(connector, cleaned["board_token"])
+        if not _OWN_TOKEN.fullmatch(token):
+            self.add_error("board_token", "That does not look like a company name from a careers page address. Use letters, digits, dash or underscore only, or paste the careers page address.")
+        else:
+            cleaned["board_token"] = token
+            cleaned["name"] = (cleaned.get("name") or "").strip() or token
+        return cleaned

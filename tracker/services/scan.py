@@ -314,7 +314,7 @@ def _worker(run_id: int):
         default_status = Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first()
         room = max(0, settings.STILLOPEN_MAX_APPLICATIONS - Application.objects.filter(owner=owner).count())
         capped = False
-        for source in JobSource.objects.filter(enabled=True):
+        for source in JobSource.for_user(owner, enabled=True):
             entry = ScanLogEntry(run=run, source_name=source.name, connector=source.connector)
             try:
                 if not TOKEN_RE.match(source.board_token):
@@ -400,7 +400,7 @@ def start_run(owner, background: bool = True) -> ScanRun:
     existing = current_run(owner)
     if existing and existing.running:
         return existing
-    run = ScanRun.objects.create(owner=owner, total=JobSource.objects.filter(enabled=True).count())
+    run = ScanRun.objects.create(owner=owner, total=JobSource.for_user(owner, enabled=True).count())
     if background:
         threading.Thread(target=_worker, args=(run.pk,), daemon=True).start()
     else:

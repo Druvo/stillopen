@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_apply, views_cover, views_cv, views_pipeline
+from . import views, views_apply, views_cover, views_cv, views_pipeline, views_sources
 
 urlpatterns = [
     path("", views.landing, name="landing"),
@@ -28,6 +28,8 @@ urlpatterns = [
     path("cv/<int:pk>/print/", views_cv.cv_print, name="cv_print"),
     path("cv/<int:pk>/download/<str:fmt>/", views_cv.cv_download, name="cv_download"),
     path("jobs/<int:pk>/tailor/", views_cv.tailor_cv, name="tailor_cv"),
+    path("sources/", views_sources.sources, name="sources"),
+    path("sources/<int:pk>/<str:action>/", views_sources.source_action, name="source_action"),
     path("insights/", views_pipeline.insights, name="insights"),
     path("interviews/", views_pipeline.interviews, name="interviews"),
     path("interviews/<int:pk>/<str:action>/", views_pipeline.interview_action, name="interview_action"),
