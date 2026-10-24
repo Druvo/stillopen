@@ -175,7 +175,7 @@ def list_statuses() -> list[dict]:
     ]
 
 
-def add_application(company: str, role: str, url: str = "", description: str = "", notes: str = "", status: str = "Evaluated") -> dict:
+def add_application(company: str, role: str, url: str = "", description: str = "", notes: str = "", status: str = "Saved") -> dict:
     company, role = _clip(company, 160), _clip(role, 200)
     if not company or not role:
         raise ValueError("company and role are required.")

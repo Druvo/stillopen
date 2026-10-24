@@ -179,6 +179,40 @@ def _location(text: str) -> tuple[str, str]:
     return (hit[1], hit[0]) if hit else ("", "")
 
 
+_US_STATES = (
+    "AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC"
+)
+_US_STATE_SUFFIX = re.compile(r"(?:^|[,(]\s*|\s)[A-Z][A-Za-z.' -]+,\s*(?:" + _US_STATES + r")\b(?![a-z])")
+
+
+_US_STATE_NAMES = frozenset(['alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado', 'connecticut', 'delaware', 'florida', 'hawaii', 'idaho', 'illinois', 'indiana', 'iowa', 'kansas', 'kentucky', 'louisiana', 'maine', 'maryland', 'massachusetts', 'michigan', 'minnesota', 'mississippi', 'missouri', 'montana', 'nebraska', 'nevada', 'new hampshire', 'new jersey', 'new mexico', 'new york', 'north carolina', 'north dakota', 'ohio', 'oklahoma', 'oregon', 'pennsylvania', 'rhode island', 'south carolina', 'south dakota', 'tennessee', 'texas', 'utah', 'vermont', 'virginia', 'washington', 'west virginia', 'wisconsin', 'wyoming'])
+
+
+def location_codes(location: str) -> set[str]:
+    """The countries a job-board LOCATION field names, e.g. 'Bastrop, TX' -> {US}, 'Hong Kong; Singapore' -> {HK, SG},
+    'Remote - European Union' -> the EU's countries, 'Remote, Global' -> nothing. That field is structured and reliable;
+    prose in a description (a company calling itself "global") is not. Never guesses: a place we cannot place adds nothing."""
+    location = re.sub(r"\bU\.?S\.?A?\.?(?=[\s,)\]]|$)", "United States", (location or "").strip())
+    if not location:
+        return set()
+    codes: set[str] = set()
+    if _US_STATE_SUFFIX.search(location):
+        codes.add("US")
+    parts = [p for p in re.split(r"[;|/]|\s[-\u2013\u2014]\s|,|\band\b", location) if p.strip()]
+    for part in [location] + parts:
+        cleaned = re.sub(r"[()\[\]]|\bremote\b|\bhybrid\b|\bon-?site\b", " ", part, flags=re.I)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -,:")
+        if len(cleaned) < 2:
+            continue
+        if cleaned.lower() in _US_STATE_NAMES:
+            codes.add("US")
+            continue
+        resolved = resolve_place(cleaned)
+        if resolved and "*" not in resolved:
+            codes |= set(resolved)
+    return codes
+
+
 _SENIORITY = [
     ("junior", r"\b(?:intern|junior|jr\.?|entry[- ]level|graduate|trainee)\b"),
     ("manager", r"\b(?:manager|head of|director|vp\b)"),

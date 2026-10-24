@@ -14,14 +14,14 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import forms
+from . import forms, views_pipeline
 from .models import (
     AIUsageEvent, Application, Bucket, Document, Event, JobSource, KnowledgeSource, Posting, ScoreBand, SiteConfig,
     Status, UserProfile,
 )
 from .services import ai, careerops, cvversions, jobtext, knowledge, liveness, scan
 from .services import apply as apply_service
-from .services import fit as fit_service, geo
+from .services import fit as fit_service, geo, guide
 from .services.cvversions import CVError
 from .services.files import resolve_document_path
 from .services.paperless import PaperlessClient, PaperlessError, push_document
@@ -132,6 +132,7 @@ def dashboard(request):
     buckets = list(Bucket.objects.all())
     statuses = list(Status.objects.all())
     areas = list(request.user.search_areas.all())
+    scan.maybe_auto_start(request.user)  # jobs simply appear: no button, no cron, no AI
     apps = mine(request).select_related("status", "status__bucket", "source", "posting", "posting__source").prefetch_related("insights", "documents__kind", "cv_versions", "events").select_related("applied_cv")
 
     tabs = {b.pk: [] for b in buckets}
@@ -161,12 +162,18 @@ def dashboard(request):
         "paperless_on": paperless_on,
         "paperless_url": config.effective_paperless_url if paperless_on else "",
         "followups": list(apply_service.due_followups(request.user)),
+        "upcoming_interviews": views_pipeline.upcoming_interviews(request.user),
         "has_areas": bool(areas),
         "can_import": request.user.is_staff and bool(config.careerops_path),
         "run": liveness.current_run(request.user),
         "checked_at": apps.exclude(live_checked_at=None).order_by("-live_checked_at").values_list("live_checked_at", flat=True).first(),
         "scan_run": scan.current_run(request.user),
-        "can_scan": JobSource.objects.filter(enabled=True).exists(),
+        "can_scan": JobSource.for_user(request.user, enabled=True).exists(),
+        "greeting": guide.greeting(request.user, timezone.localtime()),
+        "next_step": guide.next_step(
+            profile, [c for t in tab_list for c in t["cards"]], has_areas=bool(areas),
+            searching=bool(scan.current_run(request.user) and scan.current_run(request.user).running),
+        ),
     }
     return render(request, "tracker/dashboard.html", context)
 
@@ -244,6 +251,7 @@ def scan_status(request):
             "matched": e.matched,
             "added": e.added,
             "duplicates": e.duplicates,
+            "outside": e.outside,
             "error": e.error,
         }
         for e in run.entries.all()
@@ -344,11 +352,15 @@ def add_job(request):
     elif request.method == "POST" and form.is_valid():
         app = form.save(commit=False)
         app.owner = request.user
-        app.status = Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first()
+        app.status = (
+            Status.objects.filter(name="Saved").first()
+            or Status.objects.filter(bucket__is_closed=False).order_by("order").first()
+            or Status.objects.first()
+        )
         app.save()
         geo.fill_details(app)  # suggest location, arrangement, sponsorship and type from the posting
         Event.objects.create(application=app, kind="note", text="Added")
-        messages.success(request, f"Added {app.company} - {app.role}.")
+        messages.success(request, f"Saved {app.company} - {app.role}. Next, press Check my fit to see how well it suits you.")
         return redirect("dashboard")
     return render(request, "tracker/add_job.html", {"form": form, "config": SiteConfig.load()})
 
@@ -360,7 +372,7 @@ def all_postings(request):
     fact about the job market, not about any one person's search (same reasoning as the repost signal itself).
     This is the answer to "it found 586 but only tracked 11 -- where did the rest go?": nowhere, they were
     never hidden, just never auto-added because they didn't match your target roles."""
-    qs = Posting.objects.select_related("source").order_by("-last_seen_at")
+    qs = Posting.objects.filter(source__in=JobSource.for_user(request.user)).select_related("source").order_by("-last_seen_at")
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(company__icontains=q))
@@ -378,7 +390,7 @@ def all_postings(request):
         "rows": rows,
         "q": q,
         "source_id": source_id,
-        "sources": JobSource.objects.order_by("name"),
+        "sources": JobSource.for_user(request.user).order_by("name"),
         "qs": qs_no_page.urlencode(),
     })
 
@@ -386,7 +398,7 @@ def all_postings(request):
 @login_required
 @require_POST
 def add_posting(request, pk):
-    posting = get_object_or_404(Posting, pk=pk)
+    posting = get_object_or_404(Posting, pk=pk, source__in=JobSource.for_user(request.user))
     target = reverse("all_postings")
     qs = request.POST.get("qs", "")
     if qs:
@@ -404,7 +416,11 @@ def add_posting(request, pk):
         url=posting.url,
         location_text=posting.location,
         posting=posting,
-        status=Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first(),
+        status=(
+            Status.objects.filter(name="Saved").first()
+            or Status.objects.filter(bucket__is_closed=False).order_by("order").first()
+            or Status.objects.first()
+        ),
         found_date=timezone.localdate(),
     )
     app.save()
@@ -412,6 +428,41 @@ def add_posting(request, pk):
     Event.objects.create(application=app, kind="note", text="Added from All postings")
     messages.success(request, f"Added {app.company} - {app.role}.")
     return redirect(target)
+
+
+def _save_cv_history(request, obj, form):
+    knowledge.sync_cv(SiteConfig.for_user(request.user), request.user)
+    if "profile_cv" in form.changed_data and obj.profile_cv.strip():
+        try:
+            cvversions.record_master(request.user, obj.profile_cv)  # every CV change is kept in the history
+        except CVError:
+            pass
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def welcome(request):
+    """A short, skippable first stop after sign-up."""
+    obj = UserProfile.for_user(request.user)
+    form = forms.WelcomeForm(request.POST or None, request.FILES or None, instance=obj)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        _save_cv_history(request, obj, form)
+        forms.create_default_areas(request.user, obj.home_country, form.cleaned_data.get("open_remote", False), form.cleaned_data.get("other_places", ""))
+        obj.onboarding_done = True
+        obj.save(update_fields=["onboarding_done"])
+        messages.success(request, "Lovely, that helps. We are searching for jobs that fit you now; they will appear here in a minute.")
+        return redirect("dashboard")
+    return render(request, "tracker/welcome.html", {"form": form, "config": SiteConfig.load()})
+
+
+@login_required
+@require_POST
+def welcome_skip(request):
+    obj = UserProfile.for_user(request.user)
+    obj.onboarding_done = True
+    obj.save(update_fields=["onboarding_done"])
+    return redirect("dashboard")
 
 
 @login_required
@@ -427,13 +478,8 @@ def profile(request):
             forms.save_areas(areas, request.user)
             for place in areas.unrecognised_places:
                 messages.warning(request, f'"{place}" is not a place we recognise, so jobs are matched to it by name only.')
-        knowledge.sync_cv(SiteConfig.for_user(request.user), request.user)
-        if "profile_cv" in form.changed_data and obj.profile_cv.strip():
-            try:
-                cvversions.record_master(request.user, obj.profile_cv)  # every CV change is kept in the history
-            except CVError:
-                pass
-        messages.success(request, "Profile saved.")
+        _save_cv_history(request, obj, form)
+        messages.success(request, "Saved. Your next matches will use this.")
         return redirect("profile")
     return render(request, "tracker/profile.html", {
         "form": form, "areas": areas, "profile": obj, "config": SiteConfig.load(), "welcome": request.GET.get("welcome"),
@@ -442,6 +488,10 @@ def profile(request):
             "email": request.user.email,
             "jobs": mine(request).count(),
             "cv_versions": request.user.cv_versions.count(),
+            "cover_letters": request.user.cover_letters.count(),
+            "interviews": request.user.interviews.count(),
+            "contacts": request.user.contacts.count(),
+            "offers": request.user.offers.count(),
             "documents": KnowledgeSource.objects.filter(owner=request.user).exclude(key__in=["profile-cv", "careerops:cv.md"]).count(),
             "google": request.user.socialaccount_set.filter(provider="google").exists(),
         },
@@ -531,6 +581,29 @@ def export_data(request):
             {"label": v.label, "kind": v.kind, "source": v.source, "created": v.created_at.isoformat(),
              "for_job": f"{v.application.company} - {v.application.role}" if v.application else None, "content": v.content}
             for v in user.cv_versions.select_related("application")
+        ],
+        "interviews": [
+            {"for_job": f"{i.application.company} - {i.application.role}", "when": i.scheduled_at.isoformat(), "kind": i.kind,
+             "where": i.where, "notes": i.notes, "outcome": i.outcome}
+            for i in user.interviews.select_related("application")
+        ],
+        "contacts": [
+            {"name": c.name, "company": c.company, "title": c.title, "email": c.email, "link": c.link, "notes": c.notes,
+             "last_contacted": c.last_contacted.isoformat() if c.last_contacted else None,
+             "referrals": [{"for_job": f"{r.application.company} - {r.application.role}", "status": r.status, "note": r.note} for r in c.referrals.all()]}
+            for c in user.contacts.prefetch_related("referrals__application")
+        ],
+        "offers": [
+            {"for_job": f"{o.application.company} - {o.application.role}", "status": o.status, "currency": o.currency,
+             "base": str(o.base), "period": o.period, "bonus": str(o.bonus), "equity": str(o.equity),
+             "other_benefits": str(o.other_benefits), "signing": str(o.signing),
+             "deadline": o.deadline.isoformat() if o.deadline else None, "notes": o.notes}
+            for o in user.offers.select_related("application")
+        ],
+        "cover_letters": [
+            {"for_job": f"{l.application.company} - {l.application.role}", "source": l.source,
+             "created": l.created_at.isoformat(), "content": l.content}
+            for l in user.cover_letters.select_related("application")
         ],
         "applications": [
             {

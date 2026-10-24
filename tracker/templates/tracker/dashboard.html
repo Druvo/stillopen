@@ -1,34 +1,43 @@
 {% extends "tracker/base_app.html" %}
 {% block title %}Dashboard{% endblock %}
-{% block page_title %}Dashboard{% endblock %}
+{% block page_title %}{{ greeting }}{% endblock %}
 {% block page_subtitle %}
 <div class="text-secondary mt-1">
-  {% if checked_at %}Open/closed checked {{ checked_at|timesince }} ago{% else %}Open/closed not checked yet{% endif %}
+  {% if stats.total %}{% if checked_at %}We last looked at which jobs are still open {{ checked_at|timesince }} ago.{% else %}We have not yet looked at which of your jobs are still open.{% endif %}{% else %}Your job search, in one calm place.{% endif %}
 </div>
 {% endblock %}
 {% block page_actions %}
 <a class="btn btn-primary" href="{% url 'add_job' %}">Add job</a>
 {% if can_scan %}<button id="btn-scan" class="btn btn-outline-secondary" title="Searches every enabled job board for postings matching your target roles. Free -- no AI used.">Search jobs</button>{% endif %}
-<button id="btn-check" class="btn btn-outline-secondary">Check open/closed</button>
+<button id="btn-check" class="btn btn-outline-secondary" title="Looks at each job link and tells you if the posting has closed.">Are they still open?</button>
 {% if can_import %}<button id="btn-import" class="btn btn-outline-secondary">Import from career-ops</button>{% endif %}
 {% if paperless_on %}<a class="btn btn-outline-secondary" href="{{ paperless_url }}" target="_blank" rel="noopener">Paperless</a>{% endif %}
 {% endblock %}
 {% block content %}
-{% if not profile.is_complete %}
-<div class="alert alert-warning">
-  <strong>Finish your profile.</strong> Still missing: {{ profile.missing_fields|join:" and " }} -- matches won't mean much until those are set.
-  <a href="{% url 'profile' %}?welcome=1">Open profile</a>
+{% if user.is_staff and email_unverified_signups %}
+<div class="alert alert-warning">Sign-up is open, but this server has no email set up, so new people are let in without confirming their address. Set <code>EMAIL_HOST</code> (see docs/HOSTING.md) to turn confirmation back on.</div>
+{% endif %}
+{% if next_step %}
+<div class="card mb-3 border-primary">
+  <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div>
+      <div class="text-primary fw-bold" style="font-size:12px;letter-spacing:.04em">YOUR NEXT STEP</div>
+      <div class="h3 mb-1">{{ next_step.headline }}</div>
+      <div class="text-secondary">{{ next_step.body }}</div>
+    </div>
+    {% if next_step.url %}<a class="btn btn-primary" href="{{ next_step.url }}">{{ next_step.label }}</a>{% endif %}
+  </div>
 </div>
 {% endif %}
 
 <div class="card mb-3">
   <div class="card-body">
-    <label for="quickadd-url" class="form-label">Paste a job URL</label>
+    <label for="quickadd-url" class="form-label">Found a job you like? Paste its link</label>
     <div class="input-group">
       <input type="url" id="quickadd-url" class="form-control" placeholder="https://...">
-      <button id="quickadd-btn" class="btn btn-primary">Fetch &amp; review</button>
+      <button id="quickadd-btn" class="btn btn-primary">Look it up</button>
     </div>
-    <small class="form-hint">Fetches the title and description from the link, then opens Add job prefilled for you to check and save. Nothing is added until you submit that form.</small>
+    <small class="form-hint">We read the title and description from the page and let you check them first. Nothing is saved until you say so.</small>
   </div>
 </div>
 
@@ -36,17 +45,18 @@
 <div class="card mb-3" id="scan-log-card">
   <div class="card-body">
     <strong id="scan-log-title">
-      {% if scan_run.running %}Searching... {{ scan_run.done }}/{{ scan_run.total }} sources{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- {{ scan_run.found }} found, {{ scan_run.added }} new{% if scan_run.error %}, error{% endif %}{% endif %}
+      {% if scan_run.running %}{% if scan_run.done >= scan_run.total %}Sorting out the best matches for you...{% else %}Reading job sources... {{ scan_run.done }}/{{ scan_run.total }}{% endif %}{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- looked through {{ scan_run.found }} openings, {{ scan_run.added }} new for you{% endif %}
     </strong>
+    {% if scan_run.note %}<div class="text-secondary mt-1">{{ scan_run.note }}</div>{% endif %}
     {% if scan_run.error %}<div class="text-danger mt-1">{{ scan_run.error }}</div>{% endif %}
-    <details id="scan-log-details" class="mt-2" {% if not scan_run.running %}open{% endif %}>
+    <details id="scan-log-details" class="mt-2">
       <summary style="cursor:pointer">Scan log -- where it searched and what it found</summary>
       <div id="scan-log-entries" class="mt-2">
         {% for e in scan_run.entries.all %}
         <div class="d-flex justify-content-between" style="font-size:13px">
           <span>{{ e.source_name }} <span class="text-secondary">({{ e.get_connector_display }})</span></span>
           <span class="text-secondary">
-            {% if e.error %}<span class="text-danger">{{ e.error }}</span>{% else %}{{ e.found }} found, {{ e.matched }} matched, {{ e.added }} new, {{ e.duplicates }} already tracked{% endif %}
+            {% if e.error %}<span class="text-danger">{{ e.error }}</span>{% else %}{{ e.found }} found, {{ e.matched }} matched, {{ e.added }} new, {{ e.duplicates }} already tracked{% if e.outside %}, {{ e.outside }} outside your areas{% endif %}{% endif %}
           </span>
         </div>
         {% empty %}
@@ -54,6 +64,17 @@
         {% endfor %}
       </div>
     </details>
+  </div>
+</div>
+{% endif %}
+
+{% if upcoming_interviews %}
+<div class="card mb-3">
+  <div class="card-body">
+    <strong>Coming up</strong> <a class="ms-2" href="{% url 'interviews' %}">All interviews</a>
+    {% for i in upcoming_interviews %}
+    <div class="mt-2">{{ i.scheduled_at|date:"D j M, H:i" }} · {{ i.get_kind_display }} — {{ i.application.company }}, {{ i.application.role }}</div>
+    {% endfor %}
   </div>
 </div>
 {% endif %}
@@ -75,12 +96,14 @@
 </div>
 {% endif %}
 
+{% if stats.total %}
 <div class="row row-deck row-cards mb-3">
-  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{{ stats.total }}</div><div class="text-secondary">Tracked roles</div></div></div></div>
-  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{{ stats.submitted }}</div><div class="text-secondary">CV submitted</div></div></div></div>
-  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{% if stats.average_match is None %}N/A{% else %}{{ stats.average_match }}%{% endif %}</div><div class="text-secondary">Average match</div></div></div></div>
-  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{{ stats.urgent }}</div><div class="text-secondary">Deadline within {{ config.urgent_days }} days</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{{ stats.total }}</div><div class="text-secondary">Jobs you are tracking</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{{ stats.submitted }}</div><div class="text-secondary">Applications sent</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{% if stats.average_match is None %}&ndash;{% else %}{{ stats.average_match }}%{% endif %}</div><div class="text-secondary">{% if stats.average_match is None %}Average fit (check a job first){% else %}Average fit{% endif %}</div></div></div></div>
+  <div class="col-sm-6 col-lg-3"><div class="card card-sm"><div class="card-body"><div class="h1 mb-0">{{ stats.urgent }}</div><div class="text-secondary">Closing within {{ config.urgent_days }} days</div></div></div></div>
 </div>
+{% endif %}
 
 <ul class="nav nav-tabs mb-3" role="tablist">
   {% for tab in tabs %}
@@ -93,7 +116,7 @@
 <section data-panel="{{ tab.bucket.key }}" {% if not forloop.first %}hidden{% endif %}>
   {% for c in tab.cards %}
   {% with a=c.app %}
-  <article class="card mb-3 {% if c.urgent %}border-warning{% endif %}">
+  <article id="job-{{ a.pk }}" class="card mb-3 {% if c.urgent %}border-warning{% endif %}">
     <div class="card-body">
     <div class="row">
       <div class="col">
@@ -105,14 +128,14 @@
           {% if a.deadline %}
             <span class="{% if c.overdue %}text-danger{% elif c.urgent %}text-warning{% endif %}">
               Deadline {{ a.deadline|date:"j M Y" }}
-              {% if c.overdue %}(passed){% elif c.days_left == 0 %}(today){% else %}({{ c.days_left }}d left){% endif %}
+              {% if c.overdue %}(it has passed){% elif c.days_left == 0 %}(today){% elif c.days_left == 1 %}(tomorrow){% else %}(in {{ c.days_left }} days){% endif %}
             </span>
           {% endif %}
         </div>
       </div>
       <div class="col-auto text-end">
-        <div class="h2 mb-0" {% if c.band %}style="color:{{ c.band.color }}"{% endif %}>{% if c.percent is None %}N/A{% else %}{{ c.percent }}%{% endif %}</div>
-        <small class="text-secondary">{% if c.band %}{{ c.band.label }} match{% else %}match{% endif %}</small>
+        {% if c.percent is None %}<div class="text-secondary">Not checked yet</div>{% else %}<div class="h2 mb-0" {% if c.band %}style="color:{{ c.band.color }}"{% endif %}>{{ c.percent }}%</div>
+        <small class="text-secondary">{% if c.band %}{{ c.band.label }}{% else %}fit{% endif %}</small>{% endif %}
       </div>
     </div>
 
@@ -133,17 +156,17 @@
       <select data-status-for="{{ a.pk }}" aria-label="Change status" class="form-select form-select-sm" style="width:auto">
         {% for s in statuses %}<option value="{{ s.pk }}" {% if s.pk == a.status_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
       </select>
-      {% if a.url %}<a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">Job post</a>{% endif %}
+      {% if a.url %}<a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">View the posting</a>{% endif %}
       <a href="{% url 'job_edit' a.pk %}">Details</a>
-      {% if a.description or a.url %}<button data-eval="{{ a.pk }}" class="btn btn-sm btn-outline-secondary" title="Provider: {{ config.get_ai_provider_display }}">{% if a.ai_evaluated_at %}Re-evaluate{% else %}Evaluate match{% endif %}</button>{% endif %}
-      {% if a.description or a.url %}<form method="post" action="{% url 'tailor_cv' a.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-secondary" title="Make a CV tailored to this job from your own CV. Nothing is invented.">Tailor CV</button></form>{% endif %}
+      {% if a.description or a.url %}<button data-eval="{{ a.pk }}" class="btn btn-sm {% if a.ai_evaluated_at %}btn-outline-secondary{% else %}btn-primary{% endif %}" title="How we judge: {{ config.get_ai_provider_display }}">{% if a.ai_evaluated_at %}Check again{% else %}Check my fit{% endif %}</button>{% endif %}
+      {% if a.description or a.url %}<form method="post" action="{% url 'tailor_cv' a.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm {% if a.ai_evaluated_at and not c.cv %}btn-primary{% else %}btn-outline-secondary{% endif %}" title="Make a CV tailored to this job from your own CV. Nothing is invented.">Tailor my CV</button></form>{% endif %}
       {% if c.cv %}<a href="{% url 'cv_detail' c.cv.pk %}" class="badge {% if c.cv.flagged and not c.cv.approved %}bg-warning-lt{% else %}bg-green-lt{% endif %}">CV v{{ c.cv.pk }}{% if c.cv.flagged and not c.cv.approved %} · review{% endif %}</a>{% endif %}
-      <a class="btn btn-sm btn-outline-secondary" href="{% url 'apply_page' a.pk %}">{% if a.applied_date and a.applied_cv_id %}Application{% else %}Apply{% endif %}</a>
-      {% if a.ai_method %}<span class="text-secondary" style="font-size:12px">{% if a.ai_method == "keywords" %}keyword match{% else %}AI-evaluated{% endif %}</span>{% endif %}
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'apply_page' a.pk %}">{% if a.applied_date and a.applied_cv_id %}Your application{% else %}Get ready to apply{% endif %}</a>
+      {% if a.ai_method %}<span class="text-secondary" style="font-size:12px">{% if a.ai_method == "keywords" %}quick keyword check{% else %}read by AI{% endif %}</span>{% endif %}
     </div>
 
     {% if a.summary %}<div class="mt-2">{{ a.summary }}</div>{% endif %}
-    {% if a.next_action %}<div class="text-secondary mt-1">Next: {{ a.next_action }}</div>{% endif %}
+    {% if a.next_action %}<div class="text-secondary mt-1">Suggested next: {{ a.next_action }}</div>{% endif %}
 
     {% if a.applied_date and a.status.counts_as_applied %}
     <div class="text-secondary mt-2" style="font-size:13px">Applied {{ a.applied_date|date:"j M Y" }}{% if a.applied_channel %} via {{ a.get_applied_channel_display }}{% endif %}{% if a.applied_cv_id %} · sent <a href="{% url 'cv_detail' a.applied_cv_id %}">CV v{{ a.applied_cv_id }}</a>{% endif %}{% if a.follow_up_date %} · follow up {{ a.follow_up_date|date:"j M" }}{% endif %}</div>
@@ -154,7 +177,7 @@
       <summary style="cursor:pointer">Details</summary>
       <div class="mt-2">
       {% if c.strengths %}<strong>Strengths</strong><ul>{% for i in c.strengths %}<li>{{ i.text }}</li>{% endfor %}</ul>{% endif %}
-      {% if c.gaps %}<strong>Gaps and risks</strong><ul>{% for i in c.gaps %}<li>{{ i.text }}</li>{% endfor %}</ul>{% endif %}
+      {% if c.gaps %}<strong>Worth knowing</strong><ul>{% for i in c.gaps %}<li>{{ i.text }}</li>{% endfor %}</ul>{% endif %}
       {% if a.notes %}<p class="text-secondary">{{ a.notes }}</p>{% endif %}
       {% if c.documents %}
       <strong>Documents</strong>
@@ -178,7 +201,9 @@
   </article>
   {% endwith %}
   {% empty %}
-  <div class="text-center text-secondary py-5">Nothing here.</div>
+  <div class="text-center text-secondary py-5">
+    {% if not stats.total %}{% if scan_run and scan_run.running %}We are searching {{ scan_run.total }} job sources for roles that fit you. They will appear here in a minute, with nothing for you to do.{% elif scan_run and not scan_run.added %}Nothing new matched yet. Check your roles and places in <a href="{% url 'profile' %}">Profile</a>, paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% else %}No jobs yet. Paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% endif %}{% else %}Nothing here right now. That is fine.{% endif %}
+  </div>
   {% endfor %}
 </section>
 {% endfor %}
@@ -203,7 +228,7 @@ try { const saved = sessionStorage.getItem('tab'); if (saved && document.querySe
 
 document.querySelectorAll('[data-status-for]').forEach(sel => sel.addEventListener('change', async () => {
   const r = await post(`/api/application/${sel.dataset.statusFor}/status/`, {status: sel.value});
-  if (r.ok) location.reload(); else toast('Could not change status');
+  if (r.ok) location.reload(); else toast('Could not change that. Please try again.');
 }));
 
 document.querySelectorAll('[data-push]').forEach(btn => btn.addEventListener('click', async () => {
@@ -214,9 +239,9 @@ document.querySelectorAll('[data-push]').forEach(btn => btn.addEventListener('cl
 
 document.querySelectorAll('[data-eval]').forEach(btn => btn.addEventListener('click', async () => {
   const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Evaluating...';
+  btn.disabled = true; btn.textContent = 'Reading the posting...';
   const r = await post(`/api/application/${btn.dataset.eval}/evaluate/`);
-  if (r.data.ok) location.reload(); else { toast(r.data.error || 'Evaluation failed'); btn.disabled = false; btn.textContent = label; }
+  if (r.data.ok) location.reload(); else { toast(r.data.error || 'That did not work this time. Please try again.'); btn.disabled = false; btn.textContent = label; }
 }));
 
 const importBtn = document.getElementById('btn-import');
@@ -244,10 +269,10 @@ const quickaddBtn = document.getElementById('quickadd-btn');
 const quickaddUrl = document.getElementById('quickadd-url');
 quickaddBtn.addEventListener('click', async () => {
   const url = quickaddUrl.value.trim();
-  if (!url) { toast('Paste a job URL first'); return; }
-  quickaddBtn.disabled = true; quickaddBtn.textContent = 'Fetching...';
+  if (!url) { toast('Paste a job link first'); return; }
+  quickaddBtn.disabled = true; quickaddBtn.textContent = 'Looking...';
   const r = await post('/api/jobs/quickadd/', {url});
-  quickaddBtn.disabled = false; quickaddBtn.textContent = 'Fetch & review';
+  quickaddBtn.disabled = false; quickaddBtn.textContent = 'Look it up';
   if (!r.data.ok) { toast(r.data.error || 'Could not fetch that page'); return; }
   location.href = "{% url 'add_job' %}";
 });
@@ -261,7 +286,7 @@ function renderScanEntries(entries) {
   box.innerHTML = entries.map(e => `
     <div class="d-flex justify-content-between" style="font-size:13px">
       <span>${e.source} <span class="text-secondary">(${e.connector})</span></span>
-      <span class="text-secondary">${e.error ? `<span class="text-danger">${e.error}</span>` : `${e.found} found, ${e.matched} matched, ${e.added} new, ${e.duplicates} already tracked`}</span>
+      <span class="text-secondary">${e.error ? `<span class="text-danger">${e.error}</span>` : `${e.found} found, ${e.matched} matched, ${e.added} new, ${e.duplicates} already tracked${e.outside ? `, ${e.outside} outside your areas` : ''}`}</span>
     </div>`).join('');
 }
 async function scanPoll() {
@@ -269,8 +294,8 @@ async function scanPoll() {
   renderScanEntries(s.entries || []);
   const title = document.getElementById('scan-log-title');
   if (s.running) {
-    if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = `Searching ${s.done}/${s.total}...`; }
-    if (title) title.textContent = `Searching... ${s.done}/${s.total} sources`;
+    if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = s.done >= s.total ? 'Sorting...' : `Reading ${s.done}/${s.total}...`; }
+    if (title) title.textContent = s.done >= s.total ? 'Sorting out the best matches for you...' : `Reading job sources... ${s.done}/${s.total}`;
     setTimeout(scanPoll, 1500);
   } else if (scanBtn && scanBtn.disabled) {
     location.reload();

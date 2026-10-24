@@ -35,19 +35,25 @@ title_key at the same source, seen across more than one calendar day. Two concur
 day are not flagged -- same discipline as career-ops' own detect-reposts.mjs (2+ distinct URLs, 2+ distinct
 scan dates). This is an observation, never a verdict: a real company can legitimately re-post a role.
 """
+import hashlib
+import html
 import re
 import threading
 from collections import Counter
 from datetime import timedelta
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeout
+
 from django.conf import settings
+from django.core.cache import cache
 from django.db import connections
 from django.utils import timezone
 
 from tracker.models import (
     Application, Event, JobSource, Posting, PostingSighting, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile,
 )
-from tracker.services import geo, knowledge
+from tracker.services import ai, fit, geo, knowledge
 from tracker.services.jobtext import html_to_text
 from tracker.services.netguard import FetchError, safe_get
 from tracker.services.text import terms as _terms
@@ -106,6 +112,35 @@ def record_sighting(source: JobSource, title: str, url: str, location: str, comp
     return posting
 
 
+def record_sightings(source: JobSource, postings: list[dict], seen_date=None) -> None:
+    """record_sighting for a whole list of postings from one source in a handful of queries instead of two per
+    posting (a first search reads ~20,000 openings). Same result: the Posting is created or refreshed and marked seen today."""
+    seen_date = seen_date or timezone.localdate()
+    rows, urls = [], set()
+    for p in postings:
+        url = p["url"][:600]
+        if url in urls:
+            continue
+        urls.add(url)
+        company = (p.get("company") or source.name).strip()
+        rows.append(Posting(
+            source=source, url=url, title=p["title"][:300], company=company[:160],
+            title_key=title_key(f"{company} :: {p['title']}"), location=(p.get("location") or "")[:160],
+        ))
+    for i in range(0, len(rows), 500):
+        Posting.objects.bulk_create(
+            rows[i:i + 500], update_conflicts=True, unique_fields=["source", "url"],
+            update_fields=["title", "company", "title_key", "location", "last_seen_at"],
+        )
+    ids = {}
+    ordered = list(urls)
+    for i in range(0, len(ordered), 500):
+        ids.update(Posting.objects.filter(source=source, url__in=ordered[i:i + 500]).values_list("url", "pk"))
+    PostingSighting.objects.bulk_create(
+        [PostingSighting(posting_id=pk, seen_date=seen_date) for pk in ids.values()], batch_size=500, ignore_conflicts=True,
+    )
+
+
 def repost_signal(posting: Posting) -> dict | None:
     """None if `posting` shows no repost pattern; otherwise the evidence -- never a verdict on why."""
     siblings = Posting.objects.filter(source_id=posting.source_id, title_key=posting.title_key)
@@ -121,14 +156,46 @@ def repost_signal(posting: Posting) -> dict | None:
     }
 
 
+_FILLER = {
+    "senior", "sr", "junior", "jr", "lead", "staff", "principal", "head", "chief", "associate", "intern", "the", "a", "an",
+    "and", "of", "for", "in", "at", "i", "ii", "iii", "iv", "remote", "hybrid", "new", "grad",
+}
+_SYNONYMS = {"developer": "engineer", "dev": "engineer", "programmer": "engineer", "swe": "engineer", "sde": "engineer", "engineers": "engineer", "developers": "engineer"}
+_COMPOUNDS = [("back-end", "backend"), ("back end", "backend"), ("front-end", "frontend"), ("front end", "frontend"),
+              ("full-stack", "fullstack"), ("full stack", "fullstack"), ("dev ops", "devops"), ("machine learning", "ml")]
+_WORD = re.compile(r"[a-z0-9+#.]+")
+
+
+def _normalise_title(text: str) -> set[str]:
+    text = (text or "").lower()
+    for old, new in _COMPOUNDS:
+        text = text.replace(old, new)
+    return {_SYNONYMS.get(w.strip("."), w.strip(".")) for w in _WORD.findall(text) if w.strip(".")}
+
+
 def _matches(title: str, roles: list[str]) -> bool:
+    """A posting title fits a target role when the role's own words are all in the title, in any order:
+    "Backend Engineer" matches "Senior Software Engineer, Back-end" and "Backend Developer". Seniority words
+    are ignored here (the fit check handles seniority). The role as a plain phrase still matches too."""
     if not roles or not title:
         return False
     t = title.lower()
-    return any(r in t for r in roles)
+    words = _normalise_title(title)
+    for role in roles:
+        if role in t:
+            return True
+        core = _normalise_title(role) - _FILLER
+        if core and core <= words:
+            return True
+    return False
 
 
-def _blurb(raw_html: str, limit: int = 4000) -> str:
+def _tidy_place(text: str) -> str:
+    """'Beijing, , China' (an empty region in the middle) becomes 'Beijing, China'."""
+    return ", ".join(part.strip() for part in (text or "").split(",") if part.strip())
+
+
+def _blurb(raw_html: str, limit: int = 2000) -> str:
     """Plain text from an HTML description field, trimmed -- only ever used for skill-term overlap, never
     stored or shown, so a few KB of context is plenty and keeps per-posting parsing cheap."""
     return html_to_text(raw_html or "")[:limit] if raw_html else ""
@@ -185,17 +252,25 @@ def fetch_ashby(token: str) -> list[dict]:
 def fetch_smartrecruiters(token: str) -> list[dict]:
     # The list endpoint has no description field (SmartRecruiters only returns it from a per-posting detail
     # call) -- title-only matching, same as before, for this one connector.
-    resp = safe_get(f"https://api.smartrecruiters.com/v1/companies/{token}/postings", timeout=20)
-    if resp.status_code != 200:
-        raise FetchError(f"HTTP {resp.status_code}")
-    out = []
-    for j in resp.json().get("content", []):
-        posting_id = j.get("id", "")
-        out.append({
-            "title": j.get("name", ""),
-            "url": f"https://jobs.smartrecruiters.com/{token}/{posting_id}" if posting_id else "",
-            "location": (j.get("location") or {}).get("fullLocation", ""),
-        })
+    out, offset = [], 0
+    while True:  # 100 a page; large employers (Grab, Delivery Hero) have several pages
+        resp = safe_get(f"https://api.smartrecruiters.com/v1/companies/{token}/postings?limit=100&offset={offset}", timeout=20)
+        if resp.status_code != 200:
+            if offset == 0:
+                raise FetchError(f"HTTP {resp.status_code}")
+            break
+        data = resp.json()
+        page = data.get("content", [])
+        for j in page:
+            posting_id = j.get("id", "")
+            out.append({
+                "title": j.get("name", ""),
+                "url": f"https://jobs.smartrecruiters.com/{token}/{posting_id}" if posting_id else "",
+                "location": _tidy_place((j.get("location") or {}).get("fullLocation", "")),
+            })
+        offset += len(page)
+        if not page or offset >= min(int(data.get("totalFound") or 0), SMARTRECRUITERS_MAX):
+            break
     return out
 
 
@@ -290,6 +365,133 @@ def fetch_himalayas(token: str) -> list[dict]:
     return out
 
 
+def fetch_remotive(token: str) -> list[dict]:
+    """Remotive's public API (https://remotive.com/api/remote-jobs). `token` is ignored. Aggregator."""
+    resp = safe_get("https://remotive.com/api/remote-jobs", timeout=30)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    return [{
+        "title": j.get("title", ""), "url": j.get("url", ""),
+        "location": j.get("candidate_required_location") or "Remote",
+        "company": j.get("company_name", ""), "description": _blurb(j.get("description", "")),
+    } for j in resp.json().get("jobs", [])]
+
+
+def fetch_arbeitnow(token: str) -> list[dict]:
+    """Arbeitnow's public job-board API (https://www.arbeitnow.com/api/job-board-api). Mostly Germany and
+    visa-sponsored roles in Europe. `token` is ignored. Aggregator."""
+    resp = safe_get("https://www.arbeitnow.com/api/job-board-api", timeout=30)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    out = []
+    for j in resp.json().get("data", []):
+        place = (j.get("location") or "").strip()
+        out.append({
+            "title": j.get("title", ""), "url": j.get("url", ""),
+            "location": f"{place} (remote)" if j.get("remote") and place else ("Remote" if j.get("remote") else place),
+            "company": j.get("company_name", ""), "description": _blurb(html.unescape(j.get("description", ""))),
+        })
+    return out
+
+
+def fetch_jobicy(token: str) -> list[dict]:
+    """Jobicy's public remote-jobs API (https://jobicy.com/api/v2/remote-jobs). `token` is ignored. Aggregator."""
+    resp = safe_get("https://jobicy.com/api/v2/remote-jobs?count=100", timeout=30)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    return [{
+        "title": j.get("jobTitle", ""), "url": j.get("url", ""),
+        "location": f"Remote ({j['jobGeo']})" if j.get("jobGeo") else "Remote",
+        "company": j.get("companyName", ""), "description": _blurb(j.get("jobDescription") or j.get("jobExcerpt", "")),
+    } for j in resp.json().get("jobs", [])]
+
+
+def fetch_workingnomads(token: str) -> list[dict]:
+    """Working Nomads' public feed (https://www.workingnomads.com/api/exposed_jobs/). `token` is ignored. Aggregator."""
+    resp = safe_get("https://www.workingnomads.com/api/exposed_jobs/", timeout=30)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    return [{
+        "title": j.get("title", ""), "url": j.get("url", ""), "location": j.get("location") or "Remote",
+        "company": j.get("company_name", ""), "description": _blurb(j.get("description", "")),
+    } for j in resp.json()]
+
+
+def fetch_themuse(token: str) -> list[dict]:
+    """The Muse's public jobs API (https://www.themuse.com/api/public/jobs), first few pages. `token` is ignored. Aggregator."""
+    out, pages = [], 1
+    page = 1
+    while page <= min(pages, 5):
+        resp = safe_get(f"https://www.themuse.com/api/public/jobs?page={page}", timeout=30)
+        if resp.status_code != 200:
+            if page == 1:
+                raise FetchError(f"HTTP {resp.status_code}")
+            break
+        data = resp.json()
+        pages = int(data.get("page_count") or 1)
+        for j in data.get("results", []):
+            places = ", ".join(l.get("name", "") for l in j.get("locations", []) if l.get("name"))
+            out.append({
+                "title": j.get("name", ""), "url": (j.get("refs") or {}).get("landing_page", ""),
+                "location": places or "Remote", "company": (j.get("company") or {}).get("name", ""),
+                "description": _blurb(j.get("contents", "")),
+            })
+        page += 1
+    return out
+
+
+SMARTRECRUITERS_MAX = 500  # most postings read from one employer
+
+
+JOOBLE_PLACES = {
+    "bd": "Bangladesh", "my": "Malaysia", "ae": "United Arab Emirates", "sa": "Saudi Arabia",
+    "qa": "Qatar", "kw": "Kuwait", "bh": "Bahrain", "om": "Oman",
+}
+JOOBLE_ROLES_PER_PLACE = 3
+_TAG = re.compile(r"<[^>]+>")
+
+
+def fetch_jooble(token: str, roles: list[str] | None = None, key: str = "") -> list[dict]:
+    """Jooble's partner search API (POST https://jooble.org/api/<key>, JSON {keywords, location, page}). Unlike a company
+    board this is a search, so it is asked for one person's own target roles in one country (`token`: bd, my, ae...).
+    Needs the site's free Jooble key; no key or no roles means nothing to ask. Aggregator: company varies per posting.
+    The key is part of the URL, so it is never put in an error message or a log line."""
+    place = JOOBLE_PLACES.get((token or "").lower())
+    if place is None:
+        raise FetchError("Unknown Jooble place.")
+    if not key or not roles:
+        return []
+    from tracker.services.netguard import check_public_url
+    import requests
+
+    url = f"https://jooble.org/api/{key}"
+    check_public_url("https://jooble.org/")
+    out, seen = [], set()
+    for role in roles[:JOOBLE_ROLES_PER_PLACE]:
+        try:
+            resp = requests.post(url, json={"keywords": role, "location": place, "page": 1}, timeout=20, allow_redirects=False,
+                                 headers={"User-Agent": "StillOpen/1.0"})
+        except requests.RequestException as exc:
+            raise FetchError(f"Request failed: {exc.__class__.__name__}") from exc
+        if resp.status_code in (401, 403, 404):
+            raise FetchError("Jooble did not accept the key. Check it in Site configuration.")
+        if resp.status_code != 200:
+            raise FetchError(f"HTTP {resp.status_code}")
+        for j in (resp.json() or {}).get("jobs", []):
+            link = j.get("link") or ""
+            if not link or link in seen:
+                continue
+            seen.add(link)
+            where = (j.get("location") or "").strip()
+            if place.lower() not in where.lower():
+                where = f"{where}, {place}" if where else place
+            out.append({
+                "title": _TAG.sub("", j.get("title", "")).strip(), "url": link, "location": where,
+                "company": (j.get("company") or "").strip(), "description": _blurb(j.get("snippet", "")),
+            })
+    return out
+
+
 def _fetch(connector: str, token: str) -> list[dict]:
     # Resolved by name against this module's own namespace (not a dict built at import time) so that
     # mock.patch("tracker.services.scan.fetch_greenhouse", ...) in tests reaches the call that's actually made.
@@ -303,31 +505,165 @@ def _existing_urls(owner) -> set[str]:
     return set(Application.objects.filter(owner=owner).exclude(url="").values_list("url", flat=True))
 
 
+def _job_key(company: str, title: str) -> tuple[str, str]:
+    return (re.sub(r"\W+", " ", (company or "").lower()).strip(), re.sub(r"\W+", " ", (title or "").lower()).strip())
+
+
+def _existing_job_keys(owner) -> dict[tuple[str, str], set]:
+    """Company+title of everything the person already tracks, with the source each came from (None: added by hand).
+    The same role at one company in several cities is several postings on one source, so only a copy turning up on
+    a DIFFERENT source (the same job on two job sites) counts as a duplicate."""
+    keys: dict[tuple[str, str], set] = {}
+    for company, role, source_id in Application.objects.filter(owner=owner).values_list("company", "role", "posting__source_id"):
+        keys.setdefault(_job_key(company, role), set()).add(source_id)
+    return keys
+
+
+def _triple(company: str, title: str, location: str) -> tuple[str, str, str]:
+    return _job_key(company, title) + (re.sub(r"\W+", " ", (location or "").lower()).strip(),)
+
+
+def _existing_triples(owner) -> set[tuple[str, str, str]]:
+    """Company + title + place of everything tracked. Big employers post the same role many times over (one per team,
+    each with its own link); one of them is enough on a dashboard."""
+    return {_triple(c, r, loc) for c, r, loc in Application.objects.filter(owner=owner).values_list("company", "role", "location_text")}
+
+
+def _is_cross_source_duplicate(existing_jobs: dict, company: str, title: str, source) -> bool:
+    sources = existing_jobs.get(_job_key(company, title))
+    return sources is not None and source.pk not in sources
+
+
+def _fetch_cached(source: JobSource, roles: list[str] | None = None, jooble_key: str = "") -> list[dict]:
+    """One read of a source's public list is shared by every person's search for a while, so a hundred people
+    searching never means a hundred requests to the same company (and public feeds with a fair-use limit stay happy)."""
+    seconds = settings.STILLOPEN_SCAN_CACHE_SECONDS
+    key = f"scan-source:{source.connector}:{source.board_token}"
+    if source.connector == "jooble":  # a search, not a list: the answer depends on whose roles were asked for
+        key += ":" + hashlib.md5("|".join(sorted((roles or [])[:JOOBLE_ROLES_PER_PLACE])).encode()).hexdigest()[:16]
+    if seconds > 0:
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+    if not TOKEN_RE.match(source.board_token):
+        raise FetchError("Invalid board token.")
+    if source.connector == "jooble":
+        postings = fetch_jooble(source.board_token, roles, jooble_key)
+    else:
+        postings = _fetch(source.connector, source.board_token)
+    if seconds > 0:
+        cache.set(key, postings, timeout=seconds)
+    return postings
+
+
+def searchable_sources(owner):
+    """The enabled sources a person's search can really use. Jooble sources need the site's key and the person's roles."""
+    qs = JobSource.for_user(owner, enabled=True)
+    if not SiteConfig.load().effective_jooble_key or not _roles(owner):
+        qs = qs.exclude(connector="jooble")
+    return qs
+
+
+GENERIC_MIN_CORPUS = 200
+
+
+def _common_terms(fetched: dict, share: float, only: set[str] | None = None) -> set[str]:
+    """Words so common across everything just read that they say nothing about any one job ("software", "systems",
+    "build", "engineering"). Measured on the postings themselves, so it adapts to whatever the sources hold. With `only`,
+    just those words are counted (much cheaper)."""
+    total, counts = 0, Counter()
+    for postings in fetched.values():
+        if isinstance(postings, Exception):
+            continue
+        for p in postings:
+            total += 1
+            words = set(_terms(f"{p.get('title', '')} {p.get('description', '')}"))
+            counts.update(words & only if only is not None else words)
+    if total < GENERIC_MIN_CORPUS:  # too few postings for "common" to mean anything
+        return set()
+    return {term for term, n in counts.items() if n / total > share}
+
+
+def _generic_terms(fetched: dict, skill_terms: set[str], share: float) -> set[str]:
+    """Of the person's own skill words, the ones that are generic filler across everything just read."""
+    return _common_terms(fetched, share, only=skill_terms) if skill_terms else set()
+
+
+def _prefetch(sources: list[JobSource], roles: list[str] | None = None, jooble_key: str = "", on_progress=None) -> dict[int, object]:
+    """Read every source at once (they are different hosts, so this is polite and about 8x faster than one by one).
+    Maps source id to its postings, or to the exception that stopped it."""
+    def one(source):
+        try:
+            return source.pk, _fetch_cached(source, roles, jooble_key)
+        except Exception as exc:  # noqa: BLE001 - recorded on that source's log entry; the others carry on
+            return source.pk, exc
+    pool = ThreadPoolExecutor(max_workers=max(1, settings.STILLOPEN_SCAN_FETCH_THREADS))
+    futures = {pool.submit(one, source): source for source in sources}
+    results = {}
+    try:
+        for future in as_completed(futures, timeout=settings.STILLOPEN_SCAN_DEADLINE_SECONDS):
+            pk, value = future.result()
+            results[pk] = value
+            if on_progress:
+                on_progress(len(results))  # the person watches a counter move instead of a dead "0/118"
+    except FuturesTimeout:
+        pass
+    for future in (f for f in futures if futures[f].pk not in results):
+        # One slow host must not hold up everyone's search. Its request carries on in the background and, when it
+        # finishes, lands in the shared cache, so the next search has it ready.
+        results[futures[future].pk] = FetchError("Took too long this time; it is tried again on your next search.")
+    pool.shutdown(wait=False, cancel_futures=True)
+    return results
+
+
 def _worker(run_id: int):
     try:
         run = ScanRun.objects.select_related("owner").get(pk=run_id)
         owner = run.owner
+        config = SiteConfig.for_user(owner)
+        profile = UserProfile.for_user(owner)
+        areas = list(owner.search_areas.all())
         roles = _roles(owner)
         skill_terms = _skill_terms(owner)
+        cv_text = knowledge.all_candidate_text(config, owner)
         min_overlap = settings.STILLOPEN_SKILL_MATCH_MIN_OVERLAP
         existing = _existing_urls(owner)
+        existing_jobs = _existing_job_keys(owner)
+        existing_triples = _existing_triples(owner)
         default_status = Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first()
         room = max(0, settings.STILLOPEN_MAX_APPLICATIONS - Application.objects.filter(owner=owner).count())
-        capped = False
-        for source in JobSource.objects.filter(enabled=True):
+        new_cap = max(0, settings.STILLOPEN_SCAN_MAX_NEW)
+        today = timezone.localdate()
+        sources = list(searchable_sources(owner))
+        def reading(count):
+            ScanRun.objects.filter(pk=run.pk).update(done=count)
+            run.done = count
+
+        fetched = _prefetch(sources, roles, SiteConfig.load().effective_jooble_key, on_progress=reading)  # key read here: worker threads must not touch the database
+        common = _common_terms(fetched, settings.STILLOPEN_SCAN_GENERIC_SHARE)
+        if common:
+            cache.set("scan-common-terms", frozenset(common), 7 * 24 * 3600)  # so a later one-off "Check my fit" scores the same way
+        skill_terms = skill_terms - common
+        pool = []  # every clear, in-area, not-yet-tracked match from every source, ranked together at the end
+        for source in sources:
             entry = ScanLogEntry(run=run, source_name=source.name, connector=source.connector)
             try:
-                if not TOKEN_RE.match(source.board_token):
-                    raise FetchError("Invalid board token.")
-                postings = _fetch(source.connector, source.board_token)
+                postings = fetched[source.pk]
+                if isinstance(postings, Exception):
+                    raise postings
                 entry.found = len(postings)
+                fresh = []
+                seen_today = set(PostingSighting.objects.filter(seen_date=today, posting__source=source).values_list("posting__url", flat=True))
                 for p in postings:
                     if not p["url"] or not p["title"]:
                         continue
                     # Recorded regardless of match: a repost pattern is a property of the posting/company,
                     # not of any one person's target roles, so it should build up even from scans that match
-                    # nothing for this particular user.
-                    posting = record_sighting(source, p["title"], p["url"], p.get("location") or "", company=p.get("company"))
+                    # nothing for this particular user. Already recorded today (by anyone's search): no write.
+                    posting = None
+                    if p["url"][:600] not in seen_today:
+                        fresh.append(p)
+                        seen_today.add(p["url"][:600])
                     role_matched = _matches(p["title"], roles)
                     overlap = set() if role_matched else _skill_overlap(
                         f"{p['title']} {p.get('description', '')}", skill_terms,
@@ -335,48 +671,109 @@ def _worker(run_id: int):
                     if not role_matched and len(overlap) < min_overlap:
                         continue
                     entry.matched += 1
-                    if p["url"] in existing:
+                    company = p.get("company") or source.name
+                    if (p["url"] in existing or _is_cross_source_duplicate(existing_jobs, company, p["title"], source)
+                            or _triple(company, p["title"], p.get("location") or "") in existing_triples):
                         entry.duplicates += 1
                         continue
-                    if room <= 0:
-                        capped = True
-                        break
-                    app = Application(
-                        owner=owner,
-                        company=p.get("company") or source.name,
-                        role=p["title"][:200],
-                        url=p["url"][:600],
-                        location_text=(p.get("location") or "")[:160],
-                        status=default_status,
-                        found_date=timezone.localdate(),
-                        posting=posting,
-                    )
-                    app.save()
-                    geo.fill_details(app)
-                    if not role_matched:
-                        Event.objects.create(
-                            application=app, kind="note",
-                            text=f"Found by skill match, not a listed target role -- shared: {', '.join(sorted(overlap)[:6])}",
-                        )
-                    existing.add(p["url"])
-                    entry.added += 1
-                    run.added += 1
-                    room -= 1
+                    # Clear location mismatches are left out (every posting stays visible under All postings).
+                    description = p.get("description") or ""
+                    probe = Application(owner=owner, company=company, role=p["title"][:200], location_text=(p.get("location") or "")[:160], description=description)
+                    found = geo.detect(probe.role, f"{probe.location_text}\n{description}")
+                    # The feed's own LOCATION field decides the country, not prose in the description (a company calling
+                    # itself "global" must not turn a United States only job into a worldwide one).
+                    place_codes = geo.location_codes(probe.location_text)
+                    if len(place_codes) == 1:
+                        found["country"] = next(iter(place_codes))
+                    elif probe.location_text:
+                        found.pop("country", None)
+                    for name, value in found.items():
+                        if name != "location_text" or not probe.location_text:
+                            setattr(probe, name, value)
+                    if areas and (fit.clearly_outside(probe, areas, profile) or fit.region_outside(place_codes, areas, profile)):
+                        entry.outside += 1
+                        continue
+                    area_state = fit.area_status(probe, areas, profile)
+                    try:
+                        thin = len(set(_terms(description))) < settings.STILLOPEN_SCAN_MIN_TERMS_TO_SCORE
+                        result = None if thin or not cv_text.strip() else ai.keyword_match(description, cv_text, ignore=common)
+                    except ai.AIError:
+                        result = None
+                    percent = result["match_percent"] if result else -1
+                    pool.append({
+                        "rank": (0 if area_state == "yes" else 1, not role_matched, -percent, len(pool)), "role_matched": role_matched, "overlap": overlap,
+                        "p": p, "company": company, "source": source, "posting": posting, "probe": probe, "found": found,
+                        "result": result, "entry": entry,
+                    })
+                record_sightings(source, fresh, today)
             except (FetchError, KeyError, ValueError) as exc:
                 entry.error = str(exc)[:300]
             except Exception as exc:  # noqa: BLE001 - recorded on the entry, scan continues with the next source
                 entry.error = str(exc)[:300]
             entry.save()
             run.found += entry.found
-            run.done += 1
-            run.save(update_fields=["done", "found", "added"])
-            if capped:
+            run.save(update_fields=["found"])
+
+        # The best matches across every source: ones that clearly fit a search area first, then ones that fit a listed
+        # role, then by how well the person's own CV covers what the posting talks about. The cap keeps the best, never
+        # just whatever source came first.
+        pool.sort(key=lambda item: item["rank"])
+        per_company_cap = max(0, settings.STILLOPEN_SCAN_MAX_PER_COMPANY)
+        from_company: Counter = Counter()
+        touched = set()
+        for item in pool:
+            if room <= 0:
                 run.error = (
                     f"Stopped early: you're at your {settings.STILLOPEN_MAX_APPLICATIONS}-job tracker limit. "
                     "Delete some roles, or raise STILLOPEN_MAX_APPLICATIONS, then search again."
                 )
-                run.save(update_fields=["error"])
                 break
+            if new_cap and run.added >= new_cap:
+                run.note = (
+                    f"Showing the {new_cap} best new matches. Search again later for more; "
+                    "the rest are still under All postings."
+                )
+                break
+            p, probe, found, result, entry = item["p"], item["probe"], item["found"], item["result"], item["entry"]
+            company_key = item["company"].strip().lower()
+            if per_company_cap and from_company[company_key] >= per_company_cap:
+                continue  # a fair spread: one employer cannot fill the whole list
+            triple = _triple(item["company"], p["title"], p.get("location") or "")
+            if (p["url"] in existing or _is_cross_source_duplicate(existing_jobs, item["company"], p["title"], item["source"])
+                    or triple in existing_triples):
+                continue  # the same job on two sources, or the same role posted again for another team: the better-ranked copy was added
+            posting = item["posting"] or Posting.objects.filter(source=item["source"], url=p["url"][:600]).first()
+            app = Application(
+                owner=owner, company=item["company"][:160], role=p["title"][:200], url=p["url"][:600],
+                location_text=(probe.location_text or "")[:160], description=probe.description, status=default_status,
+                found_date=today, posting=posting,
+                **{k: getattr(probe, k) for k in found if k != "location_text"},
+            )
+            if found:
+                app.details_source = "detected"
+            app.save()
+            if result:
+                ai.store_result(app, result, config, "keywords", note="found by search")
+            if not item["role_matched"]:
+                Event.objects.create(
+                    application=app, kind="note",
+                    text=f"Found by skill match, not a listed target role -- shared: {', '.join(sorted(item['overlap'])[:6])}",
+                )
+            existing.add(p["url"])
+            from_company[company_key] += 1
+            existing_triples.add(triple)
+            existing_jobs.setdefault(_job_key(item["company"], p["title"]), set()).add(item["source"].pk)
+            entry.added += 1
+            touched.add(id(entry))
+            run.added += 1
+            run.added_ids.append(app.pk)
+            room -= 1
+        for entry in {id(i["entry"]): i["entry"] for i in pool}.values():
+            if id(entry) in touched:
+                entry.save(update_fields=["added"])
+        run.done = len(sources)
+        run.save(update_fields=["added", "added_ids", "error", "note", "done"])
+        PostingSighting.objects.filter(seen_date__lt=today - timedelta(days=180)).delete()
     except Exception as exc:  # noqa: BLE001 - recorded on the run
         ScanRun.objects.filter(pk=run_id).update(error=str(exc)[:500])
     finally:
@@ -399,10 +796,68 @@ def start_run(owner, background: bool = True) -> ScanRun:
     existing = current_run(owner)
     if existing and existing.running:
         return existing
-    run = ScanRun.objects.create(owner=owner, total=JobSource.objects.filter(enabled=True).count())
+    run = ScanRun.objects.create(owner=owner, total=searchable_sources(owner).count())
     if background:
         threading.Thread(target=_worker, args=(run.pk,), daemon=True).start()
     else:
         _worker(run.pk)
         run.refresh_from_db()
     return run
+
+
+def scan_digest_text(apps) -> str:
+    lines = ["New jobs matching your search on StillOpen:", ""]
+    for app in apps:
+        where = f" ({app.location_text})" if app.location_text else ""
+        lines.append(f"- {app.company} - {app.role}{where}")
+        if app.url:
+            lines.append(f"  {app.url}")
+    lines += ["", "They are saved on your dashboard. Open it to check each fit and decide what to apply to.",
+              "Turn these emails off any time under Profile > Job alerts."]
+    return "\n".join(lines)
+
+
+def send_scan_digest(owner, run: ScanRun) -> bool:
+    """One email per person per scheduled run listing what that run added. Nothing is sent when nothing was added,
+    or when the person has no verified address."""
+    from allauth.account.models import EmailAddress
+    from django.core.mail import send_mail
+
+    apps = list(Application.objects.filter(owner=owner, pk__in=run.added_ids))
+    if not apps:
+        return False
+    if not EmailAddress.objects.filter(user=owner, email=owner.email, verified=True).exists():
+        return False
+    count = len(apps)
+    send_mail(
+        subject=f"StillOpen: {count} new job{'s' if count != 1 else ''} for you",
+        message=scan_digest_text(apps),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[owner.email],
+        fail_silently=False,
+    )
+    return True
+
+
+def maybe_auto_start(owner) -> ScanRun | None:
+    """Search on the person's behalf when they open their dashboard and their last search is older than
+    `SiteConfig.auto_scan_hours` (0 turns it off). No button, no cron, no AI: jobs are simply there. Runs only for
+    someone who has said what they want (a target role or a CV), never twice at once, and never more often than that
+    interval, whether or not the last search found anything."""
+    if not settings.STILLOPEN_AUTO_SCAN:
+        return None
+    hours = SiteConfig.load().auto_scan_hours
+    if hours <= 0:
+        return None
+    profile = UserProfile.for_user(owner)
+    if not (profile.target_roles.strip() or (profile.profile_cv or "").strip()):
+        return None
+    if not searchable_sources(owner).exists():
+        return None
+    last = ScanRun.objects.filter(owner=owner).first()
+    if last is not None:
+        if last.running and timezone.now() - last.started_at <= STALE_AFTER:
+            return None
+        if timezone.now() - last.started_at < timedelta(hours=hours):
+            return None
+    return start_run(owner)

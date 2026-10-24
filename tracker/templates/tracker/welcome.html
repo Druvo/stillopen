@@ -1,0 +1,27 @@
+{% extends "tracker/base_app.html" %}
+{% load form_tags %}
+{% block title %}Welcome{% endblock %}
+{% block page_title %}Welcome. Let's get you started.{% endblock %}
+{% block page_subtitle %}A few quick questions so we can find jobs that fit you, and where you could really do them. You can skip this and fill it in later.{% endblock %}
+{% block content %}
+<div class="row"><div class="col-lg-8">
+<form method="post" enctype="multipart/form-data" class="card card-body">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for field in form.visible_fields %}
+  <div class="mb-3">
+    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+    {{ field|bootstrap_field }}
+    {% if field.help_text %}<div class="form-hint">{{ field.help_text }}</div>{% endif %}
+    {{ field.errors }}
+  </div>
+  {% endfor %}
+  <div class="d-flex gap-2 align-items-center">
+    <button type="submit" class="btn btn-primary">Find jobs for me</button>
+    <button type="submit" form="skip-form" class="btn btn-link text-secondary">Skip for now</button>
+  </div>
+</form>
+<form id="skip-form" method="post" action="{% url 'welcome_skip' %}">{% csrf_token %}</form>
+<p class="text-secondary mt-3" style="font-size:13px">Your answers stay private to you. Nothing is ever sent to an employer, and we never apply for you.</p>
+</div></div>
+{% endblock %}

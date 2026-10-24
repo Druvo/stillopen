@@ -100,6 +100,39 @@ def _needs(area: SearchArea) -> int:
     return int(area.needs_visa_sponsorship) + int(area.needs_relocation_support) + int(bool(area.min_salary))
 
 
+def area_status(app: Application, areas: list, profile: UserProfile | None = None) -> str:
+    """The best any of the person's search areas can say about this posting: "yes" (it clearly fits one), "maybe" (the
+    posting does not say enough, or the person has no areas) or "no" (it is stated to be outside every area)."""
+    if not areas or not (app.country or app.arrangement or app.location_text):
+        return "maybe"
+    home = profile.home_country if profile else ""
+    statuses = {_area_status(area, app, home) for area in areas}
+    return "yes" if "yes" in statuses else "maybe" if "maybe" in statuses else "no"
+
+
+def region_outside(place_codes: set[str], areas: list, profile: UserProfile | None = None) -> bool:
+    """A posting whose location names several countries ("Hong Kong; Singapore", "Remote - European Union", "United States
+    and Canada") fits only if the person lives in one of them or one of their own search areas names one. "Anywhere" does
+    not count: it means any remote job, not that every region will take you. No places or no named countries: never excluded."""
+    if len(place_codes) < 2 or not areas:
+        return False
+    if profile and profile.home_country and profile.home_country.upper() in place_codes:
+        return False
+    for area in areas:
+        codes = geo.resolve_place(area.place)
+        if codes and "*" not in codes and place_codes & set(codes):
+            return False
+        if codes is None and any(area.place.lower() == geo.country_name(c).lower() for c in place_codes):
+            return False
+    return True
+
+
+def clearly_outside(app: Application, areas: list, profile: UserProfile | None = None) -> bool:
+    """True only when the posting states enough about where it is that no search area can take it. A job with
+    no stated place, or one that might fit, is never excluded: the search leaves out clear mismatches, not unknowns."""
+    return bool(areas) and area_status(app, areas, profile) == "no"
+
+
 def fit_flags(app: Application, areas: list | None = None, profile: UserProfile | None = None) -> list[dict]:
     """All fit messages for `app` against its owner's profile. Pass `areas` and `profile` to avoid a query per job."""
     flags: list[dict] = []

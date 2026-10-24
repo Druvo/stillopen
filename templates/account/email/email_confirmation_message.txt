@@ -1,0 +1,10 @@
+{% extends "account/email/base_message.txt" %}
+{% block content %}{% autoescape off %}Welcome to StillOpen, and thanks for joining.
+
+{% if code %}To finish setting up, enter this code in the window you left open:
+
+{{ code }}{% else %}One tap to confirm this is your email. It signs you straight in:
+
+{{ activate_url }}{% endif %}
+
+Didn't sign up? Ignore this message and nothing happens.{% endautoescape %}{% endblock content %}

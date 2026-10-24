@@ -165,5 +165,5 @@ def tailor_cv(request, pk):
     if version.flagged:
         messages.error(request, f"Tailored CV saved, but {len(version.check_report)} claim(s) are not in your own material. Review them before using it.")
     else:
-        messages.success(request, "Tailored CV saved. Nothing in it goes beyond your own material.")
+        messages.success(request, "Your tailored CV is ready. Everything in it comes from your own material, so read it over and approve it when you are happy.")
     return redirect("cv_detail", pk=version.pk)

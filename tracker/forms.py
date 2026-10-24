@@ -1,12 +1,49 @@
 import re
+import time
 
+from allauth.account.forms import SignupForm as AllauthSignupForm
 from django import forms
+from django.conf import settings
+from django.core import signing
 from django.contrib.auth import get_user_model
 from django.forms import inlineformset_factory
 
-from .models import Application, KnowledgeSource, PersonalSettings, SearchArea, UserProfile
+from .models import (
+    Application, Contact, Interview, JobSource, KnowledgeSource, Offer, PersonalSettings, Referral, SearchArea, UserProfile,
+)
 from .services import geo, knowledge
 from .services.netguard import FetchError, check_public_url
+
+SIGNUP_SALT = "tracker.signup-form"
+SIGNUP_MAX_AGE = 2 * 24 * 3600  # a sign-up page left open longer than this has to be reloaded
+
+
+class SignupForm(AllauthSignupForm):
+    """Sign-up with two invisible bot traps and no third-party service: a text box real people never see (bots fill
+    every box), and a signed timestamp so a form submitted faster than a person could type it is refused."""
+
+    website = forms.CharField(required=False, label="Leave this empty", widget=forms.TextInput(attrs={"tabindex": "-1", "autocomplete": "off"}))
+    form_started = forms.CharField(required=False, widget=forms.HiddenInput)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            self.initial["form_started"] = signing.dumps(time.time(), salt=SIGNUP_SALT)
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("website"):
+            raise forms.ValidationError("We could not create this account. Please try again.")
+        minimum = settings.STILLOPEN_SIGNUP_MIN_SECONDS
+        if minimum > 0:
+            try:
+                started = signing.loads(cleaned.get("form_started") or "", salt=SIGNUP_SALT, max_age=SIGNUP_MAX_AGE)
+            except signing.BadSignature:
+                raise forms.ValidationError("This page expired. Please reload it and try again.") from None
+            if time.time() - started < minimum:
+                raise forms.ValidationError("That was very quick. Please check your details and press the button again.")
+        return cleaned
+
 
 RESTRICTED_PROVIDERS = {"claude_cli", "agent_sdk"}  # these run commands on the server: site admins only
 
@@ -128,7 +165,7 @@ class ProfileForm(forms.ModelForm):
         model = UserProfile
         fields = [
             "target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages",
-            "notice_period", "salary_floor", "deal_breakers", "about", "profile_cv",
+            "notice_period", "salary_floor", "deal_breakers", "about", "profile_cv", "scan_digest_enabled",
         ]
         widgets = {
             "target_roles": forms.Textarea(attrs={"rows": 3, "placeholder": "Senior Backend Engineer\nSolutions Architect"}),
@@ -169,7 +206,65 @@ class ProfileForm(forms.ModelForm):
         return cleaned
 
 
+class WelcomeForm(ProfileForm):
+    """The three things worth asking a new person: what they want, where they live, their CV."""
+
+    open_remote = forms.BooleanField(
+        required=False, initial=True, label="I am happy to work remotely, from anywhere",
+        help_text="Untick if you only want work in a place you name below.",
+    )
+    other_places = forms.CharField(
+        required=False, max_length=600, label="Anywhere else you would work in person?",
+        widget=forms.Textarea(attrs={"rows": 2, "placeholder": "Malaysia\nGulf"}),
+        help_text="A country like Malaysia, or a region like Gulf or Europe, one per line. Leave it empty to look only where you live, plus remote.",
+    )
+
+    class Meta(ProfileForm.Meta):
+        fields = ["target_roles", "home_country", "profile_cv"]
+        labels = {"profile_cv": "Or paste your CV here"}
+
+    def clean_other_places(self):
+        lines = [line.strip() for line in (self.cleaned_data.get("other_places") or "").splitlines() if line.strip()]
+        if len(lines) > 8:
+            raise forms.ValidationError("That is a lot of places. Name up to 8 here; you can add more in your profile later.")
+        if any(len(line) > 80 for line in lines):
+            raise forms.ValidationError("Each place should be a short name, one per line.")
+        return "\n".join(lines)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in ("employment_types", "seniority_levels"):
+            self.fields.pop(name, None)
+        self.order_fields(["target_roles", "home_country", "open_remote", "other_places", "cv_file", "profile_cv"])
+        self.fields["target_roles"].label = "What kind of work are you looking for?"
+        self.fields["target_roles"].help_text = "One role per line. It is fine to be rough, you can change it any time."
+        self.fields["home_country"].label = "Where do you live?"
+        self.fields["home_country"].help_text = "So we can tell you whether a job is open to someone there. A country name is enough."
+        self.fields["cv_file"].label = "Your CV"
+        self.fields["cv_file"].help_text = "PDF, .txt or .md. We read the text and keep that, not the file."
+
+
 MAX_AREAS = 20
+
+
+def create_default_areas(user, home_country: str, open_remote: bool, other_places: str) -> int:
+    """Turn the welcome answers into visible, editable search areas. Only for someone who has none yet, so a person's own
+    careful setup is never replaced. Where they live: any kind of work. Remote anywhere: remote only. Other places: in person
+    or hybrid. Returns how many rows were made."""
+    if user.search_areas.exists():
+        return 0
+    rows = []
+    if home_country:
+        rows.append({"place": geo.country_name(home_country), "allow_remote": True, "allow_hybrid": True, "allow_onsite": True})
+    if open_remote:
+        rows.append({"place": "Anywhere", "allow_remote": True})
+    for line in (other_places or "").splitlines():
+        line = line.strip()
+        if line and line.lower() not in {r["place"].lower() for r in rows}:
+            rows.append({"place": line[:80], "allow_remote": True, "allow_hybrid": True, "allow_onsite": True})
+    for position, row in enumerate(rows[:MAX_AREAS]):
+        SearchArea.objects.create(owner=user, order=position, **row)
+    return len(rows[:MAX_AREAS])
 
 
 class SearchAreaForm(forms.ModelForm):
@@ -251,9 +346,13 @@ class JobForm(forms.ModelForm):
     class Meta:
         model = Application
         fields = ["company", "role", "url", "deadline", "description", "notes"]
+        labels = {
+            "url": "Link to the posting", "deadline": "Apply by (if it says)", "description": "The job description",
+            "notes": "Your own notes",
+        }
         widgets = {
             "deadline": forms.DateInput(attrs={"type": "date"}),
-            "description": forms.Textarea(attrs={"rows": 10, "placeholder": "Paste the job description. Leave blank to fetch it from the link."}),
+            "description": forms.Textarea(attrs={"rows": 10, "placeholder": "Paste the text of the posting here. Or leave this empty and we will read it from the link."}),
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
 
@@ -335,4 +434,117 @@ class KnowledgeForm(forms.ModelForm):
             self.add_error("text", "Add some text or upload a file.")
         if len(cleaned.get("text") or "") > knowledge.MAX_TEXT_CHARS:
             self.add_error("text", "That text is too long.")
+        return cleaned
+
+
+# --- pipeline after "Applied": interviews, contacts and referrals, offers ------------------------------
+
+class OwnedFormMixin:
+    """Every foreign key a person can pick (a job, a contact) is limited to their own rows, so a forged id is an invalid choice."""
+
+    def __init__(self, *args, owner, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.owner = owner
+        if "application" in self.fields:
+            self.fields["application"].queryset = Application.objects.filter(owner=owner).order_by("company", "role")
+            self.fields["application"].label_from_instance = lambda a: f"{a.company} - {a.role}"
+        if "contact" in self.fields:
+            self.fields["contact"].queryset = Contact.objects.filter(owner=owner)
+
+
+class InterviewForm(OwnedFormMixin, forms.ModelForm):
+    scheduled_at = forms.DateTimeField(
+        label="When", input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"],
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+        help_text="In your own time zone.",
+    )
+
+    class Meta:
+        model = Interview
+        fields = ["application", "scheduled_at", "kind", "where", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
+        labels = {"where": "Where or link"}
+
+
+class ContactForm(OwnedFormMixin, forms.ModelForm):
+    last_contacted = forms.DateField(required=False, label="Last spoke", widget=forms.DateInput(attrs={"type": "date"}))
+
+    class Meta:
+        model = Contact
+        fields = ["name", "company", "title", "email", "link", "last_contacted", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+
+class ReferralForm(OwnedFormMixin, forms.ModelForm):
+    class Meta:
+        model = Referral
+        fields = ["contact", "application", "status", "note"]
+
+
+class OfferForm(OwnedFormMixin, forms.ModelForm):
+    deadline = forms.DateField(required=False, label="Reply by", widget=forms.DateInput(attrs={"type": "date"}))
+
+    class Meta:
+        model = Offer
+        fields = ["application", "base", "period", "currency", "bonus", "equity", "other_benefits", "signing", "deadline", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def clean_currency(self):
+        value = (self.cleaned_data.get("currency") or "").strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", value):
+            raise forms.ValidationError("Use a three-letter code such as USD, BDT or MYR.")
+        return value
+
+
+# --- a person's own company job boards ---------------------------------------------------------------
+
+_OWN_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,59}")
+_BOARD_HOSTS = {
+    "greenhouse": ("boards.greenhouse.io", "job-boards.greenhouse.io"),
+    "lever": ("jobs.lever.co",),
+    "ashby": ("jobs.ashbyhq.com",),
+    "smartrecruiters": ("jobs.smartrecruiters.com", "careers.smartrecruiters.com"),
+}
+
+
+def board_token_from(connector: str, raw: str) -> str:
+    """Accept the token itself, or a careers-page address pasted from the browser. Only text is parsed: the pasted
+    address is never fetched, and only the token is kept (the app always builds the real URL itself)."""
+    raw = (raw or "").strip()
+    if not raw.lower().startswith(("http://", "https://")):
+        return raw
+    from urllib.parse import urlparse
+
+    parsed = urlparse(raw)
+    host = (parsed.hostname or "").lower()
+    if connector == "recruitee" and host.endswith(".recruitee.com"):
+        return host[: -len(".recruitee.com")]
+    if host in _BOARD_HOSTS.get(connector, ()):
+        return next((p for p in parsed.path.split("/") if p), "")
+    return ""
+
+
+class OwnSourceForm(forms.Form):
+    connector = forms.ChoiceField(
+        choices=[(c, label) for c, label in JobSource.CONNECTORS if c in JobSource.OWN_CONNECTORS],
+        label="Which hiring system does the company use?",
+        help_text="Check the address of the company's careers page: boards.greenhouse.io/..., jobs.lever.co/..., jobs.ashbyhq.com/..., jobs.smartrecruiters.com/... or ....recruitee.com.",
+    )
+    board_token = forms.CharField(
+        max_length=300, label="The company's name in that address, or paste the careers page address",
+        help_text="For jobs.lever.co/acme the name is acme.",
+    )
+    name = forms.CharField(max_length=120, required=False, label="Company name (optional)", help_text="Shown in your search log. Defaults to the name from the address.")
+
+    def clean(self):
+        cleaned = super().clean()
+        connector = cleaned.get("connector")
+        if not connector or "board_token" not in cleaned:
+            return cleaned
+        token = board_token_from(connector, cleaned["board_token"])
+        if not _OWN_TOKEN.fullmatch(token):
+            self.add_error("board_token", "That does not look like a company name from a careers page address. Use letters, digits, dash or underscore only, or paste the careers page address.")
+        else:
+            cleaned["board_token"] = token
+            cleaned["name"] = (cleaned.get("name") or "").strip() or token
         return cleaned

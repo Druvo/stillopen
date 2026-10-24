@@ -1,12 +1,14 @@
 from django.urls import path
 
-from . import views, views_apply, views_cv
+from . import views, views_apply, views_cover, views_cv, views_pipeline, views_sources
 
 urlpatterns = [
     path("", views.landing, name="landing"),
     path("privacy/", views.privacy, name="privacy"),
     path("terms/", views.terms, name="terms"),
     path("dashboard/", views.dashboard, name="dashboard"),
+    path("welcome/", views.welcome, name="welcome"),
+    path("welcome/skip/", views.welcome_skip, name="welcome_skip"),
     path("jobs/add/", views.add_job, name="add_job"),
     path("api/jobs/quickadd/", views.quickadd_fetch, name="quickadd_fetch"),
     path("postings/", views.all_postings, name="all_postings"),
@@ -26,6 +28,21 @@ urlpatterns = [
     path("cv/<int:pk>/print/", views_cv.cv_print, name="cv_print"),
     path("cv/<int:pk>/download/<str:fmt>/", views_cv.cv_download, name="cv_download"),
     path("jobs/<int:pk>/tailor/", views_cv.tailor_cv, name="tailor_cv"),
+    path("sources/", views_sources.sources, name="sources"),
+    path("sources/<int:pk>/<str:action>/", views_sources.source_action, name="source_action"),
+    path("insights/", views_pipeline.insights, name="insights"),
+    path("interviews/", views_pipeline.interviews, name="interviews"),
+    path("interviews/<int:pk>/<str:action>/", views_pipeline.interview_action, name="interview_action"),
+    path("contacts/", views_pipeline.contacts, name="contacts"),
+    path("contacts/<int:pk>/delete/", views_pipeline.contact_delete, name="contact_delete"),
+    path("referrals/<int:pk>/<str:action>/", views_pipeline.referral_action, name="referral_action"),
+    path("offers/", views_pipeline.offers, name="offers"),
+    path("offers/<int:pk>/<str:action>/", views_pipeline.offer_action, name="offer_action"),
+    path("jobs/<int:pk>/cover-letter/", views_cover.write_cover_letter, name="write_cover_letter"),
+    path("cover/<int:pk>/", views_cover.cover_detail, name="cover_detail"),
+    path("cover/<int:pk>/approve/", views_cover.cover_approve, name="cover_approve"),
+    path("cover/<int:pk>/delete/", views_cover.cover_delete, name="cover_delete"),
+    path("cover/<int:pk>/download/<str:fmt>/", views_cover.cover_download, name="cover_download"),
     path("jobs/<int:pk>/edit/", views.job_edit, name="job_edit"),
     path("jobs/<int:pk>/redetect/", views.job_redetect, name="job_redetect"),
     path("jobs/<int:pk>/apply/", views_apply.apply_page, name="apply_page"),

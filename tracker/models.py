@@ -183,6 +183,17 @@ class SiteConfig(PersonalSettings):
         "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
     )
 
+    auto_scan_hours = models.PositiveIntegerField(
+        default=12,
+        help_text="Search for new jobs on a person's behalf when they open the dashboard and their last search is older than this many hours. "
+        "0 turns automatic searching off (people can still press Search jobs). No cron needed, no AI used.",
+    )
+    scan_emails_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow the scheduled job search to email people who opted in (Profile > Job alerts). Needs SMTP configured -- "
+        "without it, emails only print to the server console. Run `manage.py scheduled_scan` on a schedule (e.g. daily cron).",
+    )
+
     careerops_path = models.CharField(
         max_length=500,
         blank=True,
@@ -201,6 +212,11 @@ class SiteConfig(PersonalSettings):
         max_length=200,
         blank=True,
         help_text="API token. The PAPERLESS_TOKEN environment variable takes precedence if set.",
+    )
+    jooble_api_key = models.CharField(
+        max_length=200, blank=True,
+        help_text="Free key from jooble.org/api/about (Jooble approves it by email). Switches on the Jooble sources, which add "
+        "Bangladesh, Malaysia and the Gulf. The JOOBLE_API_KEY environment variable takes precedence. Never shown again.",
     )
     paperless_verify_tls = models.BooleanField(default=True)
     paperless_auto_upload = models.BooleanField(
@@ -294,6 +310,10 @@ class SiteConfig(PersonalSettings):
         return self.signup_mode == "open"
 
     @property
+    def effective_jooble_key(self):
+        return os.environ.get("JOOBLE_API_KEY", "").strip() or self.jooble_api_key.strip()
+
+    @property
     def effective_paperless_token(self):
         return os.environ.get("PAPERLESS_TOKEN", "").strip() or self.paperless_token.strip()
 
@@ -335,6 +355,14 @@ class UserProfile(PersonalSettings):
     salary_floor = models.CharField(max_length=60, blank=True, help_text="Your minimum, with currency and period (e.g. 100,000 BDT/month).")
     deal_breakers = models.TextField(blank=True, help_text="Things you will not accept, one per line.")
     about = models.TextField(blank=True, help_text="Anything else the AI should know when judging fit.")
+    scan_digest_enabled = models.BooleanField(
+        default=False, verbose_name="Search for new jobs for me and email me what is found",
+        help_text="Runs your saved search on a schedule and emails one short list of new matches. Off until you turn it on.",
+    )
+    onboarding_done = models.BooleanField(
+        default=False, editable=False,
+        help_text="The person has seen (or skipped) the short welcome questions after signing up.",
+    )
     self_registered = models.BooleanField(
         default=False, editable=False,
         help_text="Created through the public sign-up form. These accounts must confirm their email before they can sign in.",
@@ -733,6 +761,144 @@ class CVVersion(models.Model):
         return self.kind == "master" or self.approved or not self.check_report
 
 
+class CoverLetter(models.Model):
+    """A cover letter for one job. Unlike a CV version it is a plain draft the person edits in place; every save
+    re-runs the fact check and withdraws any earlier approval, so what is exported was always the text that was
+    checked (or approved) last."""
+
+    SOURCES = [("ai", "AI"), ("keywords", "Built from your CV (no AI)"), ("manual", "Written or edited by hand")]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cover_letters")
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="cover_letters")
+    content = models.TextField(help_text="The letter, plain text.")
+    source = models.CharField(max_length=10, choices=SOURCES, default="manual")
+    provider = models.CharField(max_length=40, blank=True)
+    check_report = models.JSONField(default=list, blank=True)
+    approved = models.BooleanField(default=False)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"Cover letter for {self.application.company} - {self.application.role}"
+
+    @property
+    def flagged(self) -> bool:
+        return bool(self.check_report)
+
+    @property
+    def exportable(self) -> bool:
+        return self.approved or not self.check_report
+
+
+class Interview(models.Model):
+    """One scheduled conversation for a job: phone screen, video call, on-site. Owner-only, like everything personal."""
+
+    KINDS = [
+        ("phone", "Phone screen"), ("video", "Video call"), ("technical", "Technical round"),
+        ("onsite", "On-site"), ("final", "Final round"), ("other", "Other"),
+    ]
+    OUTCOMES = [
+        ("pending", "Not yet"), ("done", "Happened, waiting to hear"), ("passed", "Going well, moving on"),
+        ("rejected", "Not moving on"), ("cancelled", "Cancelled"),
+    ]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="interviews")
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="interviews")
+    scheduled_at = models.DateTimeField()
+    kind = models.CharField(max_length=10, choices=KINDS, default="video")
+    where = models.CharField(max_length=300, blank=True, help_text="Address, or the video-call link.")
+    notes = models.TextField(blank=True, max_length=4000, help_text="Who you will meet, what to prepare, questions to ask.")
+    outcome = models.CharField(max_length=10, choices=OUTCOMES, default="pending")
+    reminded_at = models.DateTimeField(null=True, blank=True, editable=False, help_text="When the reminder email went out, if one did.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["scheduled_at", "id"]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} for {self.application.company} on {self.scheduled_at:%d %b %Y %H:%M}"
+
+
+class Contact(models.Model):
+    """A person you know at, or near, a company you are applying to. Never contacted by the app."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="contacts")
+    name = models.CharField(max_length=120)
+    company = models.CharField(max_length=160, blank=True)
+    title = models.CharField(max_length=160, blank=True, verbose_name="Their role")
+    email = models.EmailField(blank=True)
+    link = models.URLField(blank=True, max_length=300, verbose_name="Profile link")
+    notes = models.TextField(blank=True, max_length=2000)
+    last_contacted = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+class Referral(models.Model):
+    """A contact who may put in a word for you on one job."""
+
+    STATUSES = [
+        ("thinking", "Thinking of asking"), ("asked", "Asked"), ("agreed", "Agreed to refer me"),
+        ("submitted", "Referral submitted"), ("declined", "Declined or no answer"),
+    ]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="referrals")
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="referrals")
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="referrals")
+    status = models.CharField(max_length=10, choices=STATUSES, default="thinking")
+    note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
+class Offer(models.Model):
+    """A job offer, kept in plain numbers so offers can be set side by side. Amounts are per year unless the base is monthly."""
+
+    PERIODS = [("year", "per year"), ("month", "per month")]
+    STATUSES = [("open", "Deciding"), ("accepted", "Accepted"), ("declined", "Declined")]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="offers")
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="offers")
+    base = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)], verbose_name="Base pay")
+    period = models.CharField(max_length=5, choices=PERIODS, default="year")
+    currency = models.CharField(max_length=3, default="USD", help_text="Three letters, e.g. USD, BDT, MYR, AED.")
+    bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)], verbose_name="Yearly bonus")
+    equity = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)], verbose_name="Yearly value of shares or options")
+    signing = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)], verbose_name="One-off signing bonus")
+    other_benefits = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)], verbose_name="Other yearly benefits worth counting", help_text="Allowances, insurance, pension match: only what you would otherwise pay for.")
+    deadline = models.DateField(null=True, blank=True, verbose_name="Reply by")
+    status = models.CharField(max_length=10, choices=STATUSES, default="open")
+    notes = models.TextField(blank=True, max_length=2000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    @property
+    def yearly_base(self):
+        return self.base * 12 if self.period == "month" else self.base
+
+    @property
+    def yearly_total(self):
+        """Pay you can count on each year, leaving out the one-off signing bonus."""
+        return self.yearly_base + self.bonus + self.equity + self.other_benefits
+
+    @property
+    def first_year_total(self):
+        return self.yearly_total + self.signing
+
+
 class Document(models.Model):
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="documents")
     kind = models.ForeignKey(DocumentKind, on_delete=models.PROTECT, related_name="documents")
@@ -857,6 +1023,12 @@ class JobSource(models.Model):
         ("remoteok", "RemoteOK"),
         ("weworkremotely", "We Work Remotely"),
         ("himalayas", "Himalayas"),
+        ("remotive", "Remotive"),
+        ("arbeitnow", "Arbeitnow"),
+        ("jobicy", "Jobicy"),
+        ("workingnomads", "Working Nomads"),
+        ("themuse", "The Muse"),
+        ("jooble", "Jooble (needs a free key)"),
     ]
 
     name = models.CharField(max_length=120, help_text="Shown in the scan log. The company name for a single-company connector; a label like 'RemoteOK' for an aggregator.")
@@ -873,13 +1045,32 @@ class JobSource(models.Model):
         validators=[RegexValidator(r"^[A-Za-z0-9._-]+$", "Only letters, digits, dot, dash and underscore.")],
     )
     enabled = models.BooleanField(default=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="job_sources",
+        help_text="Empty: a site-wide source the admin manages, searched for everyone. Set: one person's own board, "
+        "searched only for them and invisible to everyone else.",
+    )
+
+    # What a person may add for themselves: single-company boards only. Aggregators stay admin-managed.
+    OWN_CONNECTORS = ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"]
 
     class Meta:
         ordering = ["name"]
-        constraints = [models.UniqueConstraint(fields=["connector", "board_token"], name="uniq_connector_token")]
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "connector", "board_token"], name="uniq_owner_connector_token"),
+            models.UniqueConstraint(
+                fields=["connector", "board_token"], condition=models.Q(owner__isnull=True), name="uniq_sitewide_connector_token",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.get_connector_display()})"
+
+    @classmethod
+    def for_user(cls, user, enabled: bool | None = None):
+        """The sources a person's searches may use and see: the site-wide ones plus their own, never anyone else's."""
+        qs = cls.objects.filter(models.Q(owner__isnull=True) | models.Q(owner=user))
+        return qs if enabled is None else qs.filter(enabled=enabled)
 
 
 class ScanRun(models.Model):
@@ -893,6 +1084,8 @@ class ScanRun(models.Model):
     done = models.PositiveIntegerField(default=0, help_text="Sources checked so far.")
     found = models.PositiveIntegerField(default=0, help_text="Postings seen across all sources.")
     added = models.PositiveIntegerField(default=0, help_text="New applications created.")
+    added_ids = models.JSONField(default=list, blank=True, help_text="Primary keys of the applications this run created.")
+    note = models.TextField(blank=True, help_text="Plain information about the run (for example that only the best matches were added). Not an error.")
     error = models.TextField(blank=True)
 
     class Meta:
@@ -909,6 +1102,7 @@ class ScanLogEntry(models.Model):
     matched = models.PositiveIntegerField(default=0, help_text="Postings whose title matched one of your target roles.")
     added = models.PositiveIntegerField(default=0, help_text="New applications created from this source.")
     duplicates = models.PositiveIntegerField(default=0, help_text="Matched postings already in your tracker.")
+    outside = models.PositiveIntegerField(default=0, help_text="Matched postings left out because they are clearly outside your search areas.")
     error = models.CharField(max_length=300, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

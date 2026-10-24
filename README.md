@@ -43,6 +43,53 @@ Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboar
 
 Import is idempotent: new tracker rows are created, existing rows refresh only evaluation data (score, summary, strengths, gaps, deadline, PDFs). Your local status, notes and URL are never overwritten unless you run `import_careerops --sync-status`.
 
+## Jobs found for you, with no setup and no AI
+
+A new install already knows where to look: it ships with about 100 job sources (8 remote-job feeds such as Remotive, RemoteOK, We Work Remotely, Himalayas, Jobicy, Working Nomads, Arbeitnow and The Muse, plus the public hiring boards of ~90 well-known companies on Greenhouse, Lever, Ashby, SmartRecruiters and Recruitee). All of them are open, documented, key-free endpoints. They are added by the migration, or by `python manage.py seed_sources` on an existing install, and the admin can pause or remove any.
+
+Candidates do nothing. When someone opens their dashboard and their last search is older than `auto_scan_hours` (Site configuration > Dashboard, default 12; 0 turns it off), a search starts in the background and the jobs appear. No cron, no button, no AI key. What a search does:
+
+1. Reads every source at once (a slow one is skipped after `STILLOPEN_SCAN_DEADLINE_SECONDS`, 90, and finishes into a shared cache for next time; each source is read at most once per `STILLOPEN_SCAN_CACHE_SECONDS`, 6 hours, however many people search).
+2. Keeps postings whose title fits a target role (the role's words in any order, with developer/engineer treated alike: "Backend Engineer" matches "Senior Software Engineer, Back-end"), or that share real skills with the CV.
+3. Leaves out postings that clearly cannot work for the person's search areas. The country comes from the feed's own location field (so a company calling itself "global" cannot turn a United States only job into a worldwide one), including US state codes and names, "Remote (Spain)" and multi-country lists like "Hong Kong; Singapore", which need one of the person's places. A posting that does not say enough is never excluded. Everything seen stays under **All postings**. The welcome page asks where the person would work (their country, remote anywhere, and other places) and turns the answers into editable search areas.
+4. Skips what is already tracked, including the same job on two sites.
+5. Gives each new job a free skill-coverage score and saves the posting text, so the dashboard already shows a percentage and a fit label. The score is how many of the person's main skills the posting mentions, ignoring filler words that nearly every posting repeats (measured from the postings just read). A posting with too little text to judge (some boards publish only a title) gets no score instead of a fake one.
+6. Adds at most `STILLOPEN_SCAN_MAX_NEW` (40) per search, the best first (clear fits, then listed roles, then CV match), and at most `STILLOPEN_SCAN_MAX_PER_COMPANY` (5) from one employer so one big company cannot fill the list. Search again later for the next batch.
+
+### Bangladesh, Malaysia and the Gulf
+
+Few job sites in these markets publish an open feed, so coverage comes from three honest routes:
+
+1. **Employers' own hiring boards.** About 20 boards verified to have openings there are included: Grab, Bybit, Binance, OKX, Ninja Van, Lalamove (including Dhaka), Tamara, Careem, Talabat (Delivery Hero), Airwallex, Xendit, Ziina, Unifonic, Namshi, Wise and more, plus the global companies in the default list that hire in Kuala Lumpur, Dubai or Riyadh. Large employers are read across all their pages (up to 500 postings each).
+2. **Jooble (optional, free key).** Jooble searches Bangladesh, Malaysia, the UAE, Saudi Arabia, Qatar, Kuwait, Bahrain and Oman. Request a key at <https://jooble.org/api/about> (they approve it by email), then paste it in the admin under **Site configuration > Job search keys**, or set `JOOBLE_API_KEY` in the environment (which wins). The key is write-only and never shown again or put in a log or error. Until a key exists, the eight Jooble sources are simply skipped. Unlike a company board, Jooble is a search, so each person's search asks it for *their own* target roles (up to 3) in each country, and answers are cached per set of roles. Check Jooble's terms for how you may use the results; every job links back to its Jooble page. This connector was built against Jooble's documented request and response shape and tested with simulated responses; it has not been run against a live key.
+3. **The remote feeds**, which include "Remote, Bangladesh/Asia" roles.
+
+Not included on purpose: LinkedIn, Indeed, Glassdoor, **bdjobs** (its robots.txt says other crawlers will not spider, and it publishes no feed) and **JobStreet** (its robots.txt disallows crawling its job pages and job-search API). Paste one of their links into **Add job** instead. Jobs in the same place from the same employer with the same title are collapsed to one per search, because big employers post the same role once per team.
+
+## Your own company job boards
+
+Under **Job sources** in the sidebar, anyone can add the companies they care about. Pick the hiring system the company uses (Greenhouse, Lever, Ashby, SmartRecruiters or Recruitee), then type the company's name from its careers page address or paste the address itself (`jobs.lever.co/acme` gives `acme`). The app reads that company's public job list once to make sure it works, and only then saves it. Your boards are searched only for you and are invisible to everyone else; the boards the site owner added are searched for everyone. Limits per person: `STILLOPEN_MAX_OWN_SOURCES` (20) boards and `STILLOPEN_SOURCE_ADDS_PER_HOUR` (20) additions an hour.
+
+Why this is safe to offer: nobody enters a web address. They choose from a fixed list of hiring systems, and the app builds the real address itself on that system's own host, through the same guarded fetch every scan uses. Boards for sites that need a browser or break a site's terms (LinkedIn, and aggregators like RemoteOK) stay site-owner only or unsupported.
+
+## After you apply: interviews, contacts, offers
+
+Three pages in the sidebar, all private to you and none of them contacts anyone:
+
+- **Interviews**: when, what kind, where or the call link, and notes (who you meet, what to prepare). The next few show on the dashboard under "Coming up". Mark how each went; every change is added to the job's timeline.
+- **Contacts**: people you know at or near a company, and **referrals**: which contact you have asked to put in a word for which job (thinking of asking, asked, agreed, submitted, declined).
+- **Offers**: base pay (per year or month), yearly bonus, yearly value of shares, benefits you would otherwise pay for, and a one-off signing bonus. Offers are ranked side by side by yearly total, with the gap to the best. Different currencies are compared separately and never converted, because the app will not guess an exchange rate. Declined offers drop out.
+
+**Insights** shows plain counts from your own tracker: how many applications reached an interview or an offer, the typical days from applying to a first interview, and which channels (and referrals) led to interviews. It describes, it never predicts.
+
+**Interview reminders.** With follow-up emails switched on (Site configuration > Dashboard) and SMTP configured, run `python manage.py send_interview_reminders` hourly from cron or Task Scheduler. Each person gets one email for interviews in the next 24 hours, once per interview, and only at a verified address.
+
+Each person can save up to `STILLOPEN_MAX_PIPELINE` (500) of each. Everything is included in the Profile > Your data export and removed with the account.
+
+## Job alerts
+
+Each person can tick **Profile > Job alerts** to have their saved search run on a schedule and get one email listing what was added. The site owner switches this on with `scan_emails_enabled` (Site configuration > Dashboard), configures SMTP, and runs `python manage.py scheduled_scan` daily from cron or Task Scheduler. Nothing is sent when nothing new was found, or to an unverified address.
+
 ## Open/closed check
 
 - `node` mode runs career-ops `check-liveness.mjs` (Playwright). Use this: it renders JavaScript pages, so it catches closed postings that a plain HTTP check misses.
@@ -107,7 +154,7 @@ Press **Tailor CV** on a job to make a CV for that role from your own CV and doc
 - **Export.** DOCX (plain single column, real headings and bullets, no tables or images) and a print view for "Save as PDF". The output is Markdown you can also download.
 - **Claude Code.** The `list_cv_versions`, `get_cv_version` and `save_tailored_cv` MCP tools let an AI client write a tailored CV; it goes through the same check and cannot approve its own work.
 
-Limits: 200 versions and 20 tailorings per hour per person (`STILLOPEN_MAX_CV_VERSIONS`, `STILLOPEN_CVGEN_PER_HOUR`). Not built yet: cover letters.
+Limits: 200 versions and 20 tailorings per hour per person (`STILLOPEN_MAX_CV_VERSIONS`, `STILLOPEN_CVGEN_PER_HOUR`). **Cover letters.** On the apply page, "Write a cover letter" makes a short letter from your own material (an AI if you have connected one, otherwise your own most relevant CV bullets in a plain frame). It goes through the same fact check; a flagged letter is locked until you edit it or approve it, and any edit re-checks it and withdraws the approval. DOCX and plain-text download; it is never sent for you.
 
 ## Applying
 

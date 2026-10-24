@@ -37,9 +37,19 @@ class SiteConfigForm(forms.ModelForm):
         help_text="Leave blank to keep the saved token. The PAPERLESS_TOKEN environment variable takes precedence.",
     )
 
+    jooble_api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text="Free key from jooble.org/api/about. Leave blank to keep the saved key. The JOOBLE_API_KEY environment variable takes precedence.",
+    )
+
     class Meta:
         model = SiteConfig
         fields = "__all__"
+
+    def clean_jooble_api_key(self):
+        key = self.cleaned_data.get("jooble_api_key", "")
+        return key or (self.instance.jooble_api_key if self.instance else "")
 
     def clean_paperless_token(self):
         token = self.cleaned_data.get("paperless_token", "")
@@ -53,7 +63,7 @@ class SiteConfigAdmin(admin.ModelAdmin):
         (
             "Dashboard",
             {
-                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled"),
+                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "auto_scan_hours"),
                 "description": "Follow-up emails need SMTP (EMAIL_HOST in the environment) and `manage.py send_followup_emails` on a schedule (e.g. daily cron) -- enabling this alone does not send anything by itself.",
             },
         ),
@@ -80,6 +90,14 @@ class SiteConfigAdmin(admin.ModelAdmin):
                     "<code>&lt;your site&gt;/accounts/google/login/callback/</code>. Then add it under "
                     "<strong>Social applications</strong> (provider Google, choose your Site) and tick the box below."
                 ),
+            },
+        ),
+        (
+            "Job search keys (site admins only)",
+            {
+                "fields": ("jooble_api_key",),
+                "description": "Optional. Jooble covers Bangladesh, Malaysia and the Gulf, where few job sites publish an open feed. "
+                "Without a key those sources are simply skipped.",
             },
         ),
         (
@@ -123,7 +141,7 @@ class UserProfileAdmin(admin.ModelAdmin):
     search_fields = ("user__username", "user__email")
     fieldsets = (
         (None, {"fields": ("user",)}),
-        ("What they want", {"fields": ("target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages", "notice_period", "salary_floor", "deal_breakers", "about")}),
+        ("What they want", {"fields": ("target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages", "notice_period", "salary_floor", "deal_breakers", "about", "scan_digest_enabled")}),
         ("CV", {"fields": ("profile_cv",)}),
         (
             "AI evaluation",
@@ -399,9 +417,9 @@ class LivenessRunAdmin(admin.ModelAdmin):
 
 @admin.register(JobSource)
 class JobSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "connector", "board_token", "enabled")
+    list_display = ("name", "connector", "board_token", "owner", "enabled")
     list_editable = ("enabled",)
-    list_filter = ("connector", "enabled")
+    list_filter = ("connector", "enabled", "owner")
     search_fields = ("name", "board_token")
 
 

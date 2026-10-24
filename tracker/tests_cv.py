@@ -326,7 +326,7 @@ class Pages(TestCase):
         v = CVVersion.objects.get(owner=self.u, kind="tailored")
         self.assertRedirects(r, reverse("cv_detail", args=[v.pk]), fetch_redirect_response=False)
         dashboard = self.client.get(reverse("dashboard")).content.decode()
-        self.assertTrue("Tailor CV" in dashboard)
+        self.assertTrue("Tailor my CV" in dashboard)
         self.assertTrue(f"CV v{v.pk}" in dashboard)
 
     def test_flagged_versions_are_locked_until_approved(self):

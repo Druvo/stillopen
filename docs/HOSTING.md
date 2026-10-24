@@ -27,11 +27,11 @@ Without Docker: `pip install -r requirements-hosting.txt`, set `DATABASE_URL=pos
 
 ## Open registration
 
-1. Configure SMTP (`EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`). Confirmation links are emailed; without SMTP they are only printed to the server log.
+1. Configure SMTP (`EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`). Confirmation links are emailed. **Without SMTP, email confirmation is switched off** (a link that is only printed to the server log would lock every new person out), so people are signed straight in and admins see a warning on their dashboard; set `STILLOPEN_REQUIRE_EMAIL_CONFIRMATION=1` to insist anyway. Open registration without confirmed addresses invites fake accounts, so configure email before a public launch.
 2. In the admin, Site configuration > Registration, choose **Open**.
 3. Optional: add Google sign-in (see the README). With sign-up Open, any Google account with a verified email can register.
 
-People who register themselves must confirm their email before they can sign in. Accounts you create in the admin, or with `createsuperuser`, are never blocked by this. New accounts are never staff.
+People who register themselves only give an email and a password. They must confirm the email before they can sign in; clicking the link in that email confirms it, signs them in and opens a short welcome page. Accounts you create in the admin, or with `createsuperuser`, are never blocked by this. New accounts are never staff.
 
 ## How data is kept apart
 
@@ -41,6 +41,10 @@ People who register themselves must confirm their email before they can sign in.
 - Because the server fetches URLs that users supply (job links, AI endpoints), every outgoing request refuses non-http(s) schemes and any host that resolves to a private, loopback, link-local or cloud-metadata address, and redirects are checked hop by hop. AI requests do not follow redirects.
 - Uploaded CV and document files are read for their text and discarded; only the text is stored. Deleting an account removes the profile, jobs, notes, documents and any stored files.
 
+## No third-party requests from the browser
+
+The interface (Tabler 1.7.0, MIT) is shipped inside the app under `static/vendor/tabler/` and served by your own server, and the admin theme's Google Fonts CDN is turned off. Visitors' browsers therefore contact only your domain, so nothing about who visits or what they open leaks to a CDN, and a compromised CDN cannot inject script into your users' sessions. `tracker/tests_selfhost.py` fails if any page starts loading an asset from another host. The files are checked against jsDelivr's published SHA-256 hashes; see `static/vendor/tabler/NOTICE.md` to upgrade.
+
 ## Limits per person
 
 Set in `.env`: `STILLOPEN_MAX_APPLICATIONS` (500), `STILLOPEN_MAX_KNOWLEDGE` (40 documents), `STILLOPEN_EVALS_PER_HOUR` (30), `STILLOPEN_CHECKS_PER_HOUR` (12). Uploads are limited to 2 MB and PDFs to 60 pages.
@@ -49,7 +53,7 @@ Set in `.env`: `STILLOPEN_MAX_APPLICATIONS` (500), `STILLOPEN_MAX_KNOWLEDGE` (40
 
 Be honest with yourself about these before a public launch:
 
-- **Bots and abuse:** there is no CAPTCHA and no per-IP rate limiting. Put Cloudflare Turnstile or similar in front of sign-up, or rate limit at the proxy.
+- **Bots and abuse:** sign-up has a hidden trap field, a minimum fill time and per-IP rate limits (`STILLOPEN_SIGNUP_MIN_SECONDS`, `STILLOPEN_SIGNUP_RATE` default `5/h/ip`, `STILLOPEN_LOGIN_FAILED_RATE`). There is deliberately no CAPTCHA: Turnstile and similar would load a third-party script, which this app never does. Behind a reverse proxy set `ALLAUTH_TRUSTED_PROXY_COUNT=1` (and make the proxy set `X-Forwarded-For`), or every visitor shares the proxy's address and one limit. A determined human or a distributed bot network is still not stopped; add proxy-level limits if you see abuse.
 - **Network isolation:** the private-address check happens before the request, so a hostile DNS server could still answer differently the second time (DNS rebinding). For hostile multi-tenant use, run the app with restricted egress (a network policy, or an egress proxy that blocks private ranges).
 - **Job search sources:** there is no shared job feed or auto-scraping yet. People add roles themselves.
 - **Staff access:** site admins can read the database and therefore everyone's data. Keep the number of admins small.

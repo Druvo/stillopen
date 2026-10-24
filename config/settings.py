@@ -1,6 +1,7 @@
 """Django settings. Everything environment-specific comes from env vars or .env."""
 import os
 import secrets
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -103,6 +104,7 @@ JAZZMIN_SETTINGS = {
     "show_sidebar": True,
     "navigation_expanded": False,
     "changeform_format": "horizontal_tabs",
+    "use_google_fonts_cdn": False,  # no third-party requests from the admin either
 }
 JAZZMIN_UI_TWEAKS = {
     "theme": "darkly",
@@ -150,6 +152,8 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# Vendored front-end files (Tabler) live here and are served by this app, never from a third-party CDN.
+STATICFILES_DIRS = [BASE_DIR / "static"]
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
@@ -173,11 +177,24 @@ LOGOUT_REDIRECT_URL = "/"
 # Open sign-up needs a verified email, so configure SMTP (EMAIL_HOST...) before opening it; without SMTP the
 # verification link is printed to the server console.
 ACCOUNT_LOGIN_METHODS = {"username", "email"}
-ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+# Email and a password is all we ask for; a username is made up from the email (it can still be used to sign in).
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True  # the link in the email is the whole confirmation, no second button
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True  # and it signs the person in
+ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 # "optional" globally so accounts made in the admin or by createsuperuser (no confirmed email) are never locked out;
 # tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
-ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional")
 ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_FORMS = {"signup": "tracker.forms.SignupForm"}
+# Bot protection without any third-party service (the no-CDN rule): a hidden trap field, a minimum time to fill the
+# sign-up form (0 turns the timing check off), and per-IP rate limits. Behind a reverse proxy set
+# ALLAUTH_TRUSTED_PROXY_COUNT (e.g. 1) so the limits see the visitor's address and not the proxy's.
+STILLOPEN_SIGNUP_MIN_SECONDS = int(os.environ.get("STILLOPEN_SIGNUP_MIN_SECONDS", "3"))
+ACCOUNT_RATE_LIMITS = {
+    "signup": os.environ.get("STILLOPEN_SIGNUP_RATE", "5/h/ip"),
+    "login_failed": os.environ.get("STILLOPEN_LOGIN_FAILED_RATE", "10/10m/ip,5/5m/key"),
+}
+ALLAUTH_TRUSTED_PROXY_COUNT = int(os.environ.get("ALLAUTH_TRUSTED_PROXY_COUNT", "0"))
 ACCOUNT_PASSWORD_MIN_LENGTH = 10
 if os.environ.get("EMAIL_HOST"):
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -189,6 +206,15 @@ if os.environ.get("EMAIL_HOST"):
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "StillOpen <noreply@localhost>")
+EMAIL_CONFIGURED = bool(os.environ.get("EMAIL_HOST"))
+# People who register themselves must click an emailed link before they get in -- but only where that email can actually
+# arrive. With no SMTP the link would only be printed to the server console and nobody could ever sign up, so a fresh
+# self-hosted install lets people straight in and tells the admin (see the dashboard notice). Set to 1 to insist anyway.
+STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = os.environ.get("STILLOPEN_REQUIRE_EMAIL_CONFIRMATION", "1" if (EMAIL_CONFIGURED or "test" in sys.argv) else "0") == "1"
+# "optional" globally so accounts made in the admin or by createsuperuser (no confirmed email) are never locked out;
+# tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
+# "none" when confirmation is not required, so no email is sent (or claimed to be sent) from a server that cannot send it.
+ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional" if STILLOPEN_REQUIRE_EMAIL_CONFIRMATION else "none")
 
 # Per-person limits on a shared server.
 STILLOPEN_MAX_APPLICATIONS = int(os.environ.get("STILLOPEN_MAX_APPLICATIONS", "500"))
@@ -200,6 +226,29 @@ STILLOPEN_QUICKADD_PER_HOUR = int(os.environ.get("STILLOPEN_QUICKADD_PER_HOUR", 
 # How many of the candidate's own skill terms a posting's title+blurb must share to be added even when its
 # title doesn't literally contain one of their target-role phrases. Higher = fewer false positives.
 STILLOPEN_SKILL_MATCH_MIN_OVERLAP = int(os.environ.get("STILLOPEN_SKILL_MATCH_MIN_OVERLAP", "4"))
+# Interviews, contacts, referrals and offers: most any one person may save of each.
+# Job search engine. Reading each source's public list is shared between everyone's searches for this long (public
+# feeds ask for few requests a day), sources are read this many at a time, and one search adds at most this many
+# new jobs (the best matches first; the rest stay under All postings). Tests turn the cache and the seeded default
+# sources off so they stay deterministic.
+RUNNING_TESTS = "test" in sys.argv
+STILLOPEN_SCAN_CACHE_SECONDS = int(os.environ.get("STILLOPEN_SCAN_CACHE_SECONDS", "0" if RUNNING_TESTS else "21600"))
+STILLOPEN_SCAN_FETCH_THREADS = int(os.environ.get("STILLOPEN_SCAN_FETCH_THREADS", "8"))
+# Longest a search waits for the job sources (a slow one is skipped, not waited for).
+STILLOPEN_SCAN_DEADLINE_SECONDS = int(os.environ.get("STILLOPEN_SCAN_DEADLINE_SECONDS", "90"))
+# At most this many new jobs from one employer per search (big employers post the same role for every team), and
+# a word counts as generic filler, not a skill, when it appears in more than this share of all postings read.
+STILLOPEN_SCAN_MAX_PER_COMPANY = int(os.environ.get("STILLOPEN_SCAN_MAX_PER_COMPANY", "5"))
+STILLOPEN_SCAN_GENERIC_SHARE = float(os.environ.get("STILLOPEN_SCAN_GENERIC_SHARE", "0.12"))
+# A posting needs at least this many distinct words before it is scored: three words cannot tell anyone how well they fit.
+STILLOPEN_SCAN_MIN_TERMS_TO_SCORE = int(os.environ.get("STILLOPEN_SCAN_MIN_TERMS_TO_SCORE", "12"))
+STILLOPEN_SCAN_MAX_NEW = int(os.environ.get("STILLOPEN_SCAN_MAX_NEW", "40"))
+STILLOPEN_AUTO_SCAN = os.environ.get("STILLOPEN_AUTO_SCAN", "0" if RUNNING_TESTS else "1") == "1"
+STILLOPEN_SEED_SOURCES = os.environ.get("STILLOPEN_SEED_SOURCES", "0" if RUNNING_TESTS else "1") == "1"
+# Company job boards one person may add for their own searches, and how many they may add per hour.
+STILLOPEN_MAX_OWN_SOURCES = int(os.environ.get("STILLOPEN_MAX_OWN_SOURCES", "20"))
+STILLOPEN_SOURCE_ADDS_PER_HOUR = int(os.environ.get("STILLOPEN_SOURCE_ADDS_PER_HOUR", "20"))
+STILLOPEN_MAX_PIPELINE = int(os.environ.get("STILLOPEN_MAX_PIPELINE", "500"))
 STILLOPEN_MAX_CV_VERSIONS = int(os.environ.get("STILLOPEN_MAX_CV_VERSIONS", "200"))
 STILLOPEN_CVGEN_PER_HOUR = int(os.environ.get("STILLOPEN_CVGEN_PER_HOUR", "20"))
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024

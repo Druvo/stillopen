@@ -1,0 +1,79 @@
+{% extends "tracker/base_app.html" %}
+{% load form_tags %}
+{% block title %}Contacts{% endblock %}
+{% block page_title %}People who can help{% endblock %}
+{% block content %}
+<p class="text-secondary">A referral is often the fastest way past a stack of applications. Note who you know, and who you have asked to put in a word for which job. Nothing here emails or messages anyone; you do that yourself.</p>
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="card mb-3"><div class="card-body">
+      <h3 class="mt-0">Add a contact</h3>
+      <form method="post">
+        {% csrf_token %}<input type="hidden" name="which" value="contact">
+        {{ cform.non_field_errors }}
+        {% for field in cform %}
+        <div class="mb-3">
+          <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+          {{ field|bootstrap_field }}
+          {{ field.errors }}
+        </div>
+        {% endfor %}
+        <div class="form-footer"><button class="btn btn-primary" type="submit">Save contact</button></div>
+      </form>
+    </div></div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card mb-3"><div class="card-body">
+      <h3 class="mt-0">Track a referral</h3>
+      {% if has_people %}
+      <form method="post">
+        {% csrf_token %}<input type="hidden" name="which" value="referral">
+        {{ rform.non_field_errors }}
+        {% for field in rform %}
+        <div class="mb-3">
+          <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+          {{ field|bootstrap_field }}
+          {{ field.errors }}
+        </div>
+        {% endfor %}
+        <div class="form-footer"><button class="btn btn-primary" type="submit">Save referral</button></div>
+      </form>
+      {% else %}
+      <p class="text-secondary mb-0">Add a contact first, then you can note which job they might refer you for.</p>
+      {% endif %}
+    </div></div>
+  </div>
+</div>
+
+{% for c in people %}
+<div class="card mb-3"><div class="card-body">
+  <div class="d-flex justify-content-between">
+    <div>
+      <strong>{{ c.name }}</strong>{% if c.title or c.company %} <span class="text-secondary">{{ c.title }}{% if c.title and c.company %}, {% endif %}{{ c.company }}</span>{% endif %}
+      <div class="text-secondary">
+        {% if c.email %}{{ c.email }}{% endif %}{% if c.link %} · <a href="{{ c.link }}" target="_blank" rel="noopener noreferrer">Profile</a>{% endif %}{% if c.last_contacted %} · last spoke {{ c.last_contacted|date:"j M Y" }}{% endif %}
+      </div>
+      {% if c.notes %}<div class="text-secondary" style="white-space:pre-wrap">{{ c.notes }}</div>{% endif %}
+    </div>
+    <form method="post" action="{% url 'contact_delete' c.pk %}" onsubmit="return confirm('Delete this contact and their referrals?')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit">Delete</button></form>
+  </div>
+  {% for r in c.referrals.all %}
+  <div class="d-flex justify-content-between align-items-center mt-2">
+    <span>{{ r.application.company }} — {{ r.application.role }} <span class="badge">{{ r.get_status_display }}</span>{% if r.note %} <span class="text-secondary">{{ r.note }}</span>{% endif %}</span>
+    <span class="text-nowrap">
+      <form method="post" action="{% url 'referral_action' r.pk 'status' %}" class="d-inline">{% csrf_token %}
+        <select name="status" class="form-select form-select-sm d-inline-block w-auto" aria-label="Referral status">
+          {% for value, label in r.STATUSES %}<option value="{{ value }}" {% if value == r.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
+      </form>
+      <form method="post" action="{% url 'referral_action' r.pk 'delete' %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit">Remove</button></form>
+    </span>
+  </div>
+  {% endfor %}
+</div></div>
+{% empty %}
+<p class="text-secondary">No contacts yet. Start with anyone who works at a company you like, or who could introduce you.</p>
+{% endfor %}
+{% endblock %}

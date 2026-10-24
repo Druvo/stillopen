@@ -1,11 +1,12 @@
+{% load static %}
 <!doctype html>
 <html lang="en" data-bs-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}{% endblock %} · {{ config.site_title }}</title>
-<link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.0/dist/css/tabler.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.0/dist/js/tabler.min.js" defer></script>
+<link href="{% static 'vendor/tabler/tabler.min.css' %}" rel="stylesheet">
+<script src="{% static 'vendor/tabler/tabler.min.js' %}" defer></script>
 {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -21,6 +22,11 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'add_job' %}">Add job</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'all_postings' %}">All postings</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'sources' %}">Job sources</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'interviews' %}">Interviews</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'contacts' %}">Contacts</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'offers' %}">Offers</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'insights' %}">Insights</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'cv_list' %}">CVs</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'knowledge' %}">Documents</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'profile' %}">Profile</a></li>

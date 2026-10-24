@@ -68,14 +68,14 @@ No TODO/FIXME markers anywhere in the Python source — gaps are tracked in pros
 | One-click browser-extension capture (any job site → tracker) | yes | yes | yes | — | some | **not wanted** — everything stays in-panel by decision (see Tier 1 #1 for the in-panel alternative) |
 | **Autofill into ATS application forms** | — | partial | yes (flagship) | — | — | **none** (by design: app never submits applications) |
 | Resume/JD match score | yes | yes | yes | yes (flagship) | yes | yes — keyword + optional AI, already competitive |
-| Generative resume rewrite / cover letter | yes (weak, per reviews) | yes | yes | — | some | tailoring yes, **cover letters: not built** |
-| Contact/networking tracker | — | yes | — | — | — | **none** |
-| Interview scheduling + reminders | — | yes | — | — | some | Event has an `interview` kind, **no scheduling/reminders/prep** |
-| Offer comparison (salary/bonus/equity) | — | — | — | — | — | **none** (whitespace — no competitor does this well either) |
+| Generative resume rewrite / cover letter | yes (weak, per reviews) | yes | yes | — | some | tailoring yes, cover letters built (fact-checked, same approval gate as CVs) |
+| Contact/networking tracker | — | yes | — | — | — | contacts page |
+| Interview scheduling + reminders | — | yes | — | — | some | interviews page with notes + dashboard "Coming up"; **no email/calendar reminders yet** |
+| Offer comparison (salary/bonus/equity) | — | — | — | — | — | offers page, ranked per currency (no FX guessing) |
 | Analytics (response rate, funnel, time-to-offer) | — | partial | — | — | — | **none** beyond 4 summary numbers |
 | Job alerts / saved recurring search | yes (board aggregation) | — | — | — | — | one-shot scan only, **no recurring/scheduled scan or digest** |
 | **"Is this posting still open" live check** | — | — | — | — | — (ApplyPotato: via Gmail only) | **yes — a genuine differentiator, lean into it** |
-| **Referral tracking** | — | — | — | — | — | **none — whitespace, no competitor has this either** |
+| **Referral tracking** | — | — | — | — | — | referrals per contact and job |
 | Cost/token transparency for AI use | — | — | — | — | — | tokens + cost per call, monthly total on Profile -> AI settings |
 | Mobile app | native | native | extension | — | — | responsive web only |
 

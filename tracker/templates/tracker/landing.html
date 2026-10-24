@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="en" data-bs-theme="dark">
 <head>
@@ -7,7 +8,7 @@
 <meta name="description" content="{{ config.landing_subheadline }}">
 <meta property="og:title" content="{{ config.site_title }}">
 <meta property="og:description" content="{{ config.landing_subheadline }}">
-<link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.0/dist/css/tabler.min.css" rel="stylesheet">
+<link href="{% static 'vendor/tabler/tabler.min.css' %}" rel="stylesheet">
 <style>html{scroll-behavior:smooth}</style>
 </head>
 <body>
@@ -68,27 +69,27 @@
   </div>
 
   <section id="features" class="py-5 border-top">
-    <h2>What it does</h2>
-    <p class="text-secondary mb-4">Everything below works today.</p>
+    <h2>Job hunting is tiring. This part doesn't have to be.</h2>
+    <p class="text-secondary mb-4">Here is what it does for you, in plain terms.</p>
     <div class="row row-cards">
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Knows what is still open</h3><p class="text-secondary mb-0">Checks each posting and flags it Open, Closed or Unclear. Closed roles you have not applied to move out of your way.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Match % for every role</h3><p class="text-secondary mb-0">Turns an evaluation score into a match percentage with colour bands you define.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Applied, pending, closed</h3><p class="text-secondary mb-0">Tabs and statuses are yours to rename and reorder. Setting a status stamps the date you applied.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Short summaries and gaps</h3><p class="text-secondary mb-0">Each card shows a summary, strengths, gaps and risks, and the next action to take.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Deadlines first</h3><p class="text-secondary mb-0">Roles with a deadline inside your chosen window are highlighted and sorted to the top.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Documents with Paperless-ngx</h3><p class="text-secondary mb-0">Keep each CV and cover letter next to its role, and send them to your own Paperless-ngx.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Configurable from the admin</h3><p class="text-secondary mb-0">Statuses, tabs, score bands, document types, job sources and expiry phrases are all editable. No code changes.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Self-hosted</h3><p class="text-secondary mb-0">Your jobs, CVs and notes stay on your machine. Sign in with a password or, optionally, Google.</p></div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Tells you what is still open</h3><p class="text-secondary mb-0">Postings close quietly. We look at each link for you, so you stop spending an evening on a job that is already gone.</p></div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Shows how well you fit</h3><p class="text-secondary mb-0">Add a job and see, in a sentence and a number, where you are strong and where you are not. Honest, never harsh.</p></div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Tailors your CV, truthfully</h3><p class="text-secondary mb-0">We reshape your own CV toward each job. Nothing is invented, every version is kept, and you approve it.</p></div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Remembers for you</h3><p class="text-secondary mb-0">What you sent to whom, and a gentle nudge when it is time to follow up. You always press apply yourself.</p></div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Knows where you can work</h3><p class="text-secondary mb-0">Remote, on-site or hybrid, in your country or abroad. Tell us once and jobs that don't fit are flagged.</p></div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Private to you</h3><p class="text-secondary mb-0">Your jobs, CV and notes are yours alone. You can download or delete everything whenever you like.</p></div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Works with or without AI</h3><p class="text-secondary mb-0">A quick keyword check is built in. Connect your own AI later if you want a more careful read.</p></div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Free to start</h3><p class="text-secondary mb-0">An email and a password, then three questions. No card, nothing to install.</p></div></div></div>
     </div>
   </section>
 
   <section class="py-5 border-top">
-    <h2>How it works</h2>
-    <p class="text-secondary mb-4">From a pile of tabs to one list.</p>
+    <h2>Your first ten minutes</h2>
+    <p class="text-secondary mb-4">Nothing to learn. Here is how it goes.</p>
     <div class="row">
-      <div class="col-md-4 mb-3"><div class="d-flex gap-3"><div class="avatar bg-secondary-lt">1</div><div><strong class="d-block">Bring your roles in</strong><span class="text-secondary" style="font-size:14px">Import from your career-ops folder, or add them in the admin.</span></div></div></div>
-      <div class="col-md-4 mb-3"><div class="d-flex gap-3"><div class="avatar bg-secondary-lt">2</div><div><strong class="d-block">Check what is still open</strong><span class="text-secondary" style="font-size:14px">One click, one admin action, or a scheduled command.</span></div></div></div>
-      <div class="col-md-4 mb-3"><div class="d-flex gap-3"><div class="avatar bg-secondary-lt">3</div><div><strong class="d-block">Work the list</strong><span class="text-secondary" style="font-size:14px">Apply to the strongest open roles, update the status, keep the documents together.</span></div></div></div>
+      <div class="col-md-4 mb-3"><div class="d-flex gap-3"><div class="avatar bg-secondary-lt">1</div><div><strong class="d-block">Tell us what you want</strong><span class="text-secondary" style="font-size:14px">The kind of work, where you live, and your CV. You can skip it and come back.</span></div></div></div>
+      <div class="col-md-4 mb-3"><div class="d-flex gap-3"><div class="avatar bg-secondary-lt">2</div><div><strong class="d-block">Paste a job link</strong><span class="text-secondary" style="font-size:14px">We read the posting and tell you how well it fits and whether it is still open.</span></div></div></div>
+      <div class="col-md-4 mb-3"><div class="d-flex gap-3"><div class="avatar bg-secondary-lt">3</div><div><strong class="d-block">Tailor and apply</strong><span class="text-secondary" style="font-size:14px">Get a CV shaped for that job, apply on the employer's site, and we keep track from there.</span></div></div></div>
     </div>
   </section>
 

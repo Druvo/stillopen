@@ -53,7 +53,7 @@ class Isolation(TestCase):
         self.assertContains(r, "AliceCo")
         self.assertNotContains(r, "BobCo")
         self.assertNotContains(r, "bob summary")
-        self.assertContains(r, "Tracked roles")
+        self.assertContains(r, "Jobs you are tracking")
 
     def test_cannot_act_on_someone_elses_job(self):
         applied = Status.objects.get(name="Applied")
@@ -393,7 +393,7 @@ class AddingJobsAndDocuments(TestCase):
         self.assertEqual(r.status_code, 302)
         app = Application.objects.get(company="Globex")
         self.assertEqual(app.owner, self.u)
-        self.assertEqual(app.status.name, "Evaluated")
+        self.assertEqual(app.status.name, "Saved")
         self.assertTrue(app.events.exists())
         self.assertContains(self.client.get(reverse("dashboard")), "Globex")
 
@@ -424,9 +424,9 @@ class AddingJobsAndDocuments(TestCase):
         form_page = self.client.get(reverse("add_job"))
         self.assertContains(form_page, "Globex")
         self.assertContains(form_page, "Real job text")
-        self.assertContains(form_page, "Fetched from the link")
+        self.assertContains(form_page, "We read this from the link")
         # the prefill is one-shot: a second GET sees a blank form again
-        self.assertNotContains(self.client.get(reverse("add_job")), "Fetched from the link")
+        self.assertNotContains(self.client.get(reverse("add_job")), "We read this from the link")
 
     def test_quickadd_requires_a_url_and_is_throttled(self):
         self.assertEqual(self.client.post(reverse("quickadd_fetch"), {}).status_code, 400)
@@ -522,6 +522,7 @@ class Throttling(TestCase):
         self.assertNotEqual(self.client.post(reverse("evaluate", args=[jb.pk])).status_code, 429)
 
 
+@override_settings(STILLOPEN_SIGNUP_MIN_SECONDS=0, ACCOUNT_RATE_LIMITS={"signup": "1000/m/ip"})
 class Registration(TestCase):
     def signup(self, name="newbie", email="newbie@example.com"):
         return self.client.post(reverse("account_signup"), {"email": email, "username": name, "password1": PW, "password2": PW})
@@ -548,9 +549,8 @@ class Registration(TestCase):
         self.assertNotEqual(self.client.get(reverse("dashboard")).status_code, 200)
         link = re.search(r"https?://[^\s]+/accounts/confirm-email/[^\s/]+/", mail.outbox[0].body).group(0)
         path = "/" + link.split("/", 3)[3]
-        self.assertEqual(self.client.get(path).status_code, 200)
-        self.client.post(path)
-        self.client.post(reverse("account_login"), {"login": "newbie", "password": PW})
+        # the link alone confirms the address, signs the person in and lands them on the welcome page
+        self.assertRedirects(self.client.get(path), reverse("welcome"), fetch_redirect_response=False)
         self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
         self.assertTrue(UserProfile.objects.filter(user=newbie).exists())
 

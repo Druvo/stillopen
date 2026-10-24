@@ -1,0 +1,56 @@
+{% extends "tracker/base_app.html" %}
+{% load form_tags %}
+{% block title %}Offers{% endblock %}
+{% block page_title %}Compare offers{% endblock %}
+{% block content %}
+<p class="text-secondary">Put each offer in plain numbers and see them side by side. The yearly total counts base pay, bonus, shares and benefits you would otherwise pay for; a one-off signing bonus is shown separately. Offers in different currencies are never converted for you, so each currency is compared on its own.</p>
+
+<div class="card mb-3"><div class="card-body">
+  <h3 class="mt-0">Add an offer</h3>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="row">
+    {% for field in form %}
+      <div class="mb-3 {% if field.name == 'notes' or field.name == 'application' %}col-12{% else %}col-md-4{% endif %}">
+        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+        {{ field|bootstrap_field }}
+        {% if field.help_text %}<small class="form-hint">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    </div>
+    <div class="form-footer"><button class="btn btn-primary" type="submit">Save offer</button></div>
+  </form>
+</div></div>
+
+{% for g in groups %}
+<h3>In {{ g.currency }}</h3>
+<div class="card mb-3"><div class="table-responsive"><table class="table table-vcenter card-table">
+  <thead><tr><th>Job</th><th class="text-end">Base per year</th><th class="text-end">Bonus</th><th class="text-end">Shares</th><th class="text-end">Benefits</th><th class="text-end">Yearly total</th><th class="text-end">Signing</th><th>Reply by</th><th></th></tr></thead>
+  {% for row in g.rows %}{% with o=row.offer %}
+  <tr>
+    <td><strong>{{ o.application.company }}</strong><br><span class="text-secondary">{{ o.application.role }} · {{ o.get_status_display }}</span>{% if o.notes %}<br><span class="text-secondary" style="white-space:pre-wrap">{{ o.notes }}</span>{% endif %}</td>
+    <td class="text-end">{{ o.yearly_base|floatformat:"0g" }}</td>
+    <td class="text-end">{{ o.bonus|floatformat:"0g" }}</td>
+    <td class="text-end">{{ o.equity|floatformat:"0g" }}</td>
+    <td class="text-end">{{ o.other_benefits|floatformat:"0g" }}</td>
+    <td class="text-end"><strong>{{ o.yearly_total|floatformat:"0g" }}</strong>{% if row.best %} <span class="badge bg-green-lt">highest</span>{% elif row.behind %}<br><span class="text-secondary">{{ row.behind|floatformat:"0g" }} less</span>{% endif %}</td>
+    <td class="text-end">{{ o.signing|floatformat:"0g" }}</td>
+    <td>{% if o.deadline %}{{ o.deadline|date:"j M Y" }}{% else %}—{% endif %}</td>
+    <td class="text-end text-nowrap">
+      <form method="post" action="{% url 'offer_action' o.pk 'status' %}" class="d-inline">{% csrf_token %}
+        <select name="status" class="form-select form-select-sm d-inline-block w-auto" aria-label="Offer status">
+          {% for value, label in o.STATUSES %}<option value="{{ value }}" {% if value == o.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-sm btn-outline-secondary" type="submit">Update</button>
+      </form>
+      <form method="post" action="{% url 'offer_action' o.pk 'delete' %}" class="d-inline" onsubmit="return confirm('Delete this offer?')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" type="submit">Delete</button></form>
+    </td>
+  </tr>
+  {% endwith %}{% endfor %}
+</table></div></div>
+{% empty %}
+<p class="text-secondary">No offers yet. When one arrives, add it above. Declined offers drop out of the comparison.</p>
+{% endfor %}
+{% endblock %}

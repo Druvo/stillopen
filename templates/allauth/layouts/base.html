@@ -1,10 +1,11 @@
+{% load static %}
 <!doctype html>
 <html lang="en" data-bs-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block head_title %}{% endblock %} · {{ site_config.site_title|default:"StillOpen" }}</title>
-<link href="https://cdn.jsdelivr.net/npm/@tabler/core@1.7.0/dist/css/tabler.min.css" rel="stylesheet">
+<link href="{% static 'vendor/tabler/tabler.min.css' %}" rel="stylesheet">
 </head>
 <body class="d-flex flex-column">
 <div class="page page-center">
