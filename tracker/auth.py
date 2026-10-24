@@ -10,11 +10,15 @@ from django.shortcuts import redirect
 from django.urls import reverse
 
 from .models import SiteConfig, UserProfile
+from .services import integrations
 
 
 class AccountAdapter(DefaultAccountAdapter):
     def is_open_for_signup(self, request):
         return SiteConfig.load().signup_open
+
+    def get_from_email(self):
+        return integrations.from_email()
 
     def save_user(self, request, user, form, commit=True):
         user = super().save_user(request, user, form, commit)
@@ -46,7 +50,7 @@ class AccountAdapter(DefaultAccountAdapter):
         if blocked:
             return blocked
         profile = UserProfile.objects.filter(user=user).first()
-        if (settings.STILLOPEN_REQUIRE_EMAIL_CONFIRMATION and profile and profile.self_registered
+        if (integrations.require_email_confirmation() and profile and profile.self_registered
                 and not has_verified_email(user, kwargs.get("email"))):
             address = EmailAddress.objects.filter(user=user, verified=False).order_by("-primary", "-pk").first()
             if address:  # we stop the login here, so allauth's own "send at login" stage never runs
@@ -75,6 +79,21 @@ def _may_register(config: SiteConfig, sociallogin) -> bool:
 
 
 class SocialAdapter(DefaultSocialAccountAdapter):
+    def list_apps(self, request, provider=None, client_id=None):
+        """Apps from the environment or from the admin's Site configuration first; apps added the old way (Social applications) still work."""
+        from allauth.socialaccount.models import SocialApp
+
+        apps = []
+        for pid in integrations.PROVIDERS:
+            if provider and provider != pid:
+                continue
+            credentials = integrations.social_credentials(pid)
+            if credentials and (not client_id or client_id == credentials[0]):
+                apps.append(SocialApp(provider=pid, name=pid.title(), client_id=credentials[0], secret=credentials[1]))
+        seen = {a.provider for a in apps}
+        apps.extend(a for a in super().list_apps(request, provider=provider, client_id=client_id) if a.provider not in seen)
+        return apps
+
     def pre_social_login(self, request, sociallogin):
         config = SiteConfig.load()
         provider = sociallogin.account.provider

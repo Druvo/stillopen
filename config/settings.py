@@ -4,6 +4,8 @@ import secrets
 import sys
 from pathlib import Path
 
+from django.urls import reverse_lazy
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -42,7 +44,7 @@ if "127.0.0.1" not in ALLOWED_HOSTS and "*" not in ALLOWED_HOSTS:
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
 
 INSTALLED_APPS = [
-    "jazzmin",  # must come before django.contrib.admin to replace its templates
+    "unfold",  # must come before django.contrib.admin to replace its templates
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -99,34 +101,58 @@ TEMPLATES = [
 # (the Tabler/Bootstrap checkbox-list markup override) would silently never be found without this.
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 
-# django-jazzmin: Bootstrap-based admin skin so /admin/ matches the Tabler/Bootstrap theme of the rest
-# of the app, instead of stock Django admin's unrelated look.
-JAZZMIN_SETTINGS = {
-    "site_title": "StillOpen admin",
-    "site_header": "StillOpen",
-    "site_brand": "StillOpen admin",
-    "welcome_sign": "Sign in to the StillOpen admin",
-    "copyright": "StillOpen",
-    "show_sidebar": True,
-    "navigation_expanded": False,
-    "changeform_format": "horizontal_tabs",
-    "use_google_fonts_cdn": False,  # no third-party requests from the admin either
-}
-JAZZMIN_UI_TWEAKS = {
-    "theme": "darkly",
-    "default_theme_mode": "dark",
-    "navbar": "navbar-dark",
-    "no_navbar_border": True,
-    "sidebar": "sidebar-dark-primary",
-    "brand_colour": "navbar-primary",
-    "accent": "accent-primary",
-    "button_classes": {
-        "primary": "btn-primary",
-        "secondary": "btn-secondary",
-        "info": "btn-info",
-        "warning": "btn-warning",
-        "danger": "btn-danger",
-        "success": "btn-success",
+# django-unfold: the admin's look (a modern Tailwind skin, light and dark). Everything it needs (fonts, icons, scripts) is served by
+# this app itself, nothing comes from a third-party host (tests/tests_selfhost.py checks the admin pages too).
+UNFOLD = {
+    "SITE_TITLE": "StillOpen admin",
+    "SITE_HEADER": "StillOpen",
+    "SITE_URL": "/",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    # The sidebar leads with what an owner actually needs, not an alphabetical list of every app.
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {"title": "Settings", "items": [
+                {"title": "Site configuration", "icon": "tune", "link": reverse_lazy("admin:tracker_siteconfig_changelist")},
+                {"title": "Job sources", "icon": "travel_explore", "link": reverse_lazy("admin:tracker_jobsource_changelist")},
+                {"title": "Postings seen", "icon": "work", "link": reverse_lazy("admin:tracker_posting_changelist")},
+            ]},
+            {"title": "People", "items": [
+                {"title": "Users", "icon": "group", "link": reverse_lazy("admin:auth_user_changelist")},
+                {"title": "Profiles", "icon": "badge", "link": reverse_lazy("admin:tracker_userprofile_changelist")},
+                {"title": "Applications", "icon": "assignment", "link": reverse_lazy("admin:tracker_application_changelist")},
+                {"title": "Documents", "icon": "description", "link": reverse_lazy("admin:tracker_knowledgesource_changelist")},
+            ]},
+            {"title": "Activity", "items": [
+                {"title": "Searches run", "icon": "search", "link": reverse_lazy("admin:tracker_scanrun_changelist")},
+                {"title": "Open/closed checks", "icon": "fact_check", "link": reverse_lazy("admin:tracker_livenessrun_changelist")},
+                {"title": "AI usage", "icon": "smart_toy", "link": reverse_lazy("admin:tracker_aiusageevent_changelist")},
+            ]},
+            {"title": "Labels and wording", "items": [
+                {"title": "Dashboard tabs", "icon": "tab", "link": reverse_lazy("admin:tracker_bucket_changelist")},
+                {"title": "Statuses", "icon": "label", "link": reverse_lazy("admin:tracker_status_changelist")},
+                {"title": "Score bands", "icon": "stacked_bar_chart", "link": reverse_lazy("admin:tracker_scoreband_changelist")},
+                {"title": "Job sites by link", "icon": "link", "link": reverse_lazy("admin:tracker_source_changelist")},
+                {"title": "Expired phrases", "icon": "event_busy", "link": reverse_lazy("admin:tracker_expiredphrase_changelist")},
+                {"title": "Document kinds", "icon": "folder", "link": reverse_lazy("admin:tracker_documentkind_changelist")},
+            ]},
+            {"title": "Sign-in and access", "items": [
+                {"title": "Groups", "icon": "shield_person", "link": reverse_lazy("admin:auth_group_changelist")},
+                {"title": "Email addresses", "icon": "mail", "link": reverse_lazy("admin:account_emailaddress_changelist")},
+                {"title": "Two-step devices", "icon": "key", "link": reverse_lazy("admin:mfa_authenticator_changelist")},
+                {"title": "Linked social accounts", "icon": "share", "link": reverse_lazy("admin:socialaccount_socialaccount_changelist")},
+                {"title": "Social applications", "icon": "apps", "link": reverse_lazy("admin:socialaccount_socialapp_changelist")},
+                {"title": "Sites", "icon": "language", "link": reverse_lazy("admin:sites_site_changelist")},
+            ]},
+        ],
+    },
+    "COLORS": {
+        "primary": {
+            "50": "239 246 255", "100": "219 234 254", "200": "191 219 254", "300": "147 197 253", "400": "96 165 250",
+            "500": "59 130 246", "600": "37 99 235", "700": "29 78 216", "800": "30 64 175", "900": "30 58 138", "950": "23 37 84",
+        },
     },
 }
 
@@ -211,25 +237,30 @@ MFA_TOTP_ISSUER = os.environ.get("STILLOPEN_TOTP_ISSUER", "StillOpen")
 MFA_ALLOW_UNVERIFIED_EMAIL = True
 MFA_PASSKEY_LOGIN_ENABLED = False
 MFA_PASSKEY_SIGNUP_ENABLED = False
-if os.environ.get("EMAIL_HOST"):
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = os.environ["EMAIL_HOST"]
-    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
-    EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
-    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-    EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
-else:
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# Email goes through whatever is set up at the moment of sending: these environment variables if EMAIL_HOST is set, otherwise the
+# admin's Site configuration > Email sending, otherwise the server console (tracker/email_backend.py, services/integrations.py).
+EMAIL_BACKEND = "tracker.email_backend.ConfiguredBackend"
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "StillOpen <noreply@localhost>")
 EMAIL_CONFIGURED = bool(os.environ.get("EMAIL_HOST"))
 # People who register themselves must click an emailed link before they get in -- but only where that email can actually
 # arrive. With no SMTP the link would only be printed to the server console and nobody could ever sign up, so a fresh
 # self-hosted install lets people straight in and tells the admin (see the dashboard notice). Set to 1 to insist anyway.
-STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = os.environ.get("STILLOPEN_REQUIRE_EMAIL_CONFIRMATION", "1" if (EMAIL_CONFIGURED or "test" in sys.argv) else "0") == "1"
+# None means "decide at the moment": on once email is set up (here or in the admin), off while it is not.
+if os.environ.get("STILLOPEN_REQUIRE_EMAIL_CONFIRMATION") is not None:
+    STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = os.environ["STILLOPEN_REQUIRE_EMAIL_CONFIRMATION"] == "1"
+elif EMAIL_CONFIGURED or "test" in sys.argv:
+    STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = True
+else:
+    STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = None
 # "optional" globally so accounts made in the admin or by createsuperuser (no confirmed email) are never locked out;
 # tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
 # "none" when confirmation is not required, so no email is sent (or claimed to be sent) from a server that cannot send it.
-ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional" if STILLOPEN_REQUIRE_EMAIL_CONFIRMATION else "none")
+ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "none" if STILLOPEN_REQUIRE_EMAIL_CONFIRMATION is False else "optional")
 
 # Per-person limits on a shared server.
 STILLOPEN_MAX_APPLICATIONS = int(os.environ.get("STILLOPEN_MAX_APPLICATIONS", "500"))

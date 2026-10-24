@@ -1,0 +1,17 @@
+{% extends "tracker/base_app.html" %}
+{% block title %}Test email{% endblock %}
+{% block page_title %}Test email{% endblock %}
+{% block content %}
+{% if result %}<div class="alert {% if result.0 == 'success' %}alert-success{% else %}alert-danger{% endif %}">{{ result.1 }}</div>{% endif %}
+<div class="card">
+  <div class="card-body">
+    {% if cfg %}
+    <p>Email is set up through the <strong>{{ cfg.source }}</strong>: <code>{{ cfg.host }}:{{ cfg.port }}</code>{% if cfg.username %} as <code>{{ cfg.username }}</code>{% endif %}, sending as <code>{{ cfg.from_email }}</code>.</p>
+    <form method="post">{% csrf_token %}<button class="btn btn-primary" type="submit">Send a test to {{ request.user.email|default:"my email (add one first)" }}</button></form>
+    {% else %}
+    <p>Email is <strong>not set up</strong>, so nothing is sent: messages only print to the server's console.</p>
+    <p class="mb-0">Fill in the <strong>Email</strong> tab under <a href="{% url 'admin:tracker_siteconfig_changelist' %}">Site configuration</a> in the admin (for Brevo: host <code>smtp-relay.brevo.com</code>, port 587), save, then come back here.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

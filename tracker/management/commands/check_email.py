@@ -3,6 +3,8 @@ from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand, CommandError
 
+from tracker.services import integrations
+
 
 class Command(BaseCommand):
     help = (
@@ -16,16 +18,17 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         backend = settings.EMAIL_BACKEND.rsplit(".", 1)[-1]
-        if not settings.EMAIL_CONFIGURED:
+        cfg = integrations.email_settings()
+        if cfg is None:
             self.stdout.write(self.style.WARNING(
                 "Email is NOT set up. Messages are only printed to this console, so nobody receives them.\n"
-                "Set EMAIL_HOST (and usually EMAIL_PORT, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, DEFAULT_FROM_EMAIL) in .env, then run this again.\n"
-                f"Consequence today: new sign-ups are not email-verified (STILLOPEN_REQUIRE_EMAIL_CONFIRMATION={'on' if settings.STILLOPEN_REQUIRE_EMAIL_CONFIRMATION else 'off'})."
+                "Fill in Site configuration > Email in the admin (or set EMAIL_HOST and friends in .env), then run this again.\n"
+                f"Consequence today: new sign-ups are not email-verified (confirmation is {'on' if integrations.require_email_confirmation() else 'off'})."
             ))
             return
         self.stdout.write(
-            f"Backend: {backend}\nServer:  {settings.EMAIL_HOST}:{settings.EMAIL_PORT} (TLS {'on' if settings.EMAIL_USE_TLS else 'off'})\n"
-            f"Login:   {settings.EMAIL_HOST_USER or '(none)'}\nFrom:    {settings.DEFAULT_FROM_EMAIL}"
+            f"Backend: {backend} (settings from the {cfg.source})\nServer:  {cfg.host}:{cfg.port} (TLS {'on' if cfg.use_tls else 'off'})\n"
+            f"Login:   {cfg.username or '(none)'}\nFrom:    {cfg.from_email}"
         )
         if opts["no_send"]:
             return
@@ -38,7 +41,7 @@ class Command(BaseCommand):
         try:
             send_mail(
                 "StillOpen: test email", "If you can read this, StillOpen can send email.\n\nSign-up confirmations, interview reminders, "
-                "follow-ups and job alerts will reach people.", settings.DEFAULT_FROM_EMAIL, [recipient], fail_silently=False,
+                "follow-ups and job alerts will reach people.", cfg.from_email, [recipient], fail_silently=False,
             )
         except Exception as exc:  # noqa: BLE001 - the reason is the whole point of this command
             raise CommandError(f"Sending failed: {exc.__class__.__name__}: {exc}") from exc

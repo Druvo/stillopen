@@ -5,6 +5,8 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Admin: email sending (Brevo or any SMTP, with a test page) and Google, GitHub and Facebook sign-in (client ID, secret, on/off) are now set in Site configuration and apply at once; environment variables still take precedence. Secrets are stored encrypted and never shown again. AI settings now ask only for a provider and a key, with the technical fields under Advanced.
+
 - Connect an AI assistant: each person can make personal tokens (read only or read and change, with expiry and revoke) under Profile, and use Claude Code or any MCP client against the website at `/mcp/`. Same small tool list as the local server, always acting as the token's owner only. See docs/MCP.md.
 
 - Sign-in: optional two-step sign-in for everyone (authenticator app, security key, recovery codes), and GitHub and Facebook sign-in beside Google, each with its own switch in the admin.

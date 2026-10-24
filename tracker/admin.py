@@ -1,8 +1,14 @@
 from django import forms
 from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import Group
 from django.urls import reverse
 from django.utils import timezone
+from unfold.admin import ModelAdmin, TabularInline
+from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from .models import (
     AIUsageEvent,
@@ -43,9 +49,29 @@ class SiteConfigForm(forms.ModelForm):
         help_text="Free key from jooble.org/api/about. Leave blank to keep the saved key. The JOOBLE_API_KEY environment variable takes precedence.",
     )
 
+    # write-only secrets: blank keeps what is saved
+    email_password = forms.CharField(
+        required=False, widget=forms.PasswordInput(render_value=False),
+        help_text="The SMTP password or key (for Brevo, the SMTP key). Stored encrypted and never shown again. Leave blank to keep the saved one.",
+    )
+    google_secret = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), help_text="Client secret. Stored encrypted. Leave blank to keep the saved one.")
+    github_secret = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), help_text="Client secret. Stored encrypted. Leave blank to keep the saved one.")
+    facebook_secret = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), help_text="App secret. Stored encrypted. Leave blank to keep the saved one.")
+
     class Meta:
         model = SiteConfig
         fields = "__all__"
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        if self.cleaned_data.get("email_password"):
+            obj.set_email_password(self.cleaned_data["email_password"])
+        for provider in ("google", "github", "facebook"):
+            if self.cleaned_data.get(f"{provider}_secret"):
+                obj.set_social_secret(provider, self.cleaned_data[f"{provider}_secret"])
+        if commit:
+            obj.save()
+        return obj
 
     def clean_jooble_api_key(self):
         key = self.cleaned_data.get("jooble_api_key", "")
@@ -56,63 +82,96 @@ class SiteConfigForm(forms.ModelForm):
         return token or (self.instance.paperless_token if self.instance else "")
 
 
+def _public_base() -> str:
+    """The site's public address for the redirect URLs shown in the admin, from the allowed hosts (never a guess at a local one)."""
+    from django.conf import settings
+
+    hosts = [h for h in settings.ALLOWED_HOSTS if h not in ("localhost", "127.0.0.1", "*", "[::1]") and not h.startswith(".")]
+    return f"https://{hosts[0]}" if hosts else "https://your-site"
+
+
 @admin.register(SiteConfig)
-class SiteConfigAdmin(admin.ModelAdmin):
+class SiteConfigAdmin(ModelAdmin):
     form = SiteConfigForm
     fieldsets = (
         (
             "Dashboard",
             {
+                "classes": ("tab",),
                 "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "auto_scan_hours", "mcp_remote_enabled"),
-                "description": "Follow-up emails need SMTP (EMAIL_HOST in the environment) and `manage.py send_followup_emails` on a schedule (e.g. daily cron) -- enabling this alone does not send anything by itself.",
+                "description": "Follow-up emails need email set up (the Email tab) and `manage.py send_followup_emails` on a schedule (e.g. daily cron) -- enabling this alone does not send anything by itself.",
             },
         ),
         (
             "Registration",
             {
+                "classes": ("tab",),
                 "fields": ("signup_mode",),
                 "description": (
-                    "<strong>Open</strong> lets anyone register. New users must confirm their email, so configure SMTP "
-                    "(EMAIL_HOST in the environment) first. Everyone only ever sees their own data."
+                    "<strong>Open</strong> lets anyone register. New users must confirm their email, so set up the Email tab "
+                    "first. Everyone only ever sees their own data."
                 ),
             },
         ),
-        ("Landing page", {"fields": ("landing_enabled", "landing_headline", "landing_subheadline", "landing_github_url")}),
+        ("Landing page", {"classes": ("tab",), "fields": ("landing_enabled", "landing_headline", "landing_subheadline", "landing_github_url")}),
         (
-            "Public job board",
+            "Job board",
             {
+                "classes": ("tab",),
                 "fields": ("public_board_enabled", "public_details_indexable", "contact_email"),
                 "description": "The public job board (/openings/) shows openings from sources marked 'Show publicly' under Job sources, each with a short excerpt "
                 "and a credit link to the original. Remotive's terms forbid this, so it is off for Remotive.",
             },
         ),
-        ("Legal", {"fields": ("privacy_text", "terms_text"), "description": "Shown at /privacy/ and /terms/. Replace the defaults."}),
-        ("career-ops import (site admins only)", {"fields": ("careerops_path", "node_command")}),
-        ("Open / closed check", {"fields": ("liveness_mode", "liveness_timeout")}),
+        ("Legal", {"classes": ("tab",), "fields": ("privacy_text", "terms_text"), "description": "Shown at /privacy/ and /terms/. Replace the defaults."}),
+        ("career-ops", {"classes": ("tab",), "fields": ("careerops_path", "node_command")}),
+        ("Open check", {"classes": ("tab",), "fields": ("liveness_mode", "liveness_timeout")}),
         (
-            "Social sign-in (Google, GitHub, Facebook)",
+            "Email",
             {
-                "fields": ("google_login_enabled", "github_login_enabled", "facebook_login_enabled", "google_allowed_emails"),
+                "classes": ("tab",),
+                "fields": ("email_host", "email_port", "email_username", "email_password", "email_use_tls", "email_from"),
                 "description": (
-                    "All three are free. Create an OAuth app with the provider, using the redirect address "
-                    "<code>&lt;your site&gt;/accounts/google/login/callback/</code> (or <code>github</code>, <code>facebook</code> "
-                    "in place of <code>google</code>). Then add it under <strong>Social applications</strong> (choose the provider and "
-                    "your Site), or set <code>GOOGLE_CLIENT_ID</code>/<code>_SECRET</code> (and the GITHUB_ and FACEBOOK_ ones) in the "
-                    "environment, and tick the box. See docs/SELF-HOSTING.md."
+                    "Needed for sign-up confirmation links, interview reminders, follow-up digests and job alerts. "
+                    "<strong>Brevo (free, 300 a day):</strong> host <code>smtp-relay.brevo.com</code>, port <code>587</code>, TLS on, "
+                    "username = your Brevo SMTP login, password = an SMTP key from Brevo, sender = an address you verified in Brevo. "
+                    "Save, then <a href=\"/tools/email-test/\">send yourself a test email</a>. "
+                    "The EMAIL_HOST environment variable, if set, takes precedence over this section."
                 ),
             },
         ),
         (
-            "Job search keys (site admins only)",
+            "Social sign-in",
             {
+                "classes": ("tab",),
+                "fields": (
+                    "google_login_enabled", "google_client_id", "google_secret",
+                    "github_login_enabled", "github_client_id", "github_secret",
+                    "facebook_login_enabled", "facebook_client_id", "facebook_secret",
+                    "google_allowed_emails",
+                ),
+                "description": (
+                    "All three are free. For each one you want, create an OAuth app with the provider, give it the redirect address "
+                    "below, paste its client ID and secret here, and tick the box. Changes apply at once. "
+                    "Redirect addresses: <code>{base}/accounts/google/login/callback/</code>, "
+                    "<code>{base}/accounts/github/login/callback/</code>, <code>{base}/accounts/facebook/login/callback/</code>. "
+                    "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (and the GITHUB_ and FACEBOOK_ ones) in the environment take precedence."
+                ).format(base=_public_base()),
+            },
+        ),
+        (
+            "Job search keys",
+            {
+                "classes": ("tab",),
                 "fields": ("jooble_api_key",),
                 "description": "Optional. Jooble covers Bangladesh, Malaysia and the Gulf, where few job sites publish an open feed. "
                 "Without a key those sources are simply skipped.",
             },
         ),
         (
-            "Paperless-ngx (site admins only)",
-            {"fields": ("paperless_enabled", "paperless_url", "paperless_token", "paperless_verify_tls", "paperless_auto_upload")},
+            "Paperless",
+            {
+                "classes": ("tab",),"fields": ("paperless_enabled", "paperless_url", "paperless_token", "paperless_verify_tls", "paperless_auto_upload")},
         ),
     )
     actions = None
@@ -145,7 +204,7 @@ class UserProfileAdminForm(SecretKeysMixin, forms.ModelForm):
 
 
 @admin.register(UserProfile)
-class UserProfileAdmin(admin.ModelAdmin):
+class UserProfileAdmin(ModelAdmin):
     form = UserProfileAdminForm
     list_display = ("user", "ai_provider", "rag_mode", "complete", "updated_at")
     search_fields = ("user__username", "user__email")
@@ -179,43 +238,43 @@ class UserProfileAdmin(admin.ModelAdmin):
 
 
 @admin.register(Bucket)
-class BucketAdmin(admin.ModelAdmin):
+class BucketAdmin(ModelAdmin):
     list_display = ("label", "key", "order", "is_closed")
     list_editable = ("order", "is_closed")
     prepopulated_fields = {"key": ("label",)}
 
 
 @admin.register(Status)
-class StatusAdmin(admin.ModelAdmin):
+class StatusAdmin(ModelAdmin):
     list_display = ("name", "bucket", "order", "color", "counts_as_applied", "is_terminal")
     list_editable = ("bucket", "order", "color", "counts_as_applied", "is_terminal")
 
 
 @admin.register(ScoreBand)
-class ScoreBandAdmin(admin.ModelAdmin):
+class ScoreBandAdmin(ModelAdmin):
     list_display = ("label", "min_percent", "color")
     list_editable = ("min_percent", "color")
 
 
 @admin.register(Source)
-class SourceAdmin(admin.ModelAdmin):
+class SourceAdmin(ModelAdmin):
     list_display = ("name", "host_contains")
 
 
 @admin.register(ExpiredPhrase)
-class ExpiredPhraseAdmin(admin.ModelAdmin):
+class ExpiredPhraseAdmin(ModelAdmin):
     list_display = ("phrase", "note")
     search_fields = ("phrase",)
 
 
 @admin.register(DocumentKind)
-class DocumentKindAdmin(admin.ModelAdmin):
+class DocumentKindAdmin(ModelAdmin):
     list_display = ("name", "keywords", "paperless_tag", "paperless_document_type", "order")
     list_editable = ("keywords", "paperless_tag", "paperless_document_type", "order")
 
 
 @admin.register(KnowledgeSource)
-class KnowledgeSourceAdmin(admin.ModelAdmin):
+class KnowledgeSourceAdmin(ModelAdmin):
     list_display = ("title", "owner", "kind", "enabled", "characters", "passages", "embedded", "updated_at")
     list_filter = ("kind", "enabled")
     search_fields = ("title", "text", "owner__username")
@@ -282,19 +341,19 @@ class KnowledgeSourceAdmin(admin.ModelAdmin):
         self.message_user(request, f"Embedded {done} passage(s).")
 
 
-class InsightInline(admin.TabularInline):
+class InsightInline(TabularInline):
     model = Insight
     extra = 1
 
 
-class DocumentInline(admin.TabularInline):
+class DocumentInline(TabularInline):
     model = Document
     extra = 0
     fields = ("kind", "title", "file", "source_path", "paperless_id", "paperless_error")
     readonly_fields = ("paperless_id", "paperless_error")
 
 
-class EventInline(admin.TabularInline):
+class EventInline(TabularInline):
     model = Event
     extra = 0
 
@@ -308,7 +367,7 @@ def _paperless_client(request, config):
 
 
 @admin.register(Application)
-class ApplicationAdmin(admin.ModelAdmin):
+class ApplicationAdmin(ModelAdmin):
     list_display = ("careerops_num", "owner", "company", "role", "status", "match", "decision", "live_state", "deadline", "applied_date")
     list_display_links = ("company", "role")
     list_editable = ("status",)
@@ -399,7 +458,7 @@ class ApplicationAdmin(admin.ModelAdmin):
 
 
 @admin.register(Document)
-class DocumentAdmin(admin.ModelAdmin):
+class DocumentAdmin(ModelAdmin):
     list_display = ("title", "application", "kind", "paperless_id", "created_at")
     list_filter = ("kind",)
     search_fields = ("title", "application__company")
@@ -417,7 +476,7 @@ class DocumentAdmin(admin.ModelAdmin):
 
 
 @admin.register(LivenessRun)
-class LivenessRunAdmin(admin.ModelAdmin):
+class LivenessRunAdmin(ModelAdmin):
     list_display = ("started_at", "finished_at", "running", "done", "total", "error")
     readonly_fields = [f.name for f in LivenessRun._meta.fields]
 
@@ -426,7 +485,7 @@ class LivenessRunAdmin(admin.ModelAdmin):
 
 
 @admin.register(JobSource)
-class JobSourceAdmin(admin.ModelAdmin):
+class JobSourceAdmin(ModelAdmin):
     list_display = ("name", "connector", "board_token", "owner", "enabled", "show_publicly")
     list_editable = ("enabled", "show_publicly")
     list_filter = ("connector", "enabled", "show_publicly", "owner")
@@ -434,7 +493,7 @@ class JobSourceAdmin(admin.ModelAdmin):
 
 
 @admin.register(Posting)
-class PostingAdmin(admin.ModelAdmin):
+class PostingAdmin(ModelAdmin):
     list_display = ("title", "company", "source", "location", "first_seen_at", "last_seen_at", "repost_flag")
     list_filter = ("source",)
     search_fields = ("title", "company", "title_key", "url")
@@ -448,7 +507,7 @@ class PostingAdmin(admin.ModelAdmin):
         return bool(scan.repost_signal(obj))
 
 
-class ScanLogEntryInline(admin.TabularInline):
+class ScanLogEntryInline(TabularInline):
     model = ScanLogEntry
     extra = 0
     fields = ("source_name", "connector", "found", "matched", "added", "duplicates", "error")
@@ -460,7 +519,7 @@ class ScanLogEntryInline(admin.TabularInline):
 
 
 @admin.register(ScanRun)
-class ScanRunAdmin(admin.ModelAdmin):
+class ScanRunAdmin(ModelAdmin):
     list_display = ("owner", "started_at", "finished_at", "running", "done", "total", "found", "added", "error")
     readonly_fields = [f.name for f in ScanRun._meta.fields]
     inlines = [ScanLogEntryInline]
@@ -470,7 +529,7 @@ class ScanRunAdmin(admin.ModelAdmin):
 
 
 @admin.register(AIUsageEvent)
-class AIUsageEventAdmin(admin.ModelAdmin):
+class AIUsageEventAdmin(ModelAdmin):
     list_display = ("owner", "provider", "purpose", "input_tokens", "output_tokens", "cost_usd", "cost_is_estimate", "created_at")
     list_filter = ("provider", "purpose", "cost_is_estimate")
     search_fields = ("owner__username",)
@@ -478,3 +537,21 @@ class AIUsageEventAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+# People and groups in the same look as everything else (Unfold's own forms and base classes).
+User = get_user_model()
+admin.site.unregister(User)
+admin.site.unregister(Group)
+
+
+@admin.register(User)
+class UserAdmin(BaseUserAdmin, ModelAdmin):
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
+
+
+@admin.register(Group)
+class GroupAdmin(BaseGroupAdmin, ModelAdmin):
+    pass

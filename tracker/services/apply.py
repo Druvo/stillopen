@@ -11,7 +11,7 @@ from django.db import models
 from django.utils import timezone
 
 from tracker.models import Application, CVVersion, Event, SiteConfig, Status
-from tracker.services import cvversions
+from tracker.services import cvversions, integrations
 
 MAX_FOLLOW_UP_DAYS = 90
 CHANNELS = {value for value, _ in Application.CHANNELS if value}
@@ -154,7 +154,7 @@ def send_followup_digest(owner, apps) -> bool:
     send_mail(
         subject=f"StillOpen: {count} follow-up{'s' if count != 1 else ''} due",
         message=followup_digest_text(apps),
-        from_email=settings.DEFAULT_FROM_EMAIL,
+        from_email=integrations.from_email(),
         recipient_list=[owner.email],
         fail_silently=False,
     )

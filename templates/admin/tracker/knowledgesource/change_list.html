@@ -1,10 +1,8 @@
 {% extends "admin/change_list.html" %}
 {% block object-tools-items %}
-  <li>
-    <form method="post" action="{% url 'admin:tracker_knowledgesource_import' %}" style="display:inline">
-      {% csrf_token %}
-      <button type="submit" class="addlink" style="cursor:pointer">Import from career-ops</button>
-    </form>
-  </li>
+  <form method="post" action="{% url 'admin:tracker_knowledgesource_import' %}" class="flex flex-row items-center mr-3">
+    {% csrf_token %}
+    <button type="submit" class="border border-base-200 dark:border-base-700 rounded-default px-3 py-1.5 font-medium text-sm hover:bg-base-50 dark:hover:bg-base-800">Import from career-ops</button>
+  </form>
   {{ block.super }}
 {% endblock %}

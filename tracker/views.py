@@ -4,6 +4,7 @@ import mimetypes
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import logout
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
@@ -52,6 +53,30 @@ def throttled(user, action: str, limit: int, window: int = 3600) -> bool:
     except ValueError:
         cache.set(key, 1, timeout=window)
         return False
+
+
+@staff_member_required
+@require_http_methods(["GET", "POST"])
+def email_test(request):
+    """Send one test message to the signed-in admin through the email settings in use, and say plainly what happened."""
+    from django.core.mail import send_mail
+
+    from .services import integrations
+
+    cfg = integrations.email_settings()
+    result = None
+    if request.method == "POST":
+        if cfg is None:
+            result = ("error", "Email is not set up yet. Fill in the Email tab in Site configuration first.")
+        elif not request.user.email:
+            result = ("error", "Your admin account has no email address. Add one to your profile first.")
+        else:
+            try:
+                send_mail("StillOpen: test email", "If you can read this, StillOpen can send email.", cfg.from_email, [request.user.email], fail_silently=False)
+                result = ("success", f"Sent to {request.user.email}. Check that inbox, and the spam folder.")
+            except Exception as exc:  # noqa: BLE001 - the reason is the point of this page
+                result = ("error", f"Sending failed: {exc.__class__.__name__}: {exc}")
+    return render(request, "tracker/email_test.html", {"cfg": cfg, "result": result})
 
 
 def too_many():
@@ -515,6 +540,7 @@ def profile_ai(request):
     ).exists()
     return render(request, "tracker/profile_ai.html", {
         "form": form, "config": SiteConfig.load(), "has_key": bool(obj.ai_key_encrypted),
+        "provider_label": "" if obj.ai_provider == "none" else f"{obj.get_ai_provider_display()}{' (' + obj.ai_model + ')' if obj.ai_model else ''}",
         "has_rag_key": bool(obj.rag_embedding_key_encrypted), "usage": usage,
     })
 
