@@ -1,0 +1,12 @@
+{% extends "tracker/public_base.html" %}
+{% block title %}This job is no longer listed | {{ config.site_title }}{% endblock %}
+{% block robots %}noindex,follow{% endblock %}
+{% block main %}
+<section class="so-section">
+  <div class="container-xl text-center" style="max-width:640px">
+    <h1 class="h2">This job is no longer listed</h1>
+    <p class="so-lead mx-auto">It has not been seen on its source recently, so it has probably been filled or closed. We remove openings like this so you do not waste an evening on them.</p>
+    <a class="btn btn-primary btn-lg" href="{% url 'openings' %}">Browse current openings</a>
+  </div>
+</section>
+{% endblock %}

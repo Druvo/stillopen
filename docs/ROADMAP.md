@@ -75,7 +75,7 @@ No TODO/FIXME markers anywhere in the Python source — gaps are tracked in pros
 | Analytics (response rate, funnel, time-to-offer) | — | partial | — | — | — | **none** beyond 4 summary numbers |
 | Job alerts / saved recurring search | yes (board aggregation) | — | — | — | — | one-shot scan only, **no recurring/scheduled scan or digest** |
 | **"Is this posting still open" live check** | — | — | — | — | — (ApplyPotato: via Gmail only) | **yes — a genuine differentiator, lean into it** |
-| **Referral tracking** | — | — | — | — | — | referrals per contact and job |
+| **Referral tracking** | — | — | — | — | — | referrals per contact and job (also via MCP) |
 | Cost/token transparency for AI use | — | — | — | — | — | tokens + cost per call, monthly total on Profile -> AI settings |
 | Mobile app | native | native | extension | — | — | responsive web only |
 

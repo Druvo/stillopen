@@ -100,6 +100,20 @@ def _needs(area: SearchArea) -> int:
     return int(area.needs_visa_sponsorship) + int(area.needs_relocation_support) + int(bool(area.min_salary))
 
 
+def _specificity(area: SearchArea, app: Application) -> int:
+    """Which of several areas that all fit a job to name: the one that describes it best. A worldwide remote job is best
+    described by "Anywhere"; a job in one country by that country (then a region, then "Anywhere"). Lower is better."""
+    codes = geo.resolve_place(area.place)
+    anywhere = bool(codes) and "*" in codes
+    if _job_is_global(app):
+        return 0 if anywhere else 1
+    if anywhere:
+        return 3
+    if codes is None:
+        return 1
+    return 0 if len(codes) == 1 else 2
+
+
 def area_status(app: Application, areas: list, profile: UserProfile | None = None) -> str:
     """The best any of the person's search areas can say about this posting: "yes" (it clearly fits one), "maybe" (the
     posting does not say enough, or the person has no areas) or "no" (it is stated to be outside every area)."""
@@ -150,7 +164,7 @@ def fit_flags(app: Application, areas: list | None = None, profile: UserProfile 
     else:
         home = profile.home_country if profile else ""
         statuses = [(area, _area_status(area, app, home)) for area in areas]
-        fits = sorted((a for a, s in statuses if s == "yes"), key=_needs)
+        fits = sorted((a for a, s in statuses if s == "yes"), key=lambda a: (_needs(a), _specificity(a, app)))
         maybes = [a for a, s in statuses if s == "maybe"]
         where = app.location_text or geo.country_name(app.country) or "an unknown place"
         what = _ARRANGEMENT_LABEL.get(app.arrangement, "work arrangement not stated")

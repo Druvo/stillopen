@@ -1,0 +1,93 @@
+{% extends "tracker/public_base.html" %}
+{% load humanize %}
+{% block title %}{% if country_name %}Jobs in {{ country_name }}{% elif remote %}Remote jobs{% elif q %}{{ q }} jobs{% else %}Browse open jobs{% endif %} | {{ config.site_title }}{% endblock %}
+{% block description %}{% if country_name %}Open jobs in {{ country_name }}{% else %}Browse {{ total|intcomma }} open jobs from employers' career pages and remote job boards{% endif %}. Create a free account to see how well each one fits you.{% endblock %}
+{% block canonical %}{% if noindex %}{{ request.build_absolute_uri }}{% else %}{% url 'openings' as u %}{{ request.scheme }}://{{ request.get_host }}{{ u }}{% endif %}{% endblock %}
+{% block robots %}{% if noindex %}noindex,follow{% else %}index,follow{% endif %}{% endblock %}
+
+{% block main %}
+<section class="so-hero">
+  <div class="container-xl py-4 py-lg-5">
+    <span class="so-eyebrow">Job board</span>
+    <h1 class="fw-bold mt-1 mb-2">{% if country_name %}Jobs in {{ country_name }}{% elif remote %}Remote jobs{% else %}Browse open jobs{% endif %}</h1>
+    <p class="so-lead mb-4">{{ total|intcomma }} open job{{ total|pluralize }}{% if filtered %} match your filters{% else %} from {{ stats.companies|intcomma }} employers in {{ stats.countries }} countries, with new ones added through the day{% endif %}. Create a free account to see how well each one fits <em>you</em>.</p>
+    <form method="get" class="card"><div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-5"><label class="form-label mb-1" for="q">Job title, company or place</label><input type="search" class="form-control" id="q" name="q" value="{{ q }}" placeholder="e.g. backend engineer, Grab, Kuala Lumpur" autocomplete="off"></div>
+        <div class="col-12 col-md-4"><label class="form-label mb-1" for="country">Country</label>
+          <select class="form-select" id="country" name="country"><option value="">Anywhere in the world</option>
+            <optgroup label="With open jobs now">{% for c in countries_with_jobs %}<option value="{{ c.code }}" {% if c.code == country %}selected{% endif %}>{{ c.name }} ({{ c.n }})</option>{% endfor %}</optgroup>
+            <optgroup label="Other countries (none open right now)">{% for c in countries_without %}<option value="{{ c.code }}" {% if c.code == country %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</optgroup>
+          </select></div>
+        <div class="col-12 col-md-3 d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">Search</button>{% if filtered %}<a class="btn btn-outline-secondary" href="{% url 'openings' %}">Clear</a>{% endif %}</div>
+      </div>
+      <div class="row g-2 align-items-end mt-1">
+        <div class="col-6 col-md-3"><label class="form-label mb-1" for="type">Kind of job</label>
+          <select class="form-select" id="type" name="type"><option value="">Any</option>{% for key, label in types %}<option value="{{ key }}" {% if key == f.type %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-6 col-md-3"><label class="form-label mb-1" for="level">Level</label>
+          <select class="form-select" id="level" name="level"><option value="">Any</option>{% for key, label in levels %}<option value="{{ key }}" {% if key == f.level %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-12 col-md-3"><label class="form-label mb-1" for="within">Posted</label>
+          <select class="form-select" id="within" name="within"><option value="">Any time</option>{% for key, label in within_options %}<option value="{{ key }}" {% if key == f.within %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-12 col-md-3">
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="remote" name="remote" value="1" {% if remote %}checked{% endif %}><label class="form-check-label" for="remote">Remote only</label></div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="visa" name="visa" value="1" {% if f.visa %}checked{% endif %}><label class="form-check-label" for="visa">Visa sponsorship</label></div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="relocation" name="relocation" value="1" {% if f.relocation %}checked{% endif %}><label class="form-check-label" for="relocation">Relocation help</label></div>
+        </div>
+      </div>
+      <p class="text-secondary mt-2 mb-0" style="font-size:.82rem">Visa, relocation, kind and level are read from each posting's own words, so a job that does not say is not matched by those filters. Always confirm with the employer.</p>
+    </div></form>
+  </div>
+</section>
+
+<section class="so-section" style="padding-top:2rem">
+  <div class="container-xl">
+    <div class="row g-4">
+      <div class="col-lg-8">
+        {% for r in rows %}
+        <article class="card so-job mb-3"><div class="card-body position-relative">
+          <div class="d-flex justify-content-between gap-3">
+            <div>
+              <h2 class="h4 mb-1"><a class="stretched-link" href="{% url 'opening_detail' r.p.pk r.slug %}">{{ r.p.title }}</a></h2>
+              <div class="text-secondary">{{ r.p.company }}</div>
+            </div>
+            <div class="text-end text-secondary" style="font-size:.85rem;white-space:nowrap">{{ r.p.first_seen_at|date:"j M" }}</div>
+          </div>
+          <div class="mt-2 d-flex flex-wrap gap-1"><span class="badge bg-secondary-lt">{{ r.where|truncatechars:48 }}</span>{% if r.p.remote and "emote" not in r.where %}<span class="badge bg-green-lt">Remote</span>{% endif %}{% if r.p.sponsorship == "yes" %}<span class="badge bg-green-lt">Visa sponsorship</span>{% endif %}{% if r.p.relocation == "yes" %}<span class="badge bg-green-lt">Relocation help</span>{% endif %}{% if r.p.employment_type %}<span class="badge bg-secondary-lt">{{ r.p.get_employment_type_display }}</span>{% endif %}<span class="badge bg-blue-lt">via {{ r.credit.label }}</span></div>
+          {% if r.p.excerpt %}<p class="text-secondary mt-2 mb-0" style="font-size:.95rem">{{ r.p.excerpt|truncatechars:210 }}</p>{% endif %}
+        </div></article>
+        {% empty %}
+        <div class="card"><div class="card-body text-center py-5">
+          <h2 class="h4">No jobs match that</h2>
+          {% if country_empty %}<p class="text-secondary">None of the sources we read have an opening in {{ country_name }} right now. Try <a href="{% url 'openings' %}?remote=1">remote jobs</a>, which you can do from anywhere, or create an account and add a company's job page yourself.</p>{% endif %}
+          <p class="text-secondary">{% if filtered %}Try fewer words, another country, or <a href="{% url 'openings' %}">clear the filters</a>.{% else %}The board is filling up. Please check back soon, or create an account and run your own search.{% endif %}</p>
+        </div></div>
+        {% endfor %}
+
+        {% if page.paginator.num_pages > 1 %}
+        <nav aria-label="Pages of jobs"><ul class="pagination justify-content-center flex-wrap">
+          {% if page.has_previous %}<li class="page-item"><a class="page-link" href="?{% if qs %}{{ qs }}&amp;{% endif %}page={{ page.previous_page_number }}" rel="prev">&laquo; Previous</a></li>{% endif %}
+          <li class="page-item disabled"><span class="page-link">Page {{ page.number }} of {{ page.paginator.num_pages }}</span></li>
+          {% if page.has_next %}<li class="page-item"><a class="page-link" href="?{% if qs %}{{ qs }}&amp;{% endif %}page={{ page.next_page_number }}" rel="next">Next &raquo;</a></li>{% endif %}
+        </ul></nav>
+        {% endif %}
+      </div>
+
+      <aside class="col-lg-4">
+        <div class="card position-sticky" style="top:84px"><div class="card-body">
+          <h2 class="h4">See how well each job fits you</h2>
+          <p class="text-secondary">This board is the same for everyone. After you sign in, the list is yours:</p>
+          <ul class="list-unstyled">
+            <li class="mb-1"><span class="so-yes">&#10003;</span> Ranked against your CV and skills</li>
+            <li class="mb-1"><span class="so-yes">&#10003;</span> Only jobs where you can work</li>
+            <li class="mb-1"><span class="so-yes">&#10003;</span> A tailored CV and cover letter per job</li>
+            <li class="mb-1"><span class="so-yes">&#10003;</span> Your applications tracked in one place</li>
+          </ul>
+          {% if user.is_authenticated %}<a class="btn btn-primary w-100" href="{% url 'dashboard' %}">Open your dashboard</a>
+          {% elif config.signup_open %}<a class="btn btn-primary w-100 mb-2" href="{% url 'account_signup' %}">Create a free account</a><a class="btn btn-outline-secondary w-100" href="{% url 'account_login' %}">Sign in</a>
+          {% else %}<a class="btn btn-primary w-100" href="{% url 'account_login' %}">Sign in</a>{% endif %}
+        </div></div>
+      </aside>
+    </div>
+  </div>
+</section>
+{% endblock %}

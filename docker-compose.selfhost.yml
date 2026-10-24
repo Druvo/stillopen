@@ -1,0 +1,56 @@
+# The simplest way to run StillOpen yourself: one container, your data in one Docker volume. No Postgres, no Paperless.
+#
+#   docker compose -f docker-compose.selfhost.yml up -d --build
+#   docker compose -f docker-compose.selfhost.yml exec stillopen python manage.py createsuperuser
+#   open http://localhost:8000   (admin: http://localhost:8000/admin/)
+#
+# Needs nothing else: the first start creates the database, adds about 120 job sources and generates a secret key that is
+# kept in the volume, so you stay signed in and stored API keys keep working across restarts and updates.
+#
+# Settings go in a `.env` file next to this one (see .env.example): SMTP, a Jooble key, your host name when you publish it.
+# Publishing to the internet? Put a TLS proxy in front, then set DJANGO_HTTPS=1 and the DJANGO_ALLOWED_HOSTS /
+# DJANGO_CSRF_TRUSTED_ORIGINS lines below; read docs/SELF-HOSTING.md first.
+#
+# Back up the `stillopen_data` volume (it holds db.sqlite3, the secret key and uploads). Update with `git pull`, then
+# `docker compose -f docker-compose.selfhost.yml up -d --build`; migrations run on start.
+services:
+  stillopen:
+    build: .
+    image: stillopen:selfhost
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${STILLOPEN_PORT:-8000}:8000"   # local only; change the left side to publish it (behind TLS)
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DJANGO_HTTPS: ${DJANGO_HTTPS:-0}              # 0 = plain http on localhost. Set 1 once a TLS proxy is in front.
+      DJANGO_BEHIND_PROXY: ${DJANGO_BEHIND_PROXY:-0}
+      STILLOPEN_DB: /data/db.sqlite3
+      STILLOPEN_MEDIA: /data/media
+      CAREEROPS_PATH: ""
+    volumes:
+      - stillopen_data:/data
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        if [ -z "$$DJANGO_SECRET_KEY" ]; then
+          [ -f /data/.secret_key ] || python -c "import secrets; print(secrets.token_urlsafe(64))" > /data/.secret_key
+          export DJANGO_SECRET_KEY="$$(cat /data/.secret_key)"
+        fi
+        python manage.py migrate --noinput
+        exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 16 --timeout 180
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/robots.txt', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  stillopen_data:

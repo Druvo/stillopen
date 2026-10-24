@@ -33,7 +33,7 @@ def next_step(profile, cards, has_areas: bool = True, searching: bool = False) -
     if searching and not cards:
         return {
             "headline": "We are searching for jobs that fit you",
-            "body": "It reads about a hundred job sources, so it takes a minute or two. Jobs will appear below; you do not need to do anything.",
+            "body": "It reads about a hundred job sources. The first jobs usually show up in under half a minute and the whole search takes about a minute. You do not need to do anything.",
             "label": "", "url": "",
         }
     if not has_areas:

@@ -1,5 +1,38 @@
 # StillOpen
 
+**Stop visiting job sites one by one.** StillOpen is free, open-source, self-hostable software that searches hundreds of company career pages and job boards for you, keeps the jobs you can really take, tailors your CV and cover letter for each one, and tracks every application. You press apply yourself; it never sends anything to an employer.
+
+[![Tests](https://github.com/Druvo/stillopen/actions/workflows/tests.yml/badge.svg)](https://github.com/Druvo/stillopen/actions/workflows/tests.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+![StillOpen landing page](docs/images/landing.jpg)
+
+## Why run your own
+
+- **Your data stays yours.** CV, notes and applications live in one database on your machine or server. Export or delete everything any time.
+- **No subscription, no lock-in, no tracking.** No ads and no third-party scripts, fonts or images on any page.
+- **No AI key needed.** Search, fit scoring, CV tailoring and cover letters all work without one. Bring your own key later for a deeper read.
+- **Read every line.** Apache-2.0 licensed. Contributions welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Quick start
+
+With Docker (about five minutes, no other setup):
+
+```bash
+git clone https://github.com/Druvo/stillopen.git
+cd stillopen
+docker compose -f docker-compose.selfhost.yml up -d --build
+docker compose -f docker-compose.selfhost.yml exec stillopen python manage.py createsuperuser
+```
+
+Open <http://localhost:8000>. Full guide (email, HTTPS, backups, updates): [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md). Running it as a shared service for many people: [docs/HOSTING.md](docs/HOSTING.md).
+
+## Project
+
+[Self-hosting](docs/SELF-HOSTING.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Changelog](CHANGELOG.md) · [License (Apache-2.0)](LICENSE)
+
+## What it is
+
 Job-search dashboard on Django. Each person registers, adds the roles they want and their CV, tracks the jobs they are chasing, and sees a match percentage and whether each posting is still open. Optional AI scoring with your own key, retrieval over your own documents, an MCP server for Claude Code, Paperless-ngx for documents, and a career-ops import for admins. Everything that changes behaviour is a row in the admin, not code.
 
 It runs two ways: on your own machine for one person, or as a shared service for many people (each only ever sees their own data). Hosting guide: [docs/HOSTING.md](docs/HOSTING.md).
@@ -43,18 +76,49 @@ Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboar
 
 Import is idempotent: new tracker rows are created, existing rows refresh only evaluation data (score, summary, strengths, gaps, deadline, PDFs). Your local status, notes and URL are never overwritten unless you run `import_careerops --sync-status`.
 
+## The public site: landing page and job board
+
+Visitors need no account to see what the app does and what is open.
+
+- **Landing page** (`/`): leads with the idea that nobody should visit job sites one by one, then shows live numbers (open jobs, employers, countries, sources searched), the latest openings, a before/after picture, how it works step by step, how a search narrows the list and how "fit" is worked out, live charts (jobs by country, by kind of source, new per day once there is history), the benefits, a comparison table, the privacy promises, the sources, and an FAQ. The headline and sub-headline are editable in the admin; everything else describes what the app really does.
+- **Job board** (`/openings/`): every currently listed opening, newest first, with search, country and remote filters and paging, and a page per opening (`/openings/<id>/<slug>/`) with a short excerpt, a credit link and the apply link unchanged. It is the same for everyone: the personalised part (fit to *your* CV and places, tailored CV, tracking) starts after sign-in.
+- **`robots.txt` and `sitemap.xml`** are generated. Private areas are disallowed.
+
+**The rules it follows** (checked against each source's own terms and Google's job-posting guidelines, 2026-10):
+
+| Rule | Why |
+| --- | --- |
+| Only sources ticked **Show publicly** (admin > Job sources) appear, never a person's own boards | Each source decides what may be republished |
+| **Remotive, We Work Remotely, Working Nomads, The Muse and Jooble are off by default.** Remotive's terms forbid sending its jobs to third-party sites and showing them to collect sign-ups | A public board whose purpose is attracting sign-ups is exactly what that clause bars |
+| RemoteOK, Himalayas, Jobicy and Arbeitnow are shown with a visible credit link; the apply link is the source's own, unchanged | Their terms ask for both |
+| Employer boards (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee) are shown, crediting the employer | They exist to be seen; review them if you want to be stricter |
+| A short excerpt only, never the full posting | The full text stays with its owner, one click away |
+| **No JobPosting structured data** | Google requires the full description on a single-job page; Himalayas and Remotive forbid passing jobs to Google Jobs |
+| An opening not seen for `STILLOPEN_PUBLIC_ACTIVE_DAYS` (3) days answers **410 Gone** and drops off the board | Google and the sources require expired jobs to be removed |
+| An opening's own page is `noindex` unless you switch on `public_details_indexable` | Short excerpts of other people's postings can be judged thin or copied content; the landing page, board and sitemap stay indexable |
+| Filtered and deeper pages are `noindex,follow` | They are for people, not search results |
+
+Freshness needs no person: the board refreshes itself in the background when a visitor arrives and it is older than `STILLOPEN_PUBLIC_REFRESH_HOURS` (6), at most once an hour, or run `python manage.py refresh_postings` from cron (it is in `deploy/`). Public pages are cached for `STILLOPEN_PUBLIC_CACHE_SECONDS` (300). Under **Site configuration > Public job board** you can switch the whole board off, allow indexing of opening pages, and set a contact email that appears in the footer for employers who want a listing removed.
+
+**The look.** A standard, familiar style: light by default for everyone, a toggle to dark that is remembered, one brand colour, system fonts only (no external fonts or scripts), a skip link, labelled forms, charts drawn as accessible inline SVG with titles and descriptions, and no sideways scrolling on small screens.
+
+## The dashboard: everything first, then filters
+
+The dashboard lists **every** job you have, best match first, with nothing hidden behind tabs. Narrow it down with the bar above the list: stage chips (All, To apply, Applied & pending, Closed & skipped, each with a count), a text search over company, role and place, and filters for fit to your places, how well you match, remote/hybrid/on-site, country, whether the posting is open, and when it was found. Sort by best match, newest, oldest, company or closing soonest. "Showing 6 of 40" says what is filtered and "Clear filters" undoes it. Your choices are remembered for the browser tab.
+
 ## Jobs found for you, with no setup and no AI
 
 A new install already knows where to look: it ships with about 100 job sources (8 remote-job feeds such as Remotive, RemoteOK, We Work Remotely, Himalayas, Jobicy, Working Nomads, Arbeitnow and The Muse, plus the public hiring boards of ~90 well-known companies on Greenhouse, Lever, Ashby, SmartRecruiters and Recruitee). All of them are open, documented, key-free endpoints. They are added by the migration, or by `python manage.py seed_sources` on an existing install, and the admin can pause or remove any.
 
 Candidates do nothing. When someone opens their dashboard and their last search is older than `auto_scan_hours` (Site configuration > Dashboard, default 12; 0 turns it off), a search starts in the background and the jobs appear. No cron, no button, no AI key. What a search does:
 
-1. Reads every source at once (a slow one is skipped after `STILLOPEN_SCAN_DEADLINE_SECONDS`, 90, and finishes into a shared cache for next time; each source is read at most once per `STILLOPEN_SCAN_CACHE_SECONDS`, 6 hours, however many people search).
+1. Reads every source at once, 16 at a time. It does not wait for the slowest hosts: once `STILLOPEN_SCAN_FIRST_WAIT_SECONDS` (15) have passed it works on the sources that answered, adds a first batch of up to `STILLOPEN_SCAN_FIRST_BATCH` (25) jobs (the dashboard refreshes itself to show them), then waits for the slow ones up to `STILLOPEN_SCAN_DEADLINE_SECONDS` (60) and tops the list up. A host still silent by then is skipped and finishes into a shared cache for next time; each source is read at most once per `STILLOPEN_SCAN_CACHE_SECONDS` (6 hours) however many people search. A typical cold search takes about a minute, with the first jobs at about 25 seconds, and a progress bar shows where it is.
 2. Keeps postings whose title fits a target role (the role's words in any order, with developer/engineer treated alike: "Backend Engineer" matches "Senior Software Engineer, Back-end"), or that share real skills with the CV.
 3. Leaves out postings that clearly cannot work for the person's search areas. The country comes from the feed's own location field (so a company calling itself "global" cannot turn a United States only job into a worldwide one), including US state codes and names, "Remote (Spain)" and multi-country lists like "Hong Kong; Singapore", which need one of the person's places. A posting that does not say enough is never excluded. Everything seen stays under **All postings**. The welcome page asks where the person would work (their country, remote anywhere, and other places) and turns the answers into editable search areas.
 4. Skips what is already tracked, including the same job on two sites.
 5. Gives each new job a free skill-coverage score and saves the posting text, so the dashboard already shows a percentage and a fit label. The score is how many of the person's main skills the posting mentions, ignoring filler words that nearly every posting repeats (measured from the postings just read). A posting with too little text to judge (some boards publish only a title) gets no score instead of a fake one.
-6. Adds at most `STILLOPEN_SCAN_MAX_NEW` (40) per search, the best first (clear fits, then listed roles, then CV match), and at most `STILLOPEN_SCAN_MAX_PER_COMPANY` (5) from one employer so one big company cannot fill the list. Search again later for the next batch.
+6. The saved job text is a short excerpt (so a search stays fast); the first time a fit check, tailored CV or cover letter needs the whole posting, it is read from the posting's own link, and the excerpt is kept if that fails.
+7. Adds at most `STILLOPEN_SCAN_MAX_NEW` (40) per search, the best first (clear fits, then listed roles, then CV match), and at most `STILLOPEN_SCAN_MAX_PER_COMPANY` (5) from one employer so one big company cannot fill the list. Search again later for the next batch.
 
 ### Bangladesh, Malaysia and the Gulf
 
@@ -66,6 +130,21 @@ Few job sites in these markets publish an open feed, so coverage comes from thre
 
 Not included on purpose: LinkedIn, Indeed, Glassdoor, **bdjobs** (its robots.txt says other crawlers will not spider, and it publishes no feed) and **JobStreet** (its robots.txt disallows crawling its job pages and job-search API). Paste one of their links into **Add job** instead. Jobs in the same place from the same employer with the same title are collapsed to one per search, because big employers post the same role once per team.
 
+## Running it: checks, schedules and CI
+
+| Command | What it is for |
+| --- | --- |
+| `python manage.py check_email` | Shows how email is set up (never the password) and sends one test message. Run it before your first real sign-up. Without `EMAIL_HOST` it says plainly that nothing is delivered. |
+| `python manage.py check_jooble` | Tries your Jooble key with one real search (`--place bd/my/ae/...`, `--role "..."`). The key is never printed. |
+| `python manage.py update_legal_text` | Puts the current privacy and terms templates in place, but only where the old unedited default is still there (`--force` replaces anything). A migration already does this for untouched defaults. |
+| `python manage.py seed_sources` | Adds any missing default job source. |
+
+**Schedules.** None are needed to use the app (the search runs when someone opens the dashboard). The emails need them: `deploy/crontab.example` (Linux/macOS) and `deploy/windows/schedule-stillopen.ps1` (Windows Task Scheduler, `-Remove` undoes it) set up interview reminders hourly, follow-up emails and job alerts daily, and a weekly source refresh.
+
+**Privacy and terms.** The shipped texts describe what the app really does (the search, Jooble, AI use, cookies, export and deletion) in plain words. They are templates: fill in the `[bracketed parts]` under Site configuration > Legal and have them reviewed for your country. While sign-up is open and blanks remain, admins see a warning on their dashboard.
+
+**Tests in CI.** `.github/workflows/tests.yml` runs the whole suite and checks that no model change is missing its migration on every pull request and push to `main`.
+
 ## Your own company job boards
 
 Under **Job sources** in the sidebar, anyone can add the companies they care about. Pick the hiring system the company uses (Greenhouse, Lever, Ashby, SmartRecruiters or Recruitee), then type the company's name from its careers page address or paste the address itself (`jobs.lever.co/acme` gives `acme`). The app reads that company's public job list once to make sure it works, and only then saves it. Your boards are searched only for you and are invisible to everyone else; the boards the site owner added are searched for everyone. Limits per person: `STILLOPEN_MAX_OWN_SOURCES` (20) boards and `STILLOPEN_SOURCE_ADDS_PER_HOUR` (20) additions an hour.
@@ -73,6 +152,9 @@ Under **Job sources** in the sidebar, anyone can add the companies they care abo
 Why this is safe to offer: nobody enters a web address. They choose from a fixed list of hiring systems, and the app builds the real address itself on that system's own host, through the same guarded fetch every scan uses. Boards for sites that need a browser or break a site's terms (LinkedIn, and aggregators like RemoteOK) stay site-owner only or unsupported.
 
 ## After you apply: interviews, contacts, offers
+
+All of this is also available to an AI client through the MCP server: `list_interviews`, `add_interview`, `set_interview_outcome`, `list_contacts`, `add_contact`, `add_referral`, `set_referral_status`, `list_offers`, `add_offer`, `set_offer_status` and `compare_offers`. They are validated and owner-scoped like everything else, there is still no delete tool, and none of them contacts anyone.
+
 
 Three pages in the sidebar, all private to you and none of them contacts anyone:
 
@@ -226,3 +308,7 @@ By design there is no delete tool, and no way to read settings, API keys, tokens
 ```bash
 .venv\Scripts\python.exe manage.py test
 ```
+
+## License
+
+Copyright 2026 Zahid Hasan and the StillOpen contributors. Licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE) for third-party components. Job postings shown by the app belong to the employers and sites that published them.

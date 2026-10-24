@@ -155,6 +155,7 @@ class ServerProtocolTests(SimpleTestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             env = {**os.environ, "STILLOPEN_DB": str(Path(tmp) / "mcp.sqlite3"), "CAREEROPS_PATH": ""}
+            env.pop("DATABASE_URL", None)  # the throwaway sqlite file above, not whatever database the suite itself runs on
             subprocess.run([sys.executable, "manage.py", "migrate", "-v", "0"], cwd=ROOT, env=env, check=True, capture_output=True)
             subprocess.run(
                 [sys.executable, "manage.py", "shell", "-c",
@@ -180,10 +181,128 @@ class ServerProtocolTests(SimpleTestCase):
         self.assertEqual(
             set(tools),
             {"summary", "list_applications", "get_application", "get_profile", "list_statuses", "add_application",
-             "set_description", "save_evaluation", "update_status", "add_note", "check_open", "search_profile", "list_knowledge", "list_cv_versions", "get_cv_version", "save_tailored_cv", "list_follow_ups", "record_application", "set_job_details"},
+             "set_description", "save_evaluation", "update_status", "add_note", "check_open", "search_profile", "list_knowledge", "list_cv_versions", "get_cv_version", "save_tailored_cv", "list_follow_ups", "record_application", "set_job_details",
+             "list_interviews", "add_interview", "set_interview_outcome", "list_contacts", "add_contact", "add_referral", "set_referral_status",
+             "list_offers", "add_offer", "set_offer_status", "compare_offers"},
         )
         self.assertTrue(tools["summary"].annotations.read_only_hint)
         self.assertFalse(added.is_error)
         self.assertIn("Initech", str(listing.content))
         self.assertTrue(bad.is_error)
         self.assertIn("Valid statuses", str(bad.content))  # the reason reaches the model
+
+
+class PipelineToolTests(TestCase):
+    """Interviews, contacts and referrals, offers through MCP: validated, owner-scoped, no delete, nothing contacted."""
+
+    def setUp(self):
+        self.user = new_user("pipe")
+        t.set_user(self.user)
+        self.addCleanup(t.set_user, None)
+        self.app = make(self.user, company="Grab", role="Backend Engineer")
+
+    def test_interview_lifecycle(self):
+        row = t.add_interview(self.app.pk, "2099-11-03T14:30", kind="video", where="https://meet.example.com/x", notes="Bring laptop")
+        self.assertEqual((row["company"], row["kind"], row["outcome"]), ("Grab", "video", "pending"))
+        self.assertTrue(row["when"].startswith("2099-11-03T14:30"))
+        self.assertEqual([r["id"] for r in t.list_interviews()], [row["id"]])
+        done = t.set_interview_outcome(row["id"], "passed")
+        self.assertEqual(done["outcome"], "passed")
+        self.assertEqual(t.list_interviews(), [])  # no longer upcoming
+        self.assertEqual(len(t.list_interviews(upcoming_only=False)), 1)
+        self.assertTrue(self.app.events.filter(kind="interview", text__contains="scheduled").exists())
+
+    def test_interview_validation(self):
+        for bad in ("soon", "", "2099-13-45"):
+            with self.assertRaises(ValueError):
+                t.add_interview(self.app.pk, bad)
+        with self.assertRaises(ValueError):
+            t.add_interview(self.app.pk, "2099-11-03T14:30", kind="seance")
+        with self.assertRaises(ValueError):
+            t.add_interview(99999, "2099-11-03T14:30")
+        row = t.add_interview(self.app.pk, "2099-11-03T14:30")
+        with self.assertRaises(ValueError):
+            t.set_interview_outcome(row["id"], "vanished")
+
+    def test_contacts_and_referrals(self):
+        c = t.add_contact("Sam Lee", company="Grab", title="EM", email="sam@example.com", link="https://example.com/sam")
+        self.assertEqual(c["name"], "Sam Lee")
+        r = t.add_referral(c["id"], self.app.pk, status="asked", note="Coffee Friday")
+        self.assertEqual(r["status"], "asked")
+        self.assertEqual(t.set_referral_status(r["id"], "agreed")["status"], "agreed")
+        listing = t.list_contacts()
+        self.assertEqual(listing[0]["referrals"][0]["status"], "agreed")
+        self.assertEqual(t.list_contacts(query="grab")[0]["name"], "Sam Lee")
+        self.assertEqual(t.list_contacts(query="nobody"), [])
+
+    def test_contact_validation(self):
+        for kwargs in ({"name": ""}, {"name": "X", "email": "not-an-email"}, {"name": "X", "link": "javascript:alert(1)"}, {"name": "X", "link": "ftp://x.test/y"}):
+            with self.assertRaises(ValueError):
+                t.add_contact(**kwargs)
+        c = t.add_contact("Y")
+        with self.assertRaises(ValueError):
+            t.add_referral(c["id"], self.app.pk, status="begged")
+        with self.assertRaises(ValueError):
+            t.add_referral(c["id"], 99999)
+        with self.assertRaises(ValueError):
+            t.add_referral(99999, self.app.pk)
+
+    def test_offers_and_comparison(self):
+        other = make(self.user, company="Globex", role="Backend Engineer")
+        hi = t.add_offer(self.app.pk, 120000, "usd", bonus=10000, signing=5000)
+        lo = t.add_offer(other.pk, 5000, "USD", period="month")
+        self.assertEqual((hi["currency"], hi["yearly_total"], hi["first_year_total"]), ("USD", "130000.00", "135000.00"))
+        self.assertEqual(lo["yearly_total"], "60000.00")
+        groups = t.compare_offers()
+        self.assertEqual(len(groups), 1)
+        self.assertEqual([o["company"] for o in groups[0]["offers"]], ["Grab", "Globex"])
+        self.assertTrue(groups[0]["offers"][0]["is_best"])
+        self.assertEqual(groups[0]["offers"][1]["behind_best_per_year"], "70000.00")
+        t.set_offer_status(lo["id"], "declined")
+        self.assertEqual(len(t.compare_offers()[0]["offers"]), 1)
+        self.assertEqual(len(t.list_offers()), 2)
+
+    def test_offer_validation(self):
+        for kwargs in ({"base": -1, "currency": "USD"}, {"base": 1, "currency": "dollars"}, {"base": 1, "currency": "USD", "period": "week"},
+                       {"base": "abc", "currency": "USD"}, {"base": float("nan"), "currency": "USD"}, {"base": 1e15, "currency": "USD"},
+                       {"base": 1, "currency": "USD", "reply_by": "next week"}, {"base": 1, "currency": "USD", "bonus": -5}):
+            with self.assertRaises(ValueError):
+                t.add_offer(self.app.pk, **kwargs)
+        with self.assertRaises(ValueError):
+            t.set_offer_status(99999, "accepted")
+        o = t.add_offer(self.app.pk, 1, "USD")
+        with self.assertRaises(ValueError):
+            t.set_offer_status(o["id"], "maybe")
+
+    def test_nothing_crosses_accounts(self):
+        mine_i = t.add_interview(self.app.pk, "2099-11-03T14:30")
+        mine_c = t.add_contact("Mine")
+        mine_o = t.add_offer(self.app.pk, 1, "USD")
+        other = new_user("outsider")
+        t.set_user(other)
+        theirs = make(other, company="Theirs")
+        self.assertEqual((t.list_interviews(upcoming_only=False), t.list_contacts(), t.list_offers(), t.compare_offers()), ([], [], [], []))
+        with self.assertRaises(ValueError):
+            t.set_interview_outcome(mine_i["id"], "passed")
+        with self.assertRaises(ValueError):
+            t.set_offer_status(mine_o["id"], "accepted")
+        with self.assertRaises(ValueError):
+            t.add_interview(self.app.pk, "2099-11-03T14:30")  # someone else's job
+        with self.assertRaises(ValueError):
+            t.add_offer(self.app.pk, 1, "USD")
+        with self.assertRaises(ValueError):
+            t.add_referral(mine_c["id"], theirs.pk)  # someone else's contact
+        with self.assertRaises(ValueError):
+            t.set_referral_status(1, "agreed")
+
+    def test_the_per_person_cap_applies(self):
+        from django.test import override_settings
+        with override_settings(STILLOPEN_MAX_PIPELINE=1):
+            t.add_contact("One")
+            with self.assertRaisesMessage(ValueError, "limit"):
+                t.add_contact("Two")
+
+    def test_no_delete_tools_were_added(self):
+        names = {n for n in dir(t) if not n.startswith("_") and callable(getattr(t, n)) and getattr(getattr(t, n), "__module__", "") == t.__name__}
+        self.assertTrue({"add_interview", "compare_offers", "add_referral"} <= names)
+        self.assertFalse({n for n in names if "delete" in n or "remove" in n})

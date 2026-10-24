@@ -22,6 +22,11 @@ StillOpen is a self-hosted tracker for one person's job search. The `stillopen` 
 | `list_follow_ups` | Applications whose follow-up reminder is due or overdue |
 | `record_application` | Record that the person applied (status, CV version sent, channel, follow-up). Only after they confirm they submitted |
 | `set_job_details` | Record a job's location, country, remote/hybrid/on-site, sponsorship, relocation, type and seniority from the posting; returns the fit with what the person wants |
+| `list_interviews` / `add_interview` / `set_interview_outcome` | The person's interviews (soonest first), record one they were invited to, how it went. Records only; nothing is scheduled or sent. Confirm before `rejected` |
+| `list_contacts` / `add_contact` | People the person knows at or near a company (with their referrals). Personal data; never contacted by the app |
+| `add_referral` / `set_referral_status` | Note that a contact might refer them for a job (thinking, asked, agreed, submitted, declined). Record only what the person says happened |
+| `list_offers` / `add_offer` / `set_offer_status` | Offers in plain numbers (base per year or month, bonus, equity value, benefits, signing bonus, 3-letter currency). Confirm before accepting or declining |
+| `compare_offers` | Offers ranked by yearly total, one group per currency (currencies are never converted), with the gap to the best |
 | `list_statuses` | Valid status names and what they mean |
 | `add_application` | Add a role (pass the full posting text as `description` when you have it) |
 | `set_description` | Attach or replace a role's posting text |

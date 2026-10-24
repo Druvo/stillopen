@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",
+    "django.contrib.humanize",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -233,15 +234,26 @@ STILLOPEN_SKILL_MATCH_MIN_OVERLAP = int(os.environ.get("STILLOPEN_SKILL_MATCH_MI
 # sources off so they stay deterministic.
 RUNNING_TESTS = "test" in sys.argv
 STILLOPEN_SCAN_CACHE_SECONDS = int(os.environ.get("STILLOPEN_SCAN_CACHE_SECONDS", "0" if RUNNING_TESTS else "21600"))
-STILLOPEN_SCAN_FETCH_THREADS = int(os.environ.get("STILLOPEN_SCAN_FETCH_THREADS", "8"))
+STILLOPEN_SCAN_FETCH_THREADS = int(os.environ.get("STILLOPEN_SCAN_FETCH_THREADS", "16"))
 # Longest a search waits for the job sources (a slow one is skipped, not waited for).
-STILLOPEN_SCAN_DEADLINE_SECONDS = int(os.environ.get("STILLOPEN_SCAN_DEADLINE_SECONDS", "90"))
+STILLOPEN_SCAN_DEADLINE_SECONDS = int(os.environ.get("STILLOPEN_SCAN_DEADLINE_SECONDS", "60"))
 # At most this many new jobs from one employer per search (big employers post the same role for every team), and
 # a word counts as generic filler, not a skill, when it appears in more than this share of all postings read.
 STILLOPEN_SCAN_MAX_PER_COMPANY = int(os.environ.get("STILLOPEN_SCAN_MAX_PER_COMPANY", "5"))
 STILLOPEN_SCAN_GENERIC_SHARE = float(os.environ.get("STILLOPEN_SCAN_GENERIC_SHARE", "0.12"))
 # A posting needs at least this many distinct words before it is scored: three words cannot tell anyone how well they fit.
 STILLOPEN_SCAN_MIN_TERMS_TO_SCORE = int(os.environ.get("STILLOPEN_SCAN_MIN_TERMS_TO_SCORE", "12"))
+# A search starts as soon as this many seconds have passed with most sources answered (a few slow hosts are waited for
+# afterwards and topped up), and its first batch adds at most this many jobs so something shows up quickly.
+STILLOPEN_SCAN_FIRST_WAIT_SECONDS = int(os.environ.get("STILLOPEN_SCAN_FIRST_WAIT_SECONDS", "15"))
+STILLOPEN_SCAN_FIRST_BATCH = int(os.environ.get("STILLOPEN_SCAN_FIRST_BATCH", "25"))
+# The public job board: an opening nobody has seen for this many days is treated as gone; the board refreshes itself when a visitor
+# arrives and it is older than this many hours (or run `manage.py refresh_postings` from cron); public pages are cached this long.
+STILLOPEN_PUBLIC_ACTIVE_DAYS = int(os.environ.get("STILLOPEN_PUBLIC_ACTIVE_DAYS", "3"))
+STILLOPEN_PUBLIC_REFRESH_HOURS = int(os.environ.get("STILLOPEN_PUBLIC_REFRESH_HOURS", "6"))
+STILLOPEN_PUBLIC_AUTO_REFRESH = os.environ.get("STILLOPEN_PUBLIC_AUTO_REFRESH", "0" if RUNNING_TESTS else "1") == "1"
+STILLOPEN_PUBLIC_CACHE_SECONDS = int(os.environ.get("STILLOPEN_PUBLIC_CACHE_SECONDS", "0" if RUNNING_TESTS else "300"))
+STILLOPEN_PUBLIC_PAGE_SIZE = int(os.environ.get("STILLOPEN_PUBLIC_PAGE_SIZE", "30"))
 STILLOPEN_SCAN_MAX_NEW = int(os.environ.get("STILLOPEN_SCAN_MAX_NEW", "40"))
 STILLOPEN_AUTO_SCAN = os.environ.get("STILLOPEN_AUTO_SCAN", "0" if RUNNING_TESTS else "1") == "1"
 STILLOPEN_SEED_SOURCES = os.environ.get("STILLOPEN_SEED_SOURCES", "0" if RUNNING_TESTS else "1") == "1"

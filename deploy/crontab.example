@@ -1,0 +1,27 @@
+# StillOpen scheduled jobs for Linux/macOS. Install with:  crontab -e   (then paste the lines below, fixing the two paths)
+#
+# Nothing here is needed to use the app: the search runs by itself when someone opens their dashboard. These are for the
+# emails, which only go out where SMTP is configured (EMAIL_HOST) and the switch is on in Site configuration.
+#
+#   APP    = the folder that holds manage.py
+#   PYTHON = that install's python (for a virtualenv: $APP/.venv/bin/python)
+APP=/srv/stillopen
+PYTHON=/srv/stillopen/.venv/bin/python
+
+# Every hour: remind people of interviews in the next 24 hours (once per interview).
+5 * * * *   cd $APP && $PYTHON manage.py send_interview_reminders >> $APP/logs/cron.log 2>&1
+
+# Every morning at 08:00 server time: follow-ups that have just become due (one digest per person).
+0 8 * * *   cd $APP && $PYTHON manage.py send_followup_emails >> $APP/logs/cron.log 2>&1
+
+# Every morning at 07:00: search for people who turned on Job alerts, and email what was found.
+0 7 * * *   cd $APP && $PYTHON manage.py scheduled_scan >> $APP/logs/cron.log 2>&1
+
+# Every 6 hours: refresh the public job board (also happens by itself when a visitor arrives and it is stale).
+15 */6 * * * cd $APP && $PYTHON manage.py refresh_postings >> $APP/logs/cron.log 2>&1
+
+# Weekly, Sunday 03:00: keep the default job sources up to date (adds any missing; never changes or removes yours).
+0 3 * * 0   cd $APP && $PYTHON manage.py seed_sources >> $APP/logs/cron.log 2>&1
+
+# Optional, daily 03:30: mark postings that have closed.
+30 3 * * *  cd $APP && $PYTHON manage.py check_liveness --all-users >> $APP/logs/cron.log 2>&1

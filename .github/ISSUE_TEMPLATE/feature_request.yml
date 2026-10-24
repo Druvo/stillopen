@@ -1,0 +1,28 @@
+name: Feature request
+description: An idea that would make StillOpen more useful
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the problem or the moment in the job search, not only the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like StillOpen to do?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Fits the project's commitments
+      description: See CONTRIBUTING.md. A request that breaks one of these will be discussed rather than accepted as-is.
+      options:
+        - label: It keeps each person's data private to them
+        - label: It does not load anything from a third-party site in the browser
+        - label: It does not apply or send anything on a person's behalf

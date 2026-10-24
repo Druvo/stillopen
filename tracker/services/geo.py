@@ -99,6 +99,37 @@ def _build():
 _PLACES = _build()
 
 
+def _combine():
+    """One regex per case rule instead of ~290 separate searches: a posting's text is scanned once, not once per place name.
+    Same answer as trying each name in turn (earliest position wins; at the same position the earlier name in the list wins)."""
+    groups: dict[int, list[int]] = {}
+    for index, (pattern, _, _, _) in enumerate(_PLACES):
+        groups.setdefault(pattern.flags, []).append(index)
+    combined = []
+    for flags, indexes in groups.items():
+        body = "|".join("(" + _PLACES[i][0].pattern[len(r"(?<![A-Za-z])"):-len(r"(?![A-Za-z])")] + ")" for i in indexes)
+        combined.append((re.compile(r"(?<![A-Za-z])(?:" + body + r")(?![A-Za-z])", flags), indexes))
+    return combined
+
+
+_COMBINED = _combine()
+
+
+def _exact_names():
+    """Whole-string lookups ("Dhaka", "Malaysia") by dictionary instead of trying every pattern; first listed wins."""
+    folded: dict[str, str] = {}
+    exact: dict[str, str] = {}
+    for pattern, code, _, text in _PLACES:
+        if pattern.flags & re.IGNORECASE:
+            folded.setdefault(text.lower(), code)
+        else:
+            exact.setdefault(text, code)
+    return folded, exact
+
+
+_FOLDED, _EXACT = _exact_names()
+
+
 def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower().replace("-", " ")).strip(" .")
 
@@ -119,15 +150,28 @@ def resolve_place(text: str):
             return {"*"}
         if key in REGIONS:
             return set(REGIONS[key])
-        for pattern, code, _, _ in _PLACES:
-            if pattern.fullmatch(part.strip()):
-                return {code}
+        stripped = part.strip()
+        code = _EXACT.get(stripped) or _FOLDED.get(stripped.lower())
+        if code:
+            return {code}
     hit = _first_place(text)
     return {hit[0]} if hit else None
 
 
 def _first_place(text: str):
     """(code, matched text, start) of the earliest recognised country or city in `text`."""
+    best, best_key = None, None
+    for regex, indexes in _COMBINED:
+        m = regex.search(text)
+        if m:
+            index = indexes[m.lastindex - 1]
+            key = (m.start(), index)
+            if best_key is None or key < best_key:
+                best, best_key = (_PLACES[index][1], m.group(0), m.start()), key
+    return best
+
+def _first_place_slow(text: str):
+    """The plain one-name-at-a-time version, kept so a test can prove the fast one gives the same answers."""
     best = None
     for pattern, code, _, name in _PLACES:
         m = pattern.search(text)
@@ -137,7 +181,11 @@ def _first_place(text: str):
 
 
 def country_name(code: str) -> str:
-    return COUNTRIES.get((code or "").upper(), (code or "",))[0]
+    code = (code or "").upper()
+    if code in COUNTRIES:
+        return COUNTRIES[code][0]
+    from .countries import name
+    return name(code)
 
 
 # --- detection from posting text ---------------------------------------------------------------------------------
@@ -223,23 +271,12 @@ _SENIORITY = [
 ]
 
 
-def detect(title: str, text: str) -> dict:
-    """Best guesses; only fields that were actually found are returned."""
+def detect_terms(title: str, text: str) -> dict:
+    """Visa sponsorship, relocation help, kind of contract and seniority, only when the posting says so."""
     text = text or ""
     title = title or ""
     whole = f"{title}\n{text}"
     found = {}
-    arrangement = _arrangement(whole)
-    if arrangement:
-        found["arrangement"] = arrangement
-    place, code = _location(whole)
-    anywhere = arrangement == "remote" and _positive(r"\b(?:worldwide|anywhere in the world|work from anywhere|global(?:ly)?)\b", whole)
-    if anywhere and not code:
-        found["location_text"] = "Remote (worldwide)"
-    elif place:
-        found["location_text"] = place[:160]
-    if code and not anywhere:
-        found["country"] = code
     if re.search(r"\b(?:no (?:visa )?sponsorship|unable to sponsor|cannot sponsor|can't sponsor|not (?:able to )?sponsor|without (?:visa )?sponsorship|"
                  r"must (?:already )?(?:have|hold|possess) (?:the |valid )?(?:right|authori[sz]ation|work permit)|right to work in)\b", whole, re.I):
         found["sponsorship"] = "no"
@@ -258,6 +295,27 @@ def detect(title: str, text: str) -> dict:
         if re.search(pattern, title, re.I):
             found["seniority"] = level
             break
+    return found
+
+
+def detect(title: str, text: str) -> dict:
+    """Best guesses; only fields that were actually found are returned."""
+    text = text or ""
+    title = title or ""
+    whole = f"{title}\n{text}"
+    found = {}
+    arrangement = _arrangement(whole)
+    if arrangement:
+        found["arrangement"] = arrangement
+    place, code = _location(whole)
+    anywhere = arrangement == "remote" and _positive(r"\b(?:worldwide|anywhere in the world|work from anywhere|global(?:ly)?)\b", whole)
+    if anywhere and not code:
+        found["location_text"] = "Remote (worldwide)"
+    elif place:
+        found["location_text"] = place[:160]
+    if code and not anywhere:
+        found["country"] = code
+    found.update(detect_terms(title, text))
     return found
 
 

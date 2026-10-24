@@ -1,5 +1,7 @@
+import importlib.util
 import os
 import sys
+import unittest
 from io import StringIO
 from unittest import mock
 
@@ -357,6 +359,7 @@ class BackendTests(TestCase):
             with self.assertRaisesMessage(ai.AIError, "requirements-ai.txt"):
                 ai.evaluate_application(self.app, self.config)
 
+    @unittest.skipUnless(importlib.util.find_spec("claude_agent_sdk"), "optional: pip install -r requirements-ai.txt")
     def test_agent_sdk_runs_without_tools(self):
         sdk = __import__("claude_agent_sdk")
         self._use("agent_sdk")
@@ -484,11 +487,11 @@ class CustomHttpTests(TestCase):
     def test_template_substitution_is_structural_and_single_pass(self):
         out = ai.fill_template(
             {"a": "{{prompt}}", "b": ["{{model}}", 3], "c": {"d": "x {{ system }} y"}},
-            {"system": 'quote " and \ and {{model}}', "prompt": "line1\nline2 {{api_key}}", "model": "m", "api_key": "K"},
+            {"system": 'quote " and \\ and {{model}}', "prompt": "line1\nline2 {{api_key}}", "model": "m", "api_key": "K"},
         )
         self.assertEqual(out["a"], "line1\nline2 {{api_key}}")  # a placeholder inside the prompt is not expanded
         self.assertEqual(out["b"], ["m", 3])
-        self.assertEqual(out["c"]["d"], 'x quote " and \ and {{model}} y')
+        self.assertEqual(out["c"]["d"], 'x quote " and \\ and {{model}} y')
 
     def test_extract_path(self):
         data = {"result": [{"text": "hello"}], "n": None, "obj": {"k": 1}}

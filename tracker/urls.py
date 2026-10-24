@@ -1,9 +1,14 @@
 from django.urls import path
 
-from . import views, views_apply, views_cover, views_cv, views_pipeline, views_sources
+from . import views, views_apply, views_cover, views_cv, views_pipeline, views_public, views_sources
 
 urlpatterns = [
-    path("", views.landing, name="landing"),
+    path("", views_public.landing, name="landing"),
+    path("openings/", views_public.openings, name="openings"),
+    path("openings/<int:pk>/", views_public.opening_detail, name="opening_detail_bare"),
+    path("openings/<int:pk>/<slug:slug>/", views_public.opening_detail, name="opening_detail"),
+    path("robots.txt", views_public.robots_txt, name="robots"),
+    path("sitemap.xml", views_public.sitemap, name="sitemap"),
     path("privacy/", views.privacy, name="privacy"),
     path("terms/", views.terms, name="terms"),
     path("dashboard/", views.dashboard, name="dashboard"),
