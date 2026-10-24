@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import forms
+from . import forms, views_pipeline
 from .models import (
     AIUsageEvent, Application, Bucket, Document, Event, JobSource, KnowledgeSource, Posting, ScoreBand, SiteConfig,
     Status, UserProfile,
@@ -161,6 +161,7 @@ def dashboard(request):
         "paperless_on": paperless_on,
         "paperless_url": config.effective_paperless_url if paperless_on else "",
         "followups": list(apply_service.due_followups(request.user)),
+        "upcoming_interviews": views_pipeline.upcoming_interviews(request.user),
         "has_areas": bool(areas),
         "can_import": request.user.is_staff and bool(config.careerops_path),
         "run": liveness.current_run(request.user),
@@ -482,6 +483,9 @@ def profile(request):
             "jobs": mine(request).count(),
             "cv_versions": request.user.cv_versions.count(),
             "cover_letters": request.user.cover_letters.count(),
+            "interviews": request.user.interviews.count(),
+            "contacts": request.user.contacts.count(),
+            "offers": request.user.offers.count(),
             "documents": KnowledgeSource.objects.filter(owner=request.user).exclude(key__in=["profile-cv", "careerops:cv.md"]).count(),
             "google": request.user.socialaccount_set.filter(provider="google").exists(),
         },
@@ -571,6 +575,24 @@ def export_data(request):
             {"label": v.label, "kind": v.kind, "source": v.source, "created": v.created_at.isoformat(),
              "for_job": f"{v.application.company} - {v.application.role}" if v.application else None, "content": v.content}
             for v in user.cv_versions.select_related("application")
+        ],
+        "interviews": [
+            {"for_job": f"{i.application.company} - {i.application.role}", "when": i.scheduled_at.isoformat(), "kind": i.kind,
+             "where": i.where, "notes": i.notes, "outcome": i.outcome}
+            for i in user.interviews.select_related("application")
+        ],
+        "contacts": [
+            {"name": c.name, "company": c.company, "title": c.title, "email": c.email, "link": c.link, "notes": c.notes,
+             "last_contacted": c.last_contacted.isoformat() if c.last_contacted else None,
+             "referrals": [{"for_job": f"{r.application.company} - {r.application.role}", "status": r.status, "note": r.note} for r in c.referrals.all()]}
+            for c in user.contacts.prefetch_related("referrals__application")
+        ],
+        "offers": [
+            {"for_job": f"{o.application.company} - {o.application.role}", "status": o.status, "currency": o.currency,
+             "base": str(o.base), "period": o.period, "bonus": str(o.bonus), "equity": str(o.equity),
+             "other_benefits": str(o.other_benefits), "signing": str(o.signing),
+             "deadline": o.deadline.isoformat() if o.deadline else None, "notes": o.notes}
+            for o in user.offers.select_related("application")
         ],
         "cover_letters": [
             {"for_job": f"{l.application.company} - {l.application.role}", "source": l.source,

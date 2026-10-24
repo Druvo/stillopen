@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_apply, views_cover, views_cv
+from . import views, views_apply, views_cover, views_cv, views_pipeline
 
 urlpatterns = [
     path("", views.landing, name="landing"),
@@ -28,6 +28,13 @@ urlpatterns = [
     path("cv/<int:pk>/print/", views_cv.cv_print, name="cv_print"),
     path("cv/<int:pk>/download/<str:fmt>/", views_cv.cv_download, name="cv_download"),
     path("jobs/<int:pk>/tailor/", views_cv.tailor_cv, name="tailor_cv"),
+    path("interviews/", views_pipeline.interviews, name="interviews"),
+    path("interviews/<int:pk>/<str:action>/", views_pipeline.interview_action, name="interview_action"),
+    path("contacts/", views_pipeline.contacts, name="contacts"),
+    path("contacts/<int:pk>/delete/", views_pipeline.contact_delete, name="contact_delete"),
+    path("referrals/<int:pk>/<str:action>/", views_pipeline.referral_action, name="referral_action"),
+    path("offers/", views_pipeline.offers, name="offers"),
+    path("offers/<int:pk>/<str:action>/", views_pipeline.offer_action, name="offer_action"),
     path("jobs/<int:pk>/cover-letter/", views_cover.write_cover_letter, name="write_cover_letter"),
     path("cover/<int:pk>/", views_cover.cover_detail, name="cover_detail"),
     path("cover/<int:pk>/approve/", views_cover.cover_approve, name="cover_approve"),

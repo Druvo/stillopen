@@ -26,6 +26,7 @@ python mcp_server.py                       # MCP server over stdio
   until the person reviews and submits the normal add-job form; the title-split guess is best-effort and
   often wrong, which is why there's a review step, not an auto-save.
 - `views.all_postings`/`views.add_posting` (`templates/tracker/postings.html`): browsable, paginated, search/source-filterable list of every `Posting` ever seen (shared, like the model itself) with a per-viewer "Tracked"/"Add to tracker" state computed from that viewer's own `Application.url`s -- the read-mostly answer to "it found 586 but only tracked 11, where did the rest go".
+- `tracker/views_pipeline.py` (+ `Interview`, `Contact`, `Referral`, `Offer` in models.py; forms in forms.py; templates `interviews.html`/`contacts.html`/`offers.html`): the stage after "Applied". All owner-scoped; the forms limit every job/contact choice to the owner's own rows (`OwnedFormMixin`). Offers are compared per currency, never converted. Tests in `tracker/tests_pipeline.py` (isolation included).
 - `tracker/mcp_tools.py`: plain functions behind the MCP tools; `mcp_server.py` registers them
 - `tracker/auth.py`: allauth adapters (Google sign-in gated by an allowlist)
 - `.claude/skills/stillopen/SKILL.md`: how an AI should use the MCP tools

@@ -8,7 +8,9 @@ from django.core import signing
 from django.contrib.auth import get_user_model
 from django.forms import inlineformset_factory
 
-from .models import Application, KnowledgeSource, PersonalSettings, SearchArea, UserProfile
+from .models import (
+    Application, Contact, Interview, KnowledgeSource, Offer, PersonalSettings, Referral, SearchArea, UserProfile,
+)
 from .services import geo, knowledge
 from .services.netguard import FetchError, check_public_url
 
@@ -395,3 +397,62 @@ class KnowledgeForm(forms.ModelForm):
         if len(cleaned.get("text") or "") > knowledge.MAX_TEXT_CHARS:
             self.add_error("text", "That text is too long.")
         return cleaned
+
+
+# --- pipeline after "Applied": interviews, contacts and referrals, offers ------------------------------
+
+class OwnedFormMixin:
+    """Every foreign key a person can pick (a job, a contact) is limited to their own rows, so a forged id is an invalid choice."""
+
+    def __init__(self, *args, owner, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.owner = owner
+        if "application" in self.fields:
+            self.fields["application"].queryset = Application.objects.filter(owner=owner).order_by("company", "role")
+            self.fields["application"].label_from_instance = lambda a: f"{a.company} - {a.role}"
+        if "contact" in self.fields:
+            self.fields["contact"].queryset = Contact.objects.filter(owner=owner)
+
+
+class InterviewForm(OwnedFormMixin, forms.ModelForm):
+    scheduled_at = forms.DateTimeField(
+        label="When", input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"],
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"),
+        help_text="In your own time zone.",
+    )
+
+    class Meta:
+        model = Interview
+        fields = ["application", "scheduled_at", "kind", "where", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
+        labels = {"where": "Where or link"}
+
+
+class ContactForm(OwnedFormMixin, forms.ModelForm):
+    last_contacted = forms.DateField(required=False, label="Last spoke", widget=forms.DateInput(attrs={"type": "date"}))
+
+    class Meta:
+        model = Contact
+        fields = ["name", "company", "title", "email", "link", "last_contacted", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+
+class ReferralForm(OwnedFormMixin, forms.ModelForm):
+    class Meta:
+        model = Referral
+        fields = ["contact", "application", "status", "note"]
+
+
+class OfferForm(OwnedFormMixin, forms.ModelForm):
+    deadline = forms.DateField(required=False, label="Reply by", widget=forms.DateInput(attrs={"type": "date"}))
+
+    class Meta:
+        model = Offer
+        fields = ["application", "base", "period", "currency", "bonus", "equity", "other_benefits", "signing", "deadline", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def clean_currency(self):
+        value = (self.cleaned_data.get("currency") or "").strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", value):
+            raise forms.ValidationError("Use a three-letter code such as USD, BDT or MYR.")
+        return value

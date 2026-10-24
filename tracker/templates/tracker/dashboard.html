@@ -64,6 +64,17 @@
 </div>
 {% endif %}
 
+{% if upcoming_interviews %}
+<div class="card mb-3">
+  <div class="card-body">
+    <strong>Coming up</strong> <a class="ms-2" href="{% url 'interviews' %}">All interviews</a>
+    {% for i in upcoming_interviews %}
+    <div class="mt-2">{{ i.scheduled_at|date:"D j M, H:i" }} · {{ i.get_kind_display }} — {{ i.application.company }}, {{ i.application.role }}</div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% if followups %}
 <div class="card mb-3">
   <div class="card-body">

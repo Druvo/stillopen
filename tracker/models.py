@@ -780,6 +780,110 @@ class CoverLetter(models.Model):
         return self.approved or not self.check_report
 
 
+class Interview(models.Model):
+    """One scheduled conversation for a job: phone screen, video call, on-site. Owner-only, like everything personal."""
+
+    KINDS = [
+        ("phone", "Phone screen"), ("video", "Video call"), ("technical", "Technical round"),
+        ("onsite", "On-site"), ("final", "Final round"), ("other", "Other"),
+    ]
+    OUTCOMES = [
+        ("pending", "Not yet"), ("done", "Happened, waiting to hear"), ("passed", "Going well, moving on"),
+        ("rejected", "Not moving on"), ("cancelled", "Cancelled"),
+    ]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="interviews")
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="interviews")
+    scheduled_at = models.DateTimeField()
+    kind = models.CharField(max_length=10, choices=KINDS, default="video")
+    where = models.CharField(max_length=300, blank=True, help_text="Address, or the video-call link.")
+    notes = models.TextField(blank=True, max_length=4000, help_text="Who you will meet, what to prepare, questions to ask.")
+    outcome = models.CharField(max_length=10, choices=OUTCOMES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["scheduled_at", "id"]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} for {self.application.company} on {self.scheduled_at:%d %b %Y %H:%M}"
+
+
+class Contact(models.Model):
+    """A person you know at, or near, a company you are applying to. Never contacted by the app."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="contacts")
+    name = models.CharField(max_length=120)
+    company = models.CharField(max_length=160, blank=True)
+    title = models.CharField(max_length=160, blank=True, verbose_name="Their role")
+    email = models.EmailField(blank=True)
+    link = models.URLField(blank=True, max_length=300, verbose_name="Profile link")
+    notes = models.TextField(blank=True, max_length=2000)
+    last_contacted = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+class Referral(models.Model):
+    """A contact who may put in a word for you on one job."""
+
+    STATUSES = [
+        ("thinking", "Thinking of asking"), ("asked", "Asked"), ("agreed", "Agreed to refer me"),
+        ("submitted", "Referral submitted"), ("declined", "Declined or no answer"),
+    ]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="referrals")
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="referrals")
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="referrals")
+    status = models.CharField(max_length=10, choices=STATUSES, default="thinking")
+    note = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
+class Offer(models.Model):
+    """A job offer, kept in plain numbers so offers can be set side by side. Amounts are per year unless the base is monthly."""
+
+    PERIODS = [("year", "per year"), ("month", "per month")]
+    STATUSES = [("open", "Deciding"), ("accepted", "Accepted"), ("declined", "Declined")]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="offers")
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="offers")
+    base = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)], verbose_name="Base pay")
+    period = models.CharField(max_length=5, choices=PERIODS, default="year")
+    currency = models.CharField(max_length=3, default="USD", help_text="Three letters, e.g. USD, BDT, MYR, AED.")
+    bonus = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)], verbose_name="Yearly bonus")
+    equity = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)], verbose_name="Yearly value of shares or options")
+    signing = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)], verbose_name="One-off signing bonus")
+    other_benefits = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)], verbose_name="Other yearly benefits worth counting", help_text="Allowances, insurance, pension match: only what you would otherwise pay for.")
+    deadline = models.DateField(null=True, blank=True, verbose_name="Reply by")
+    status = models.CharField(max_length=10, choices=STATUSES, default="open")
+    notes = models.TextField(blank=True, max_length=2000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    @property
+    def yearly_base(self):
+        return self.base * 12 if self.period == "month" else self.base
+
+    @property
+    def yearly_total(self):
+        """Pay you can count on each year, leaving out the one-off signing bonus."""
+        return self.yearly_base + self.bonus + self.equity + self.other_benefits
+
+    @property
+    def first_year_total(self):
+        return self.yearly_total + self.signing
+
+
 class Document(models.Model):
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="documents")
     kind = models.ForeignKey(DocumentKind, on_delete=models.PROTECT, related_name="documents")

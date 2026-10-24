@@ -43,6 +43,16 @@ Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboar
 
 Import is idempotent: new tracker rows are created, existing rows refresh only evaluation data (score, summary, strengths, gaps, deadline, PDFs). Your local status, notes and URL are never overwritten unless you run `import_careerops --sync-status`.
 
+## After you apply: interviews, contacts, offers
+
+Three pages in the sidebar, all private to you and none of them contacts anyone:
+
+- **Interviews**: when, what kind, where or the call link, and notes (who you meet, what to prepare). The next few show on the dashboard under "Coming up". Mark how each went; every change is added to the job's timeline.
+- **Contacts**: people you know at or near a company, and **referrals**: which contact you have asked to put in a word for which job (thinking of asking, asked, agreed, submitted, declined).
+- **Offers**: base pay (per year or month), yearly bonus, yearly value of shares, benefits you would otherwise pay for, and a one-off signing bonus. Offers are ranked side by side by yearly total, with the gap to the best. Different currencies are compared separately and never converted, because the app will not guess an exchange rate. Declined offers drop out.
+
+Each person can save up to `STILLOPEN_MAX_PIPELINE` (500) of each. Everything is included in the Profile > Your data export and removed with the account.
+
 ## Job alerts
 
 Each person can tick **Profile > Job alerts** to have their saved search run on a schedule and get one email listing what was added. The site owner switches this on with `scan_emails_enabled` (Site configuration > Dashboard), configures SMTP, and runs `python manage.py scheduled_scan` daily from cron or Task Scheduler. Nothing is sent when nothing new was found, or to an unverified address.

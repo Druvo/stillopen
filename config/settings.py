@@ -217,6 +217,8 @@ STILLOPEN_QUICKADD_PER_HOUR = int(os.environ.get("STILLOPEN_QUICKADD_PER_HOUR", 
 # How many of the candidate's own skill terms a posting's title+blurb must share to be added even when its
 # title doesn't literally contain one of their target-role phrases. Higher = fewer false positives.
 STILLOPEN_SKILL_MATCH_MIN_OVERLAP = int(os.environ.get("STILLOPEN_SKILL_MATCH_MIN_OVERLAP", "4"))
+# Interviews, contacts, referrals and offers: most any one person may save of each.
+STILLOPEN_MAX_PIPELINE = int(os.environ.get("STILLOPEN_MAX_PIPELINE", "500"))
 STILLOPEN_MAX_CV_VERSIONS = int(os.environ.get("STILLOPEN_MAX_CV_VERSIONS", "200"))
 STILLOPEN_CVGEN_PER_HOUR = int(os.environ.get("STILLOPEN_CVGEN_PER_HOUR", "20"))
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
