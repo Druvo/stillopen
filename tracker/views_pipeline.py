@@ -14,6 +14,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from .forms import ContactForm, InterviewForm, OfferForm, ReferralForm
 from .models import Contact, Event, Interview, Offer, Referral, SiteConfig
+from .services import pipeline
 
 
 def _full(request, model) -> bool:
@@ -28,6 +29,11 @@ def upcoming_interviews(user, limit: int = 5):
         Interview.objects.filter(owner=user, outcome="pending", scheduled_at__gte=timezone.now())
         .select_related("application").order_by("scheduled_at")[:limit]
     )
+
+
+@login_required
+def insights(request):
+    return render(request, "tracker/insights.html", {"config": SiteConfig.load(), "f": pipeline.funnel(request.user)})
 
 
 # --- interviews ---------------------------------------------------------------------------------

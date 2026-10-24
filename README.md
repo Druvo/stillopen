@@ -51,6 +51,10 @@ Three pages in the sidebar, all private to you and none of them contacts anyone:
 - **Contacts**: people you know at or near a company, and **referrals**: which contact you have asked to put in a word for which job (thinking of asking, asked, agreed, submitted, declined).
 - **Offers**: base pay (per year or month), yearly bonus, yearly value of shares, benefits you would otherwise pay for, and a one-off signing bonus. Offers are ranked side by side by yearly total, with the gap to the best. Different currencies are compared separately and never converted, because the app will not guess an exchange rate. Declined offers drop out.
 
+**Insights** shows plain counts from your own tracker: how many applications reached an interview or an offer, the typical days from applying to a first interview, and which channels (and referrals) led to interviews. It describes, it never predicts.
+
+**Interview reminders.** With follow-up emails switched on (Site configuration > Dashboard) and SMTP configured, run `python manage.py send_interview_reminders` hourly from cron or Task Scheduler. Each person gets one email for interviews in the next 24 hours, once per interview, and only at a verified address.
+
 Each person can save up to `STILLOPEN_MAX_PIPELINE` (500) of each. Everything is included in the Profile > Your data export and removed with the account.
 
 ## Job alerts

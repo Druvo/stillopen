@@ -28,6 +28,7 @@ urlpatterns = [
     path("cv/<int:pk>/print/", views_cv.cv_print, name="cv_print"),
     path("cv/<int:pk>/download/<str:fmt>/", views_cv.cv_download, name="cv_download"),
     path("jobs/<int:pk>/tailor/", views_cv.tailor_cv, name="tailor_cv"),
+    path("insights/", views_pipeline.insights, name="insights"),
     path("interviews/", views_pipeline.interviews, name="interviews"),
     path("interviews/<int:pk>/<str:action>/", views_pipeline.interview_action, name="interview_action"),
     path("contacts/", views_pipeline.contacts, name="contacts"),

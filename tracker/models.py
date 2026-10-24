@@ -799,6 +799,7 @@ class Interview(models.Model):
     where = models.CharField(max_length=300, blank=True, help_text="Address, or the video-call link.")
     notes = models.TextField(blank=True, max_length=4000, help_text="Who you will meet, what to prepare, questions to ask.")
     outcome = models.CharField(max_length=10, choices=OUTCOMES, default="pending")
+    reminded_at = models.DateTimeField(null=True, blank=True, editable=False, help_text="When the reminder email went out, if one did.")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

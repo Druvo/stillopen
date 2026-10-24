@@ -1,14 +1,17 @@
 """Interviews, contacts and referrals, offers: behaviour, validation, strict per-person isolation."""
+import io
 import json
 from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from tracker.models import Contact, Interview, Offer, Referral
+from tracker.models import Contact, Interview, Offer, Referral, SiteConfig
+from tracker.services import pipeline
 from tracker.tests_apply import job, person
 from tracker.tests_cv import PW
 from tracker.views_pipeline import comparison
@@ -217,3 +220,94 @@ class PipelineIsolation(TestCase):
         self.a.delete()
         for model in (Interview, Contact, Referral, Offer):
             self.assertEqual(model.objects.count(), 0)
+
+
+class ReminderTests(TestCase):
+    def setUp(self):
+        from allauth.account.models import EmailAddress
+
+        self.u = person("jane")
+        EmailAddress.objects.create(user=self.u, email=self.u.email, verified=True, primary=True)
+        self.app = job(self.u)
+        SiteConfig.objects.filter(pk=1).update(followup_emails_enabled=True)
+
+    def interview(self, hours, **kw):
+        return Interview.objects.create(owner=self.u, application=self.app, scheduled_at=timezone.now() + timedelta(hours=hours), **kw)
+
+    def run_cmd(self):
+        from django.core.management import call_command
+
+        call_command("send_interview_reminders", stdout=io.StringIO())
+        return mail.outbox
+
+    def test_soon_interview_gets_one_email_only_once(self):
+        i = self.interview(5, where="Room 4", notes="Bring laptop")
+        outbox = self.run_cmd()
+        self.assertEqual(len(outbox), 1)
+        self.assertIn("Room 4", outbox[0].body)
+        self.assertIn("Bring laptop", outbox[0].body)
+        i.refresh_from_db()
+        self.assertIsNotNone(i.reminded_at)
+        self.run_cmd()
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_far_past_and_cancelled_get_nothing(self):
+        self.interview(72)
+        self.interview(-3)
+        self.interview(5, outcome="cancelled")
+        self.assertEqual(self.run_cmd(), [])
+
+    def test_off_switch_and_unverified_address(self):
+        self.interview(5)
+        SiteConfig.objects.filter(pk=1).update(followup_emails_enabled=False)
+        self.assertEqual(self.run_cmd(), [])
+        SiteConfig.objects.filter(pk=1).update(followup_emails_enabled=True)
+        from allauth.account.models import EmailAddress
+
+        EmailAddress.objects.update(verified=False)
+        self.assertEqual(self.run_cmd(), [])
+        self.assertIsNone(Interview.objects.get().reminded_at)
+
+    def test_never_emails_someone_about_another_persons_interview(self):
+        from allauth.account.models import EmailAddress
+
+        bob = person("bob")
+        EmailAddress.objects.create(user=bob, email=bob.email, verified=True, primary=True)
+        self.interview(5)
+        outbox = self.run_cmd()
+        self.assertEqual([m.to for m in outbox], [[self.u.email]])
+
+
+class InsightsTests(TestCase):
+    def setUp(self):
+        self.u = person("jane")
+        self.client.login(username="jane", password=PW)
+
+    def test_empty_state_says_what_to_do(self):
+        self.assertContains(self.client.get(reverse("insights")), "Nothing to show yet")
+
+    def test_funnel_counts_and_median(self):
+        today = timezone.localdate()
+        a = job(self.u, company="A", applied_date=today - timedelta(days=10), applied_channel="site")
+        b = job(self.u, company="B", applied_date=today - timedelta(days=4), applied_channel="site")
+        job(self.u, company="C", applied_date=today - timedelta(days=2), applied_channel="referral")
+        job(self.u, company="Unapplied")
+        Interview.objects.create(owner=self.u, application=a, scheduled_at=timezone.now() - timedelta(days=4))  # 6 days after applying
+        Interview.objects.create(owner=self.u, application=b, scheduled_at=timezone.now())  # 4 days after
+        Offer.objects.create(owner=self.u, application=a, base=Decimal("1"), currency="USD")
+        f = pipeline.funnel(self.u)
+        self.assertEqual((f["tracked"], f["applied"], f["interviewed"], f["offered"]), (4, 3, 2, 1))
+        self.assertEqual(f["interview_rate"], 67)
+        self.assertEqual(f["median_days_to_interview"], 5)
+        site = next(r for r in f["channels"] if r["label"] == "Company site or job board")
+        self.assertEqual((site["applied"], site["interviews"], site["offers"]), (2, 2, 1))
+        self.assertContains(self.client.get(reverse("insights")), "Reached an interview")
+
+    def test_only_my_numbers(self):
+        bob = person("bob")
+        job(bob, applied_date=timezone.localdate())
+        self.assertEqual(pipeline.funnel(self.u)["applied"], 0)
+
+    def test_login_required(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse("insights")).status_code, 302)
