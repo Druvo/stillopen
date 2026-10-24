@@ -5,6 +5,7 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Operations: `deploy/backup-postgres.sh` (verified nightly dump with retention) and `deploy/crontab.docker.example` for the Docker setup.
 - Prep plans (phase 2): a daily practice of 3 questions per plan (admin setting) drawn from this week and earlier, exact-match scoring, explanations with the official source after answering, a streak, and topics that need another look (two different questions missed within 30 days; clears after right answers on three separate days across two questions). The dashboard nudges when today's practice is waiting. Answers are in the data export.
 
 - Prep plans (phase 1): from a job with skill gaps, "Prepare for this job" has the person's own AI account write a short study plan (default 4 weeks, 6 hours a week) with official-source reading and cited quiz questions. Everything the model returns is checked before it is saved; the person reviews the draft and starts it, ticks lessons off, and finished lessons count as study in the next fit check. The daily quiz comes next. Admin settings under Site configuration > Prep plans. See docs/design/prep-plans.md.
