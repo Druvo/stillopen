@@ -110,6 +110,7 @@ class DeploymentFiles(TestCase):
         self.assertIn("makemigrations --check", text)
         self.assertIn("pull_request", text)
         self.assertIn("requirements-mcp.txt", text)
+        self.assertIn("requirements-ai.txt", text)  # the Agent SDK provider's test needs the optional package
 
 
 class LegalTexts(TestCase):

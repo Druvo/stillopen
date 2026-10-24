@@ -19,7 +19,8 @@ jobs:
           cache-dependency-path: requirements*.txt
 
       - name: Install dependencies
-        run: python -m pip install -r requirements-mcp.txt
+        # The MCP server and the optional Claude Agent SDK provider both have tests, so both optional sets are installed.
+        run: python -m pip install -r requirements-mcp.txt -r requirements-ai.txt
 
       - name: No model change without a migration
         run: python manage.py makemigrations --check --dry-run
