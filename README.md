@@ -56,7 +56,15 @@ Candidates do nothing. When someone opens their dashboard and their last search 
 5. Gives each new job a free keyword match against the CV and saves the posting text, so the dashboard already shows a percentage and a fit label.
 6. Adds at most `STILLOPEN_SCAN_MAX_NEW` (40) per search, the best first (clear fits, then listed roles, then CV match). Search again later for the next batch.
 
-Not included on purpose: LinkedIn, Indeed, Glassdoor and bdjobs. Their terms forbid automated reading or they publish no feed. Paste one of their links into **Add job** instead.
+### Bangladesh, Malaysia and the Gulf
+
+Few job sites in these markets publish an open feed, so coverage comes from three honest routes:
+
+1. **Employers' own hiring boards.** About 20 boards verified to have openings there are included: Grab, Bybit, Binance, OKX, Ninja Van, Lalamove (including Dhaka), Tamara, Careem, Talabat (Delivery Hero), Airwallex, Xendit, Ziina, Unifonic, Namshi, Wise and more, plus the global companies in the default list that hire in Kuala Lumpur, Dubai or Riyadh. Large employers are read across all their pages (up to 500 postings each).
+2. **Jooble (optional, free key).** Jooble searches Bangladesh, Malaysia, the UAE, Saudi Arabia, Qatar, Kuwait, Bahrain and Oman. Request a key at <https://jooble.org/api/about> (they approve it by email), then paste it in the admin under **Site configuration > Job search keys**, or set `JOOBLE_API_KEY` in the environment (which wins). The key is write-only and never shown again or put in a log or error. Until a key exists, the eight Jooble sources are simply skipped. Unlike a company board, Jooble is a search, so each person's search asks it for *their own* target roles (up to 3) in each country, and answers are cached per set of roles. Check Jooble's terms for how you may use the results; every job links back to its Jooble page. This connector was built against Jooble's documented request and response shape and tested with simulated responses; it has not been run against a live key.
+3. **The remote feeds**, which include "Remote, Bangladesh/Asia" roles.
+
+Not included on purpose: LinkedIn, Indeed, Glassdoor, **bdjobs** (its robots.txt says other crawlers will not spider, and it publishes no feed) and **JobStreet** (its robots.txt disallows crawling its job pages and job-search API). Paste one of their links into **Add job** instead. Jobs in the same place from the same employer with the same title are collapsed to one per search, because big employers post the same role once per team.
 
 ## Your own company job boards
 

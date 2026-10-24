@@ -35,6 +35,7 @@ title_key at the same source, seen across more than one calendar day. Two concur
 day are not flagged -- same discipline as career-ops' own detect-reposts.mjs (2+ distinct URLs, 2+ distinct
 scan dates). This is an observation, never a verdict: a real company can legitimately re-post a role.
 """
+import hashlib
 import html
 import re
 import threading
@@ -245,17 +246,25 @@ def fetch_ashby(token: str) -> list[dict]:
 def fetch_smartrecruiters(token: str) -> list[dict]:
     # The list endpoint has no description field (SmartRecruiters only returns it from a per-posting detail
     # call) -- title-only matching, same as before, for this one connector.
-    resp = safe_get(f"https://api.smartrecruiters.com/v1/companies/{token}/postings", timeout=20)
-    if resp.status_code != 200:
-        raise FetchError(f"HTTP {resp.status_code}")
-    out = []
-    for j in resp.json().get("content", []):
-        posting_id = j.get("id", "")
-        out.append({
-            "title": j.get("name", ""),
-            "url": f"https://jobs.smartrecruiters.com/{token}/{posting_id}" if posting_id else "",
-            "location": (j.get("location") or {}).get("fullLocation", ""),
-        })
+    out, offset = [], 0
+    while True:  # 100 a page; large employers (Grab, Delivery Hero) have several pages
+        resp = safe_get(f"https://api.smartrecruiters.com/v1/companies/{token}/postings?limit=100&offset={offset}", timeout=20)
+        if resp.status_code != 200:
+            if offset == 0:
+                raise FetchError(f"HTTP {resp.status_code}")
+            break
+        data = resp.json()
+        page = data.get("content", [])
+        for j in page:
+            posting_id = j.get("id", "")
+            out.append({
+                "title": j.get("name", ""),
+                "url": f"https://jobs.smartrecruiters.com/{token}/{posting_id}" if posting_id else "",
+                "location": (j.get("location") or {}).get("fullLocation", ""),
+            })
+        offset += len(page)
+        if not page or offset >= min(int(data.get("totalFound") or 0), SMARTRECRUITERS_MAX):
+            break
     return out
 
 
@@ -425,6 +434,58 @@ def fetch_themuse(token: str) -> list[dict]:
     return out
 
 
+SMARTRECRUITERS_MAX = 500  # most postings read from one employer
+
+
+JOOBLE_PLACES = {
+    "bd": "Bangladesh", "my": "Malaysia", "ae": "United Arab Emirates", "sa": "Saudi Arabia",
+    "qa": "Qatar", "kw": "Kuwait", "bh": "Bahrain", "om": "Oman",
+}
+JOOBLE_ROLES_PER_PLACE = 3
+_TAG = re.compile(r"<[^>]+>")
+
+
+def fetch_jooble(token: str, roles: list[str] | None = None, key: str = "") -> list[dict]:
+    """Jooble's partner search API (POST https://jooble.org/api/<key>, JSON {keywords, location, page}). Unlike a company
+    board this is a search, so it is asked for one person's own target roles in one country (`token`: bd, my, ae...).
+    Needs the site's free Jooble key; no key or no roles means nothing to ask. Aggregator: company varies per posting.
+    The key is part of the URL, so it is never put in an error message or a log line."""
+    place = JOOBLE_PLACES.get((token or "").lower())
+    if place is None:
+        raise FetchError("Unknown Jooble place.")
+    if not key or not roles:
+        return []
+    from tracker.services.netguard import check_public_url
+    import requests
+
+    url = f"https://jooble.org/api/{key}"
+    check_public_url("https://jooble.org/")
+    out, seen = [], set()
+    for role in roles[:JOOBLE_ROLES_PER_PLACE]:
+        try:
+            resp = requests.post(url, json={"keywords": role, "location": place, "page": 1}, timeout=20, allow_redirects=False,
+                                 headers={"User-Agent": "StillOpen/1.0"})
+        except requests.RequestException as exc:
+            raise FetchError(f"Request failed: {exc.__class__.__name__}") from exc
+        if resp.status_code in (401, 403, 404):
+            raise FetchError("Jooble did not accept the key. Check it in Site configuration.")
+        if resp.status_code != 200:
+            raise FetchError(f"HTTP {resp.status_code}")
+        for j in (resp.json() or {}).get("jobs", []):
+            link = j.get("link") or ""
+            if not link or link in seen:
+                continue
+            seen.add(link)
+            where = (j.get("location") or "").strip()
+            if place.lower() not in where.lower():
+                where = f"{where}, {place}" if where else place
+            out.append({
+                "title": _TAG.sub("", j.get("title", "")).strip(), "url": link, "location": where,
+                "company": (j.get("company") or "").strip(), "description": _blurb(j.get("snippet", "")),
+            })
+    return out
+
+
 def _fetch(connector: str, token: str) -> list[dict]:
     # Resolved by name against this module's own namespace (not a dict built at import time) so that
     # mock.patch("tracker.services.scan.fetch_greenhouse", ...) in tests reaches the call that's actually made.
@@ -452,34 +513,57 @@ def _existing_job_keys(owner) -> dict[tuple[str, str], set]:
     return keys
 
 
+def _triple(company: str, title: str, location: str) -> tuple[str, str, str]:
+    return _job_key(company, title) + (re.sub(r"\W+", " ", (location or "").lower()).strip(),)
+
+
+def _existing_triples(owner) -> set[tuple[str, str, str]]:
+    """Company + title + place of everything tracked. Big employers post the same role many times over (one per team,
+    each with its own link); one of them is enough on a dashboard."""
+    return {_triple(c, r, loc) for c, r, loc in Application.objects.filter(owner=owner).values_list("company", "role", "location_text")}
+
+
 def _is_cross_source_duplicate(existing_jobs: dict, company: str, title: str, source) -> bool:
     sources = existing_jobs.get(_job_key(company, title))
     return sources is not None and source.pk not in sources
 
 
-def _fetch_cached(source: JobSource) -> list[dict]:
+def _fetch_cached(source: JobSource, roles: list[str] | None = None, jooble_key: str = "") -> list[dict]:
     """One read of a source's public list is shared by every person's search for a while, so a hundred people
     searching never means a hundred requests to the same company (and public feeds with a fair-use limit stay happy)."""
     seconds = settings.STILLOPEN_SCAN_CACHE_SECONDS
     key = f"scan-source:{source.connector}:{source.board_token}"
+    if source.connector == "jooble":  # a search, not a list: the answer depends on whose roles were asked for
+        key += ":" + hashlib.md5("|".join(sorted((roles or [])[:JOOBLE_ROLES_PER_PLACE])).encode()).hexdigest()[:16]
     if seconds > 0:
         hit = cache.get(key)
         if hit is not None:
             return hit
     if not TOKEN_RE.match(source.board_token):
         raise FetchError("Invalid board token.")
-    postings = _fetch(source.connector, source.board_token)
+    if source.connector == "jooble":
+        postings = fetch_jooble(source.board_token, roles, jooble_key)
+    else:
+        postings = _fetch(source.connector, source.board_token)
     if seconds > 0:
         cache.set(key, postings, timeout=seconds)
     return postings
 
 
-def _prefetch(sources: list[JobSource]) -> dict[int, object]:
+def searchable_sources(owner):
+    """The enabled sources a person's search can really use. Jooble sources need the site's key and the person's roles."""
+    qs = JobSource.for_user(owner, enabled=True)
+    if not SiteConfig.load().effective_jooble_key or not _roles(owner):
+        qs = qs.exclude(connector="jooble")
+    return qs
+
+
+def _prefetch(sources: list[JobSource], roles: list[str] | None = None, jooble_key: str = "") -> dict[int, object]:
     """Read every source at once (they are different hosts, so this is polite and about 8x faster than one by one).
     Maps source id to its postings, or to the exception that stopped it."""
     def one(source):
         try:
-            return source.pk, _fetch_cached(source)
+            return source.pk, _fetch_cached(source, roles, jooble_key)
         except Exception as exc:  # noqa: BLE001 - recorded on that source's log entry; the others carry on
             return source.pk, exc
     pool = ThreadPoolExecutor(max_workers=max(1, settings.STILLOPEN_SCAN_FETCH_THREADS))
@@ -507,12 +591,13 @@ def _worker(run_id: int):
         min_overlap = settings.STILLOPEN_SKILL_MATCH_MIN_OVERLAP
         existing = _existing_urls(owner)
         existing_jobs = _existing_job_keys(owner)
+        existing_triples = _existing_triples(owner)
         default_status = Status.objects.filter(bucket__is_closed=False).order_by("order").first() or Status.objects.first()
         room = max(0, settings.STILLOPEN_MAX_APPLICATIONS - Application.objects.filter(owner=owner).count())
         new_cap = max(0, settings.STILLOPEN_SCAN_MAX_NEW)
         today = timezone.localdate()
-        sources = list(JobSource.for_user(owner, enabled=True))
-        fetched = _prefetch(sources)
+        sources = list(searchable_sources(owner))
+        fetched = _prefetch(sources, roles, SiteConfig.load().effective_jooble_key)  # read here: worker threads must not touch the database
         pool = []  # every clear, in-area, not-yet-tracked match from every source, ranked together at the end
         for source in sources:
             entry = ScanLogEntry(run=run, source_name=source.name, connector=source.connector)
@@ -541,7 +626,8 @@ def _worker(run_id: int):
                         continue
                     entry.matched += 1
                     company = p.get("company") or source.name
-                    if p["url"] in existing or _is_cross_source_duplicate(existing_jobs, company, p["title"], source):
+                    if (p["url"] in existing or _is_cross_source_duplicate(existing_jobs, company, p["title"], source)
+                            or _triple(company, p["title"], p.get("location") or "") in existing_triples):
                         entry.duplicates += 1
                         continue
                     # Clear location mismatches are left out (every posting stays visible under All postings).
@@ -594,8 +680,10 @@ def _worker(run_id: int):
                 )
                 break
             p, probe, found, result, entry = item["p"], item["probe"], item["found"], item["result"], item["entry"]
-            if p["url"] in existing or _is_cross_source_duplicate(existing_jobs, item["company"], p["title"], item["source"]):
-                continue  # the same job turned up on two sources; the better-ranked copy was added
+            triple = _triple(item["company"], p["title"], p.get("location") or "")
+            if (p["url"] in existing or _is_cross_source_duplicate(existing_jobs, item["company"], p["title"], item["source"])
+                    or triple in existing_triples):
+                continue  # the same job on two sources, or the same role posted again for another team: the better-ranked copy was added
             posting = item["posting"] or Posting.objects.filter(source=item["source"], url=p["url"][:600]).first()
             app = Application(
                 owner=owner, company=item["company"][:160], role=p["title"][:200], url=p["url"][:600],
@@ -614,6 +702,7 @@ def _worker(run_id: int):
                     text=f"Found by skill match, not a listed target role -- shared: {', '.join(sorted(item['overlap'])[:6])}",
                 )
             existing.add(p["url"])
+            existing_triples.add(triple)
             existing_jobs.setdefault(_job_key(item["company"], p["title"]), set()).add(item["source"].pk)
             entry.added += 1
             touched.add(id(entry))
@@ -647,7 +736,7 @@ def start_run(owner, background: bool = True) -> ScanRun:
     existing = current_run(owner)
     if existing and existing.running:
         return existing
-    run = ScanRun.objects.create(owner=owner, total=JobSource.for_user(owner, enabled=True).count())
+    run = ScanRun.objects.create(owner=owner, total=searchable_sources(owner).count())
     if background:
         threading.Thread(target=_worker, args=(run.pk,), daemon=True).start()
     else:
@@ -703,7 +792,7 @@ def maybe_auto_start(owner) -> ScanRun | None:
     profile = UserProfile.for_user(owner)
     if not (profile.target_roles.strip() or (profile.profile_cv or "").strip()):
         return None
-    if not JobSource.for_user(owner, enabled=True).exists():
+    if not searchable_sources(owner).exists():
         return None
     last = ScanRun.objects.filter(owner=owner).first()
     if last is not None:

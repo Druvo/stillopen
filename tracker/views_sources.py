@@ -18,6 +18,12 @@ from .services.netguard import FetchError
 from .views import throttled
 
 
+def _shared_sources():
+    """The site-wide sources that really are searched: Jooble ones only count once the site has a Jooble key."""
+    qs = JobSource.objects.filter(owner__isnull=True, enabled=True)
+    return qs if SiteConfig.load().effective_jooble_key else qs.exclude(connector="jooble")
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def sources(request):
@@ -29,7 +35,7 @@ def sources(request):
     return render(request, "tracker/sources.html", {
         "config": SiteConfig.load(),
         "form": form,
-        "shared": JobSource.objects.filter(owner__isnull=True, enabled=True),
+        "shared": _shared_sources(),
         "mine": JobSource.objects.filter(owner=request.user),
         "limit": settings.STILLOPEN_MAX_OWN_SOURCES,
     })

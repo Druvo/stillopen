@@ -413,3 +413,197 @@ class BulkSightingsAndRanking(TestCase):
         with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=[unknown, clear]), override_settings(STILLOPEN_SCAN_MAX_NEW=1):
             scan.start_run(self.u, background=False)
         self.assertEqual(Application.objects.get(owner=self.u).company, "Clearco")
+
+
+class JoobleConnector(TestCase):
+    KEY = "sekret-key-123"
+
+    def response(self, jobs, status=200):
+        r = mock.Mock(status_code=status)
+        r.json.return_value = {"totalCount": len(jobs), "jobs": jobs}
+        return r
+
+    def j(self, **kw):
+        base = {"title": "Senior <b>Backend</b> Engineer", "location": "Dhaka", "snippet": "Build <b>REST</b> APIs", "salary": "", "source": "x.com", "type": "", "link": "https://jooble.org/desc/1", "company": "Pathao", "updated": "2026-10-20", "id": 1}
+        base.update(kw)
+        return base
+
+    @mock.patch("requests.post")
+    def test_asks_jooble_with_the_persons_roles_and_the_country(self, post):
+        post.return_value = self.response([self.j()])
+        out = scan.fetch_jooble("bd", ["backend engineer", "python developer"], self.KEY)
+        urls = [c.args[0] for c in post.call_args_list]
+        self.assertEqual(urls, [f"https://jooble.org/api/{self.KEY}"] * 2)
+        bodies = [c.kwargs["json"] for c in post.call_args_list]
+        self.assertEqual(bodies[0], {"keywords": "backend engineer", "location": "Bangladesh", "page": 1})
+        self.assertEqual(bodies[1]["keywords"], "python developer")
+        self.assertFalse(post.call_args.kwargs["allow_redirects"])
+        self.assertEqual(len(out), 1)  # the same link from both roles is one job
+        j = out[0]
+        self.assertEqual((j["title"], j["company"], j["url"]), ("Senior Backend Engineer", "Pathao", "https://jooble.org/desc/1"))
+        self.assertEqual(j["location"], "Dhaka, Bangladesh")
+        self.assertNotIn("<b>", j["description"])
+
+    @mock.patch("requests.post")
+    def test_at_most_three_roles_per_place(self, post):
+        post.return_value = self.response([])
+        scan.fetch_jooble("my", ["a", "b", "c", "d", "e"], self.KEY)
+        self.assertEqual(post.call_count, 3)
+
+    @mock.patch("requests.post")
+    def test_nothing_to_ask_without_a_key_or_roles(self, post):
+        self.assertEqual(scan.fetch_jooble("bd", ["x"], ""), [])
+        self.assertEqual(scan.fetch_jooble("bd", [], self.KEY), [])
+        post.assert_not_called()
+
+    def test_unknown_place_is_an_error(self):
+        with self.assertRaises(FetchError):
+            scan.fetch_jooble("zz", ["x"], self.KEY)
+
+    @mock.patch("requests.post")
+    def test_the_key_never_leaks_into_an_error_message(self, post):
+        import requests as rq
+        post.side_effect = rq.ConnectionError(f"Max retries exceeded with url: /api/{self.KEY}")
+        with self.assertRaises(FetchError) as ctx:
+            scan.fetch_jooble("bd", ["x"], self.KEY)
+        self.assertNotIn(self.KEY, str(ctx.exception))
+        post.side_effect = None
+        for status in (401, 403, 404, 500):
+            post.return_value = self.response([], status=status)
+            with self.assertRaises(FetchError) as ctx:
+                scan.fetch_jooble("bd", ["x"], self.KEY)
+            self.assertNotIn(self.KEY, str(ctx.exception))
+
+    def test_jooble_is_site_wide_only_and_a_keyed_aggregator(self):
+        self.assertIn("jooble", dict(JobSource.CONNECTORS))
+        self.assertNotIn("jooble", JobSource.OWN_CONNECTORS)
+
+
+class JoobleInSearch(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.u = person(roles="Backend Engineer")
+        self.src = JobSource.objects.create(name="Jooble Bangladesh", connector="jooble", board_token="bd")
+
+    def test_skipped_without_a_key(self):
+        self.assertEqual(scan.searchable_sources(self.u).count(), 0)
+        run = scan.start_run(self.u, background=False)
+        self.assertEqual((run.total, run.entries.count()), (0, 0))
+
+    def test_skipped_for_someone_with_no_roles(self):
+        SiteConfig.objects.filter(pk=1).update(jooble_api_key="k")
+        UserProfile.objects.filter(user=self.u).update(target_roles="")
+        self.assertEqual(scan.searchable_sources(self.u).count(), 0)
+
+    def test_environment_key_counts(self):
+        with mock.patch.dict("os.environ", {"JOOBLE_API_KEY": "envkey"}):
+            self.assertEqual(scan.searchable_sources(self.u).count(), 1)
+            self.assertEqual(SiteConfig.load().effective_jooble_key, "envkey")
+
+    def test_a_search_adds_bangladesh_jobs_and_asks_with_this_persons_roles(self):
+        SiteConfig.objects.filter(pk=1).update(jooble_api_key="k")
+        payload = {"jobs": [{"title": "Backend Engineer", "location": "Dhaka", "snippet": "Build C# SQL Server REST APIs", "link": "https://jooble.org/desc/7", "company": "Pathao"}]}
+        with mock.patch("requests.post") as post:
+            post.return_value = mock.Mock(status_code=200, **{"json.return_value": payload})
+            run = scan.start_run(self.u, background=False)
+        self.assertEqual(run.added, 1)
+        app = Application.objects.get(owner=self.u)
+        self.assertEqual((app.company, app.country), ("Pathao", "BD"))
+        self.assertEqual(post.call_args.kwargs["json"]["keywords"], "backend engineer")
+
+    def test_two_people_with_different_roles_get_different_answers_not_a_shared_cache_hit(self):
+        SiteConfig.objects.filter(pk=1).update(jooble_api_key="k")
+        other = person("sam", roles="Data Analyst")
+        asked = []
+
+        def fake(url, json=None, **kw):
+            asked.append(json["keywords"])
+            return mock.Mock(status_code=200, **{"json.return_value": {"jobs": []}})
+
+        with mock.patch("requests.post", side_effect=fake), override_settings(STILLOPEN_SCAN_CACHE_SECONDS=600):
+            scan.start_run(self.u, background=False)
+            scan.start_run(other, background=False)
+            scan.start_run(self.u, background=False)  # same roles again: cached
+        self.assertEqual(sorted(asked), ["backend engineer", "data analyst"])
+
+    def test_a_rejected_key_shows_up_in_the_log_without_stopping_the_search(self):
+        SiteConfig.objects.filter(pk=1).update(jooble_api_key="badkey")
+        with mock.patch("requests.post", return_value=mock.Mock(status_code=401)):
+            run = scan.start_run(self.u, background=False)
+        self.assertIn("did not accept the key", run.entries.get().error)
+        self.assertNotIn("badkey", run.entries.get().error)
+
+
+class JoobleKeyInAdmin(TestCase):
+    def test_blank_keeps_the_saved_key_and_it_is_never_rendered(self):
+        from tracker.admin import SiteConfigForm
+        config = SiteConfig.load()
+        config.jooble_api_key = "saved-key"
+        config.save()
+        form = SiteConfigForm(instance=config)
+        self.assertNotIn("saved-key", str(form["jooble_api_key"]))
+        cleaned = SiteConfigForm({"jooble_api_key": "", "site_title": "x", "score_scale": 5, "urgent_days": 7, "apply_followup_days": 7, "auto_scan_hours": 12}, instance=config)
+        cleaned.is_valid()
+        self.assertEqual(cleaned.clean_jooble_api_key(), "saved-key")
+
+
+class RegionalSources(TestCase):
+    def test_regional_and_jooble_lists_are_well_formed(self):
+        from tracker.seed_sources import JOOBLE, REGIONAL
+        self.assertGreaterEqual(len(REGIONAL), 15)
+        self.assertEqual({t for _, c, t in JOOBLE}, set(scan.JOOBLE_PLACES))
+        for _, connector, token in REGIONAL:
+            self.assertIn(connector, JobSource.OWN_CONNECTORS)
+            self.assertRegex(token, r"^[A-Za-z0-9._-]+$")
+
+    def test_page_count_ignores_jooble_until_there_is_a_key(self):
+        seed.ensure_default_sources(JobSource)
+        u = person()
+        self.client.login(username="rina", password=PW)
+        total = JobSource.objects.filter(owner__isnull=True).count()
+        jooble = JobSource.objects.filter(connector="jooble").count()
+        self.assertEqual(jooble, 8)
+        self.assertContains(self.client.get(reverse("sources")), f"({total - jooble})")
+        SiteConfig.objects.filter(pk=1).update(jooble_api_key="k")
+        self.assertContains(self.client.get(reverse("sources")), f"({total})")
+
+    def test_one_seed_run_gives_every_region_its_sources(self):
+        seed.ensure_default_sources(JobSource)
+        names = set(JobSource.objects.values_list("name", flat=True))
+        for expected in ("Bybit", "Grab", "Lalamove", "Careem", "Jooble Bangladesh", "Jooble Malaysia", "Jooble United Arab Emirates"):
+            self.assertIn(expected, names)
+
+    @mock.patch("tracker.services.scan.safe_get")
+    def test_smartrecruiters_reads_every_page_up_to_the_cap(self, get):
+        def page(start, n, total):
+            r = mock.Mock(status_code=200)
+            r.json.return_value = {"totalFound": total, "content": [{"id": str(start + i), "name": f"Role {start + i}", "location": {"fullLocation": "Kuala Lumpur, Malaysia"}} for i in range(n)]}
+            return r
+        get.side_effect = [page(0, 100, 230), page(100, 100, 230), page(200, 30, 230)]
+        out = scan.fetch_smartrecruiters("grab")
+        self.assertEqual(len(out), 230)
+        self.assertIn("offset=200", get.call_args.args[0])
+        get.reset_mock()
+        get.side_effect = lambda url, **kw: page(int(url.split("offset=")[1]), 100, 5000)
+        self.assertEqual(len(scan.fetch_smartrecruiters("big")), scan.SMARTRECRUITERS_MAX)
+
+
+class SameRoleManyTimes(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.u = person()
+        JobSource.objects.create(name="Grab", connector="greenhouse", board_token="grab")
+
+    def test_identical_postings_collapse_to_one_and_stay_collapsed_on_the_next_search(self):
+        rows = [job(url=f"https://g.test/{i}", company="Grab", title="Software Engineer, Backend", location="Petaling Jaya, Malaysia") for i in range(6)]
+        with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=rows):
+            first = scan.start_run(self.u, background=False)
+            second = scan.start_run(self.u, background=False)
+        self.assertEqual((first.added, second.added), (1, 0))
+        self.assertEqual(Application.objects.filter(owner=self.u).count(), 1)
+
+    def test_different_places_are_still_different_jobs(self):
+        rows = [job(url=f"https://g.test/{c}", company="Grab", title="Software Engineer, Backend", location=c) for c in ("Petaling Jaya, Malaysia", "Singapore", "Jakarta, Indonesia")]
+        with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=rows):
+            run = scan.start_run(self.u, background=False)
+        self.assertEqual(run.added, 3)

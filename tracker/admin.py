@@ -37,9 +37,19 @@ class SiteConfigForm(forms.ModelForm):
         help_text="Leave blank to keep the saved token. The PAPERLESS_TOKEN environment variable takes precedence.",
     )
 
+    jooble_api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text="Free key from jooble.org/api/about. Leave blank to keep the saved key. The JOOBLE_API_KEY environment variable takes precedence.",
+    )
+
     class Meta:
         model = SiteConfig
         fields = "__all__"
+
+    def clean_jooble_api_key(self):
+        key = self.cleaned_data.get("jooble_api_key", "")
+        return key or (self.instance.jooble_api_key if self.instance else "")
 
     def clean_paperless_token(self):
         token = self.cleaned_data.get("paperless_token", "")
@@ -80,6 +90,14 @@ class SiteConfigAdmin(admin.ModelAdmin):
                     "<code>&lt;your site&gt;/accounts/google/login/callback/</code>. Then add it under "
                     "<strong>Social applications</strong> (provider Google, choose your Site) and tick the box below."
                 ),
+            },
+        ),
+        (
+            "Job search keys (site admins only)",
+            {
+                "fields": ("jooble_api_key",),
+                "description": "Optional. Jooble covers Bangladesh, Malaysia and the Gulf, where few job sites publish an open feed. "
+                "Without a key those sources are simply skipped.",
             },
         ),
         (

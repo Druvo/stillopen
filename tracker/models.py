@@ -213,6 +213,11 @@ class SiteConfig(PersonalSettings):
         blank=True,
         help_text="API token. The PAPERLESS_TOKEN environment variable takes precedence if set.",
     )
+    jooble_api_key = models.CharField(
+        max_length=200, blank=True,
+        help_text="Free key from jooble.org/api/about (Jooble approves it by email). Switches on the Jooble sources, which add "
+        "Bangladesh, Malaysia and the Gulf. The JOOBLE_API_KEY environment variable takes precedence. Never shown again.",
+    )
     paperless_verify_tls = models.BooleanField(default=True)
     paperless_auto_upload = models.BooleanField(
         default=False, help_text="Upload documents to Paperless automatically when they are imported."
@@ -303,6 +308,10 @@ class SiteConfig(PersonalSettings):
     @property
     def signup_open(self) -> bool:
         return self.signup_mode == "open"
+
+    @property
+    def effective_jooble_key(self):
+        return os.environ.get("JOOBLE_API_KEY", "").strip() or self.jooble_api_key.strip()
 
     @property
     def effective_paperless_token(self):
@@ -1019,6 +1028,7 @@ class JobSource(models.Model):
         ("jobicy", "Jobicy"),
         ("workingnomads", "Working Nomads"),
         ("themuse", "The Muse"),
+        ("jooble", "Jooble (needs a free key)"),
     ]
 
     name = models.CharField(max_length=120, help_text="Shown in the scan log. The company name for a single-company connector; a label like 'RemoteOK' for an aggregator.")

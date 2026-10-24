@@ -244,7 +244,7 @@ class ScanRunTests(TestCase):
     @mock.patch("tracker.services.scan.fetch_greenhouse")
     def test_stops_at_the_application_limit_instead_of_blowing_past_it(self, fetch):
         fetch.return_value = [
-            {"title": "Senior Backend Engineer", "url": f"https://x.test/{i}", "location": ""} for i in range(10)
+            {"title": "Senior Backend Engineer", "url": f"https://x.test/{i}", "location": f"City {i}"} for i in range(10)
         ]
         with override_settings(STILLOPEN_MAX_APPLICATIONS=3):
             run = scan.start_run(self.u, background=False)

@@ -117,4 +117,41 @@ COMPANIES = [
     ("LVMH", "smartrecruiters", "LVMH"),
 ]
 
-DEFAULT_SOURCES = FEEDS + COMPANIES
+
+# Boards verified live (2026-10) to have openings in Malaysia, the Gulf or Bangladesh. Added to existing installs once
+# by migration 0033 and to new installs with everything else.
+REGIONAL = [
+    ("Bybit", "greenhouse", "bybit"),
+    ("Binance", "greenhouse", "binance"),
+    ("Binance (more roles)", "lever", "binance"),
+    ("OKX", "greenhouse", "okx"),
+    ("Tamara", "greenhouse", "tamara"),
+    ("Careem", "greenhouse", "careem"),
+    ("Xendit", "greenhouse", "xendit"),
+    ("Thunes", "greenhouse", "thunes"),
+    ("Coursera", "greenhouse", "coursera"),
+    ("Ninja Van", "lever", "ninjavan"),
+    ("Lalamove", "lever", "lalamove"),
+    ("Airwallex", "ashby", "airwallex"),
+    ("Ziina", "ashby", "ziina"),
+    ("Snowflake", "ashby", "snowflake"),
+    ("Grab", "smartrecruiters", "grab"),
+    ("Delivery Hero (Talabat)", "smartrecruiters", "deliveryhero"),
+    ("Namshi", "smartrecruiters", "namshi"),
+    ("Wise", "smartrecruiters", "wise"),
+    ("Unifonic", "recruitee", "unifonic"),
+]
+
+# Jooble searches (needs the site's free key; skipped silently without one): one per country, asked with each person's own roles.
+JOOBLE = [
+    ("Jooble Bangladesh", "jooble", "bd"),
+    ("Jooble Malaysia", "jooble", "my"),
+    ("Jooble United Arab Emirates", "jooble", "ae"),
+    ("Jooble Saudi Arabia", "jooble", "sa"),
+    ("Jooble Qatar", "jooble", "qa"),
+    ("Jooble Kuwait", "jooble", "kw"),
+    ("Jooble Bahrain", "jooble", "bh"),
+    ("Jooble Oman", "jooble", "om"),
+]
+
+DEFAULT_SOURCES = FEEDS + COMPANIES + REGIONAL + JOOBLE

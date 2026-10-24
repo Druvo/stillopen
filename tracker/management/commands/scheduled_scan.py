@@ -27,7 +27,7 @@ class Command(BaseCommand):
                 raise CommandError(str(exc)) from exc
         searched = emailed = 0
         for owner in people:
-            if not JobSource.for_user(owner, enabled=True).exists():
+            if not scan.searchable_sources(owner).exists():
                 continue
             run = scan.start_run(owner, background=False)
             searched += 1
