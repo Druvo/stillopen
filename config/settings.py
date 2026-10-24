@@ -273,6 +273,11 @@ STILLOPEN_AUTO_SCAN = os.environ.get("STILLOPEN_AUTO_SCAN", "0" if RUNNING_TESTS
 STILLOPEN_SEED_SOURCES = os.environ.get("STILLOPEN_SEED_SOURCES", "0" if RUNNING_TESTS else "1") == "1"
 # Company job boards one person may add for their own searches, and how many they may add per hour.
 STILLOPEN_MAX_OWN_SOURCES = int(os.environ.get("STILLOPEN_MAX_OWN_SOURCES", "20"))
+# Web MCP endpoint (/mcp/): personal tokens, per person limits.
+STILLOPEN_MAX_API_TOKENS = int(os.environ.get("STILLOPEN_MAX_API_TOKENS", "10"))
+STILLOPEN_TOKEN_ISSUES_PER_HOUR = int(os.environ.get("STILLOPEN_TOKEN_ISSUES_PER_HOUR", "10"))
+STILLOPEN_MCP_CALLS_PER_MINUTE = int(os.environ.get("STILLOPEN_MCP_CALLS_PER_MINUTE", "120"))
+STILLOPEN_MCP_BAD_TOKENS_PER_MINUTE = int(os.environ.get("STILLOPEN_MCP_BAD_TOKENS_PER_MINUTE", "20"))
 STILLOPEN_SOURCE_ADDS_PER_HOUR = int(os.environ.get("STILLOPEN_SOURCE_ADDS_PER_HOUR", "20"))
 STILLOPEN_MAX_PIPELINE = int(os.environ.get("STILLOPEN_MAX_PIPELINE", "500"))
 STILLOPEN_MAX_CV_VERSIONS = int(os.environ.get("STILLOPEN_MAX_CV_VERSIONS", "200"))

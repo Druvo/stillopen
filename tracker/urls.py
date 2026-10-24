@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_apply, views_cover, views_cv, views_pipeline, views_public, views_sources
+from . import views, views_apply, views_cover, views_cv, views_mcp, views_pipeline, views_public, views_sources
 
 urlpatterns = [
     path("", views_public.landing, name="landing"),
@@ -20,6 +20,10 @@ urlpatterns = [
     path("postings/<int:pk>/add/", views.add_posting, name="add_posting"),
     path("profile/", views.profile, name="profile"),
     path("profile/ai/", views.profile_ai, name="profile_ai"),
+    path("profile/assistant/", views_mcp.assistant, name="assistant"),
+    path("profile/assistant/new/", views_mcp.assistant_create, name="assistant_create"),
+    path("profile/assistant/<int:pk>/revoke/", views_mcp.assistant_revoke, name="assistant_revoke"),
+    path("mcp/", views_mcp.mcp_endpoint, name="mcp_endpoint"),
     path("profile/export/", views.export_data, name="export_data"),
     path("profile/delete/", views.delete_account, name="delete_account"),
     path("knowledge/", views.knowledge_list, name="knowledge"),

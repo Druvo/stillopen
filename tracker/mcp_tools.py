@@ -5,6 +5,9 @@ Job descriptions are returned under a key that says they are untrusted text.
 
 Every tool acts for exactly one user (set_user), and only ever sees that user's data.
 """
+import contextlib
+import contextvars
+
 from django.utils import timezone
 
 from .models import Application, Bucket, CVVersion, Event, KnowledgeSource, SiteConfig, Status, UserProfile
@@ -14,19 +17,31 @@ from .services import fit as fit_service, geo
 from .services.factcheck import fact_check
 
 MAX_TEXT = 30000
-_user = None
+_default_user = None  # the one account a stdio server acts for
+_request_user = contextvars.ContextVar("stillopen_mcp_user", default=None)  # the account of the request being served over HTTP
 
 
 def set_user(user) -> None:
-    """The account this server acts for. Must be called before any tool runs."""
-    global _user
-    _user = user
+    """The account a stdio server acts for. Must be called before any tool runs."""
+    global _default_user
+    _default_user = user
+
+
+@contextlib.contextmanager
+def acting_as(user):
+    """Run tools for `user` only inside this block (the HTTP endpoint: one request, one person, never shared state)."""
+    token = _request_user.set(user)
+    try:
+        yield
+    finally:
+        _request_user.reset(token)
 
 
 def _owner():
-    if _user is None:
+    user = _request_user.get() or _default_user
+    if user is None:
         raise ValueError("No user is selected. Set STILLOPEN_USER or create exactly one superuser.")
-    return _user
+    return user
 
 
 def _config() -> SiteConfig:

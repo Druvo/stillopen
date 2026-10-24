@@ -172,6 +172,12 @@ class SiteConfig(PersonalSettings):
         "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
     )
 
+    mcp_remote_enabled = models.BooleanField(
+        default=True,
+        help_text="Let people connect an AI assistant (Claude Code or any MCP client) to their own account over the web, with a "
+        "personal token made under Profile > Connect an AI assistant. Off hides the page and answers 404 at /mcp/.",
+    )
+
     auto_scan_hours = models.PositiveIntegerField(
         default=12,
         help_text="Search for new jobs on a person's behalf when they open the dashboard and their last search is older than this many hours. "
@@ -869,6 +875,75 @@ class Referral(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+
+
+class ApiToken(models.Model):
+    """A personal access token for the web MCP endpoint (/mcp/): lets an AI assistant act for one person, and only that person.
+
+    Only a SHA-256 hash is stored (the token is 256 random bits, so a plain hash is enough); the token itself is shown once.
+    A read-only token can call only the tools that cannot change anything."""
+
+    PREFIX = "so_"
+    EXPIRY_CHOICES = [(30, "30 days"), (90, "90 days"), (365, "1 year"), (0, "Never")]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="api_tokens")
+    name = models.CharField(max_length=60, help_text="What it is for, e.g. Claude Code on my laptop.")
+    token_hash = models.CharField(max_length=64, unique=True)
+    hint = models.CharField(max_length=12, help_text="The first characters, so a person can tell tokens apart. Not enough to use it.")
+    can_write = models.BooleanField(default=False, help_text="Off: the assistant can only read. On: it can also add jobs, notes and the like (never delete).")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.hint}...)"
+
+    @staticmethod
+    def digest(raw: str) -> str:
+        import hashlib
+
+        return hashlib.sha256(raw.encode()).hexdigest()
+
+    @classmethod
+    def issue(cls, owner, name: str, can_write: bool = False, days: int = 90):
+        """Make a token. Returns (record, raw token); the raw token cannot be recovered later."""
+        import secrets
+        from datetime import timedelta
+
+        raw = cls.PREFIX + secrets.token_urlsafe(32)
+        record = cls.objects.create(
+            owner=owner, name=name.strip()[:60] or "Assistant", token_hash=cls.digest(raw), hint=raw[:8], can_write=can_write,
+            expires_at=timezone.now() + timedelta(days=days) if days else None,
+        )
+        return record, raw
+
+    @classmethod
+    def lookup(cls, raw: str):
+        """The usable token for `raw` (not revoked, not expired, owner active), or None."""
+        if not raw or not raw.startswith(cls.PREFIX) or len(raw) > 200:
+            return None
+        record = cls.objects.select_related("owner").filter(token_hash=cls.digest(raw)).first()
+        if record is None or not record.is_usable:
+            return None
+        return record
+
+    @property
+    def is_usable(self) -> bool:
+        if self.revoked_at or not self.owner.is_active:
+            return False
+        return self.expires_at is None or self.expires_at > timezone.now()
+
+    @property
+    def state(self) -> str:
+        if self.revoked_at:
+            return "Revoked"
+        if self.expires_at and self.expires_at <= timezone.now():
+            return "Expired"
+        return "Active"
 
 
 class Offer(models.Model):

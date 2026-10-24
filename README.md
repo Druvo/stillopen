@@ -27,6 +27,10 @@ docker compose -f docker-compose.selfhost.yml exec stillopen python manage.py cr
 
 Open <http://localhost:8000>. Full guide (email, HTTPS, backups, updates): [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md). Running it as a shared service for many people: [docs/HOSTING.md](docs/HOSTING.md).
 
+## Use it from Claude Code or any AI assistant
+
+People can make a personal token under **Profile > Connect an AI assistant** and give it to Claude Code (or any MCP client) to work with their own job search from the assistant: [docs/MCP.md](docs/MCP.md).
+
 ## Project
 
 [Self-hosting](docs/SELF-HOSTING.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Changelog](CHANGELOG.md) · [License (Apache-2.0)](LICENSE)
@@ -287,6 +291,8 @@ claude mcp add stillopen -- <path-to>/.venv/Scripts/python.exe <path-to>/mcp_ser
 ```
 
 `.mcp.example.json` shows the same for other clients. It runs locally over stdio against the same database; nothing listens on the network.
+
+**Over the web instead:** on any StillOpen website, each person can make a personal token under Profile > Connect an AI assistant (read only or read and change, with expiry and revoke) and register `https://your-site/mcp/` with Claude Code. Details and limits: [docs/MCP.md](docs/MCP.md).
 
 | Tool | Use |
 | --- | --- |
