@@ -11,6 +11,7 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from .models import (
+    PrepPlan,
     AIUsageEvent,
     Application,
     Bucket,
@@ -138,6 +139,16 @@ class SiteConfigAdmin(ModelAdmin):
                     "Save, then <a href=\"/tools/email-test/\">send yourself a test email</a>. "
                     "The EMAIL_HOST environment variable, if set, takes precedence over this section."
                 ),
+            },
+        ),
+        (
+            "Prep plans",
+            {
+                "classes": ("tab",),
+                "fields": ("prep_enabled", "prep_default_weeks", "prep_default_hours", "prep_max_weeks", "prep_max_active_plans",
+                           "prep_questions_per_lesson", "prep_runs_per_day", "prep_check_sources"),
+                "description": "A person can turn a job's skill gaps into a short study plan with quiz questions. It is written by their own AI account "
+                "(it costs you nothing) and nothing starts until they have read it. Every lesson and question must cite an official link.",
             },
         ),
         (
@@ -555,3 +566,12 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
 @admin.register(Group)
 class GroupAdmin(BaseGroupAdmin, ModelAdmin):
     pass
+
+
+@admin.register(PrepPlan)
+class PrepPlanAdmin(ModelAdmin):
+    list_display = ("title", "owner", "application", "status", "weeks_count", "created_at")
+    list_filter = ("status",)
+    search_fields = ("title", "owner__username", "owner__email")
+    readonly_fields = ("owner", "application", "gap_skills", "generator", "progress", "error", "created_at", "approved_at")
+    exclude = ()

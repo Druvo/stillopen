@@ -712,3 +712,18 @@ class WebAssistantTokens(TestCase):
         text = json.dumps(r.json())
         self.assertIn("OnlyBobCo", text)
         self.assertNotIn("OnlyAnnCo", text)
+
+
+class PrepPlanIsolation(TestCase):
+    """Prep plans belong to one person; the full set of checks is in tests_prep.py."""
+
+    def test_another_persons_plan_is_a_404_and_stays_out_of_my_list(self):
+        from django.urls import reverse
+        from tracker.models import PrepPlan
+
+        a, b = User.objects.create_user("prep-a", password="x" * 20), User.objects.create_user("prep-b", password="x" * 20)
+        plan = PrepPlan.objects.create(owner=a, title="Only A", status="draft")
+        self.client.force_login(b)
+        self.assertEqual(self.client.get(reverse("prep_plan", args=[plan.pk])).status_code, 404)
+        self.assertEqual(self.client.post(reverse("prep_activate", args=[plan.pk])).status_code, 404)
+        self.assertNotContains(self.client.get(reverse("prep_list")), "Only A")

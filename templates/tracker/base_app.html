@@ -28,6 +28,7 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'interviews' %}">Interviews</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'contacts' %}">Contacts</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'offers' %}">Offers</a></li>
+          {% if site_config.prep_enabled %}<li class="nav-item"><a class="nav-link" href="{% url 'prep_list' %}">Prep plans</a></li>{% endif %}
           <li class="nav-item"><a class="nav-link" href="{% url 'insights' %}">Insights</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'cv_list' %}">CVs</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'knowledge' %}">Documents</a></li>

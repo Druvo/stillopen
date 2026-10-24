@@ -172,6 +172,18 @@ class SiteConfig(PersonalSettings):
         "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
     )
 
+    prep_enabled = models.BooleanField(
+        default=True,
+        help_text="Let people turn a job's skill gaps into a short prep plan (needs their own AI key). Off hides the feature.",
+    )
+    prep_default_weeks = models.PositiveSmallIntegerField(default=4, help_text="Length of a new prep plan unless the person picks another.")
+    prep_default_hours = models.PositiveSmallIntegerField(default=6, help_text="Study hours a week a new prep plan assumes.")
+    prep_max_weeks = models.PositiveSmallIntegerField(default=8, help_text="The longest plan a person may ask for.")
+    prep_max_active_plans = models.PositiveSmallIntegerField(default=3, help_text="Plans one person can have in progress at once.")
+    prep_questions_per_lesson = models.PositiveSmallIntegerField(default=3, help_text="Quiz questions written for each lesson (1 to 6).")
+    prep_runs_per_day = models.PositiveSmallIntegerField(default=3, help_text="How many plans one person may ask for each day (each uses their own AI key).")
+    prep_check_sources = models.BooleanField(default=True, help_text="Open every cited link once to see that it answers. Links that do not are flagged, not removed.")
+
     mcp_remote_enabled = models.BooleanField(
         default=True,
         help_text="Let people connect an AI assistant (Claude Code or any MCP client) to their own account over the web, with a "
@@ -1283,7 +1295,7 @@ class AIUsageEvent(models.Model):
     measure at all (Custom HTTP, whose response shape is unknowable in general) simply logs no tokens/cost,
     not a guess."""
 
-    PURPOSES = [("evaluate", "Evaluate match"), ("tailor", "Tailor CV")]
+    PURPOSES = [("evaluate", "Evaluate match"), ("tailor", "Tailor CV"), ("prep", "Prep plan")]
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ai_usage_events")
     application = models.ForeignKey(Application, null=True, blank=True, on_delete=models.SET_NULL, related_name="ai_usage_events")
@@ -1301,3 +1313,6 @@ class AIUsageEvent(models.Model):
     def __str__(self):
         return f"{self.provider} {self.purpose} {self.created_at:%Y-%m-%d}"
         constraints = [models.UniqueConstraint(fields=["posting", "seen_date"], name="uniq_posting_seen_date")]
+
+
+from .prep_models import PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, PrepTopic, PrepWeek  # noqa: E402,F401  (registers them with the app)
