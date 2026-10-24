@@ -103,7 +103,16 @@ With Docker, run the same commands through `docker compose ... exec -T stillopen
 
 ## Putting it on the internet
 
-Do **not** expose the app directly over plain HTTP. Put a TLS-terminating reverse proxy in front. With [Caddy](https://caddyserver.com) (automatic HTTPS):
+Do **not** expose the app directly over plain HTTP. Put a TLS-terminating reverse proxy in front.
+
+**Easiest with Docker:** add a third file that runs [Caddy](https://caddyserver.com), which gets and renews the certificate by itself. Point your domain's A record at
+the machine, open ports 80 and 443, put the lines from the top of `docker-compose.caddy.yml` in `.env`, and run:
+
+```bash
+docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml -f docker-compose.caddy.yml up -d --build
+```
+
+(Leave out the postgres file to stay on SQLite.) **Your own proxy instead:** with Caddy on the host, for example:
 
 ```
 jobs.example.com {
