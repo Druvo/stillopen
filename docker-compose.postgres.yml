@@ -1,0 +1,31 @@
+# Add PostgreSQL to the self-host setup. Use it together with the main file:
+#
+#   docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml up -d --build
+#
+# Needs POSTGRES_PASSWORD in .env. Worth it when many people share one instance (SQLite allows one writer at a time);
+# for one person, the default SQLite setup is simpler. Moving an existing SQLite install over: docs/SELF-HOSTING.md.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: stillopen
+      POSTGRES_USER: stillopen
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - stillopen_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stillopen -d stillopen"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  stillopen:
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://stillopen:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/stillopen
+
+volumes:
+  stillopen_pg:

@@ -878,7 +878,8 @@ def _worker(run_id: int):
         ScanRun.objects.filter(pk=run_id).update(error=str(exc)[:500])
     finally:
         ScanRun.objects.filter(pk=run_id).update(running=False, finished_at=timezone.now())
-        connections.close_all()
+        if threading.current_thread() is not threading.main_thread():
+            connections.close_all()  # a background thread owns its connection; the caller's own is never closed under it
 
 
 def current_run(owner) -> ScanRun | None:

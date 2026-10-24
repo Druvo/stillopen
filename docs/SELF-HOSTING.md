@@ -117,6 +117,37 @@ Before you open registration to other people, run through the checklist in [HOST
 
 Posting pages a person pastes are fetched through a guard that refuses private and internal addresses.
 
+## PostgreSQL (optional)
+
+SQLite is the default and is right for one person or a handful. Choose PostgreSQL when many people share one instance: SQLite lets only one
+write happen at a time, and a search saves thousands of rows while others browse. Searches are not faster on PostgreSQL (they wait on
+the network, not the database).
+
+**New install with Docker:** add a database password to `.env` (letters and digits only, e.g. from `openssl rand -hex 24`) and use both files:
+
+```bash
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> .env
+docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml up -d --build
+```
+
+**Without Docker:** `pip install -r requirements-hosting.txt`, create an empty database, then set
+`DATABASE_URL=postgres://user:password@host:5432/stillopen`.
+
+**Moving an existing SQLite install over:** stop the old app, start the PostgreSQL stack (above), then copy the old file in and run the copy.
+Keep the same secret key (`DJANGO_SECRET_KEY`), or stored API keys cannot be decrypted.
+
+```bash
+# Docker: the old file is db.sqlite3 (or /data/db.sqlite3 in the old volume)
+docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml cp ./db.sqlite3 stillopen:/tmp/old.sqlite3
+docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml exec stillopen python manage.py copy_to_postgres --from /tmp/old.sqlite3 --replace
+# Python install, with DATABASE_URL set:
+python manage.py copy_to_postgres --from db.sqlite3
+```
+
+It builds the tables, loads everyone's data and checks every table has the same row count. The SQLite file is only read. People sign in again
+(sessions are not copied). A large database takes a few minutes. `--replace` erases a PostgreSQL database that already has accounts.
+Back up with `pg_dump -Fc` from then on.
+
 ## Backups
 
 Back up the database (and, with Docker, the volume). It holds everyone's data, so treat backups like the data.

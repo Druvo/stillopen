@@ -3,6 +3,9 @@ import re
 from pathlib import Path
 
 from django.conf import settings
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db import connection
 from django.test import TestCase
 from django.urls import reverse
 
@@ -50,3 +53,15 @@ class LandingAngle(TestCase):
         self.assertIn('id="open-source"', page)
         self.assertIn("SELF-HOSTING.md", page)
         self.assertIn("Apache-2.0", page)
+
+
+class PostgresSupport(TestCase):
+    def test_compose_override_and_ci_job_exist(self):
+        self.assertIn("DATABASE_URL", (ROOT / "docker-compose.postgres.yml").read_text(encoding="utf-8"))
+        self.assertIn("test-postgres", (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8"))
+
+    def test_copy_command_refuses_to_run_on_sqlite(self):
+        if connection.vendor == "postgresql":
+            self.skipTest("this run is on PostgreSQL")
+        with self.assertRaisesMessage(CommandError, "must point at PostgreSQL"):
+            call_command("copy_to_postgres", "--from", "anything.sqlite3")

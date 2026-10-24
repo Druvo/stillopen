@@ -35,6 +35,19 @@ soft_gaps:
 """
 
 
+def close_quietly(response):
+    """Release a streamed file response. Closing it fires request_finished, whose close_old_connections would close the
+    test's own database connection inside its transaction on PostgreSQL (SQLite's in-memory one survives)."""
+    from django.core.signals import request_finished
+    from django.db import close_old_connections
+
+    request_finished.disconnect(close_old_connections)
+    try:
+        response.close()
+    finally:
+        request_finished.connect(close_old_connections)
+
+
 class SeedTests(TestCase):
     def test_defaults_seeded(self):
         self.assertEqual(Bucket.objects.count(), 3)
@@ -224,7 +237,7 @@ class ViewTests(TestCase):
             r = self.client.get(reverse("document_file", args=[ok.pk]))
             self.assertEqual(r.status_code, 200)
             self.assertEqual(r["Content-Type"], "application/pdf")
-            r.close()
+            close_quietly(r)
             self.assertEqual(self.client.get(reverse("document_file", args=[nope.pk])).status_code, 404)
 
     def test_ordinary_users_cannot_read_server_paths_through_documents(self):
@@ -245,7 +258,7 @@ class ViewTests(TestCase):
             doc.file.save("cv.pdf", ContentFile(b"%PDF-1.4"), save=True)
             r = self.client.get(reverse("document_file", args=[doc.pk]))
             self.assertEqual(r.status_code, 200)
-            r.close()
+            close_quietly(r)
             intruder = get_user_model().objects.create_user("intruder", password="x" * 20)
             self.client.force_login(intruder)
             self.assertEqual(self.client.get(reverse("document_file", args=[doc.pk])).status_code, 404)
