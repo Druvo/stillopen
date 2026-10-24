@@ -41,12 +41,18 @@
   </div>
 </div>
 
-{% if scan_run %}
-<div class="card mb-3" id="scan-log-card">
+<div class="card mb-3" id="scan-log-card" {% if not scan_run %}hidden{% endif %}>
   <div class="card-body">
+    <div class="d-flex align-items-center gap-2">
+      <span id="scan-spinner" class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true" {% if not scan_run.running %}hidden{% endif %}></span>
     <strong id="scan-log-title">
-      {% if scan_run.running %}{% if scan_run.done >= scan_run.total %}Sorting out the best matches for you...{% else %}Reading job sources... {{ scan_run.done }}/{{ scan_run.total }}{% endif %}{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- looked through {{ scan_run.found }} openings, {{ scan_run.added }} new for you{% endif %}
+      {% if scan_run.running %}{% if scan_run.done >= scan_run.total %}Sorting out the best matches for you...{% else %}Reading job sources... {{ scan_run.done }}/{{ scan_run.total }}{% endif %}{% elif scan_run %}Last search: {{ scan_run.started_at|timesince }} ago -- looked through {{ scan_run.found }} openings, {{ scan_run.added }} new for you{% endif %}
     </strong>
+    </div>
+    <div id="scan-progress" class="progress mt-2" style="height:6px" role="progressbar" aria-label="Search progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% if scan_run.total %}{% widthratio scan_run.done scan_run.total 100 %}{% else %}0{% endif %}" {% if not scan_run.running %}hidden{% endif %}>
+      <div id="scan-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:{% if scan_run.total %}{% widthratio scan_run.done scan_run.total 100 %}{% else %}0{% endif %}%"></div>
+    </div>
+    <div id="scan-hint" class="text-secondary mt-1" style="font-size:13px" {% if not scan_run.running %}hidden{% endif %}>Usually about a minute. You can keep using StillOpen: the first jobs show up here by themselves as soon as they are ready.</div>
     {% if scan_run.note %}<div class="text-secondary mt-1">{{ scan_run.note }}</div>{% endif %}
     {% if scan_run.error %}<div class="text-danger mt-1">{{ scan_run.error }}</div>{% endif %}
     <details id="scan-log-details" class="mt-2">
@@ -66,7 +72,6 @@
     </details>
   </div>
 </div>
-{% endif %}
 
 {% if upcoming_interviews %}
 <div class="card mb-3">
@@ -202,7 +207,7 @@
   {% endwith %}
   {% empty %}
   <div class="text-center text-secondary py-5">
-    {% if not stats.total %}{% if scan_run and scan_run.running %}We are searching {{ scan_run.total }} job sources for roles that fit you. They will appear here in a minute, with nothing for you to do.{% elif scan_run and not scan_run.added %}Nothing new matched yet. Check your roles and places in <a href="{% url 'profile' %}">Profile</a>, paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% else %}No jobs yet. Paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% endif %}{% else %}Nothing here right now. That is fine.{% endif %}
+    {% if not stats.total %}{% if scan_run and scan_run.running %}<span class="spinner-border spinner-border-sm text-primary me-2" aria-hidden="true"></span>We are searching {{ scan_run.total }} job sources for roles that fit you. They will appear here in a minute, with nothing for you to do.{% elif scan_run and not scan_run.added %}Nothing new matched yet. Check your roles and places in <a href="{% url 'profile' %}">Profile</a>, paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% else %}No jobs yet. Paste a link above, or <a href="{% url 'add_job' %}">add one by hand</a>.{% endif %}{% else %}Nothing here right now. That is fine.{% endif %}
   </div>
   {% endfor %}
 </section>
@@ -289,22 +294,42 @@ function renderScanEntries(entries) {
       <span class="text-secondary">${e.error ? `<span class="text-danger">${e.error}</span>` : `${e.found} found, ${e.matched} matched, ${e.added} new, ${e.duplicates} already tracked${e.outside ? `, ${e.outside} outside your areas` : ''}`}</span>
     </div>`).join('');
 }
+const spinnerHtml = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>';
+const renderedAdded = {{ scan_run.added|default:0 }};
+function showProgress(label, percent, indeterminate) {
+  const card = document.getElementById('scan-log-card');
+  if (card) card.hidden = false;
+  const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+  set('scan-spinner', el => el.hidden = false);
+  set('scan-progress', el => { el.hidden = false; el.setAttribute('aria-valuenow', String(percent)); });
+  set('scan-progress-bar', el => el.style.width = percent + '%');
+  set('scan-hint', el => el.hidden = false);
+  set('scan-log-title', el => el.textContent = label);
+}
 async function scanPoll() {
   const s = await fetch('/api/scan/status/').then(r => r.json());
   renderScanEntries(s.entries || []);
-  const title = document.getElementById('scan-log-title');
   if (s.running) {
-    if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = s.done >= s.total ? 'Sorting...' : `Reading ${s.done}/${s.total}...`; }
-    if (title) title.textContent = s.done >= s.total ? 'Sorting out the best matches for you...' : `Reading job sources... ${s.done}/${s.total}`;
+    const sorting = s.total > 0 && s.done >= s.total;
+    const percent = s.total ? Math.min(100, Math.round(100 * s.done / s.total)) : 0;
+    const label = sorting ? 'Sorting out the best matches for you...' : s.total ? `Reading job sources... ${s.done}/${s.total}` : 'Starting the search...';
+    showProgress(label, sorting ? 100 : percent);
+    if (scanBtn) { scanBtn.disabled = true; scanBtn.innerHTML = spinnerHtml + (sorting ? 'Sorting...' : s.total ? `Reading ${s.done}/${s.total}` : 'Starting...'); }
+    if (s.added > renderedAdded) { location.reload(); return; }  // the first jobs are ready: show them now, the search carries on
     setTimeout(scanPoll, 1500);
   } else if (scanBtn && scanBtn.disabled) {
     location.reload();
   }
 }
 if (scanBtn) scanBtn.addEventListener('click', async () => {
-  scanBtn.disabled = true; scanBtn.textContent = 'Starting...';
+  scanBtn.disabled = true; scanBtn.innerHTML = spinnerHtml + 'Starting...';
+  showProgress('Starting the search...', 3);  // something moves the instant it is pressed
   const r = await post('/api/scan/start/');
-  if (!r.ok) { toast(r.data.error || 'Could not start search'); scanBtn.disabled = false; scanBtn.textContent = 'Search jobs'; return; }
+  if (!r.ok) {
+    toast(r.data.error || 'Could not start search'); scanBtn.disabled = false; scanBtn.textContent = 'Search jobs';
+    const card = document.getElementById('scan-log-card'); if (card && !{{ scan_run|yesno:"1,0" }}) card.hidden = true;
+    return;
+  }
   scanPoll();
 });
 {% if scan_run and scan_run.running %}if (scanBtn) { scanBtn.disabled = true; } scanPoll();{% endif %}

@@ -183,13 +183,13 @@ class SearchQuality(TestCase):
 
     def test_progress_counts_up_while_sources_are_read(self):
         seen = []
-        real = scan._prefetch
+        real = scan._prefetch_staged
 
-        def spy(sources, roles=None, jooble_key="", on_progress=None):
-            return real(sources, roles, jooble_key, on_progress=lambda n: (seen.append(n), on_progress(n)))
+        def spy(sources, roles=None, jooble_key="", on_progress=None, first_wait=None):
+            return real(sources, roles, jooble_key, on_progress=lambda n: (seen.append(n), on_progress(n)), first_wait=first_wait)
 
         JobSource.objects.create(name="Lever Co", connector="lever", board_token="lev")
-        with mock.patch("tracker.services.scan._prefetch", spy), \
+        with mock.patch("tracker.services.scan._prefetch_staged", spy), \
                 mock.patch("tracker.services.scan.fetch_greenhouse", return_value=[]), mock.patch("tracker.services.scan.fetch_lever", return_value=[]):
             run = scan.start_run(self.u, background=False)
         self.assertEqual(sorted(seen), [1, 2])
@@ -358,3 +358,189 @@ class SkillCoverageScore(TestCase):
     def test_the_plain_count_is_unchanged_without_a_filler_list(self):
         from tracker.services import ai
         self.assertIn("things this posting talks about", ai.keyword_match("docker kubernetes terraform", self.CV)["summary"])
+
+
+class FasterPlaceDetectionAgreesWithTheSlowOne(TestCase):
+    """The search got much faster by scanning text once instead of once per place name; it must give the same answers."""
+
+    def corpus(self):
+        from tracker.services import geo
+        names = [t for _, _, _, t in geo._PLACES]
+        pieces = []
+        for i, name in enumerate(names):
+            pieces += [name, f"Based in {name}.", f"Join us in {name}, then travel", f"remote from {name.lower()}", f"{name}shire", f"x{name}", f"{name.upper()} office", f"Work in {name} or {names[(i * 7) % len(names)]}"]
+        pieces += ["", "Remote - worldwide", "nothing here at all", "New York and York and Kuala Lumpur and Lumpur", "Washington DC / Washington", "UK or United Kingdom or Britain"]
+        return pieces
+
+    def test_first_place_is_identical_on_every_name_and_variant(self):
+        from tracker.services import geo
+        for text in self.corpus():
+            self.assertEqual(geo._first_place(text), geo._first_place_slow(text), text)
+
+    def test_identical_inside_long_realistic_text(self):
+        from tracker.services import geo
+        filler = "We build payment systems for merchants. Our team works across time zones and values ownership. " * 12
+        for name in ("Dhaka", "Kuala Lumpur", "Dubai", "Berlin", "New York", "Malaysia", "United States"):
+            text = filler + f" Location: {name}. " + filler
+            self.assertEqual(geo._first_place(text[:2500]), geo._first_place_slow(text[:2500]))
+
+    def test_resolve_place_lookup_matches_the_old_behaviour(self):
+        from tracker.services import geo
+        for text, expected in [("Dhaka", {"BD"}), ("dhaka", {"BD"}), ("Malaysia", {"MY"}), ("Kuala Lumpur, Malaysia", {"MY"}),
+                               ("Petaling Jaya, Malaysia", {"MY"}), ("Anywhere", {"*"}), ("Nowhereville", None), ("", None)]:
+            self.assertEqual(geo.resolve_place(text), expected, text)
+
+    def test_detect_output_unchanged_for_typical_postings(self):
+        from tracker.services import geo
+        found = geo.detect("Backend Engineer", "Location: Kuala Lumpur, Malaysia. This is a hybrid role. Visa sponsorship available.")
+        self.assertEqual((found["country"], found["arrangement"], found["sponsorship"]), ("MY", "hybrid", "yes"))
+
+    def test_the_tokenizer_still_keeps_skills_and_drops_noise(self):
+        from tracker.services.text import terms
+        self.assertEqual(terms("The C# and C++ developer, .NET and Node.js. Go, R and an AI team."), ["c#", "c++", "developer", ".net", "node.js", "go", "r", "ai"])
+
+
+class OneTokenizationPerPosting(TestCase):
+    def test_corpus_pass_returns_counts_and_a_tiny_per_posting_summary(self):
+        postings = [{"title": "Backend Engineer", "description": "docker kubernetes terraform ansible " + ("zzz%d" % i)} for i in range(5)]
+        total, counts, memo = scan._read_corpus({1: postings, 2: Exception("x")}, {"docker", "rust"})
+        self.assertEqual(total, 5)
+        self.assertEqual(counts["docker"], 5)
+        skill_words, size = memo[id(postings[0])]
+        self.assertEqual(skill_words, frozenset({"docker"}))
+        self.assertGreaterEqual(size, 6)
+
+    def test_common_words_decision_needs_a_big_enough_sample(self):
+        from collections import Counter
+        self.assertEqual(scan._common_from(10, Counter({"a": 10}), 0.12), set())
+        self.assertEqual(scan._common_from(300, Counter({"a": 300, "b": 3}), 0.12), {"a"})
+
+
+class SearchStartsWithTheFastMajority(TestCase):
+    """The first jobs appear without waiting for the slowest hosts; those then top the list up."""
+
+    def setUp(self):
+        cache.clear()
+        self.u = person(cv=CV)
+        JobSource.objects.create(name="Fast", connector="greenhouse", board_token="fast")
+        JobSource.objects.create(name="Slow", connector="lever", board_token="slow")
+
+    def rows(self, company):
+        return [job(url=f"https://{company}.test/{i}", company=f"{company}{i}", title="Backend Engineer", description=BIG) for i in range(3)]
+
+    def test_slow_host_tops_up_after_the_first_batch(self):
+        import time
+
+        def slow(token):
+            time.sleep(0.8)
+            return self.rows("slow")
+
+        with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=self.rows("fast")), \
+                mock.patch("tracker.services.scan.fetch_lever", side_effect=slow), \
+                override_settings(STILLOPEN_SCAN_FIRST_WAIT_SECONDS=0.2, STILLOPEN_SCAN_FIRST_BATCH=2, STILLOPEN_SCAN_MAX_NEW=4, STILLOPEN_SCAN_DEADLINE_SECONDS=10):
+            run = scan.start_run(self.u, background=False)
+        self.assertEqual(run.added, 4)
+        self.assertEqual(run.entries.get(source_name="Fast").added, 2)  # the first batch, from the fast host
+        self.assertEqual(run.entries.get(source_name="Slow").added, 2)  # the top-up, from the slow one
+        self.assertIn("best new matches", run.note)
+        self.assertEqual(run.done, 2)
+
+    def test_the_first_batch_is_in_the_tracker_before_the_slow_host_answers(self):
+        import threading
+        release, seen = threading.Event(), {}
+
+        def slow(token):
+            seen["added_while_waiting"] = Application.objects.filter(owner=self.u).count()
+            return []
+
+        with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=self.rows("fast")), \
+                mock.patch("tracker.services.scan.fetch_lever", side_effect=slow), \
+                override_settings(STILLOPEN_SCAN_FIRST_WAIT_SECONDS=0.2, STILLOPEN_SCAN_FIRST_BATCH=2, STILLOPEN_SCAN_MAX_NEW=4, STILLOPEN_SCAN_DEADLINE_SECONDS=10):
+            scan.start_run(self.u, background=False)
+        self.assertEqual(Application.objects.filter(owner=self.u).count(), 3)  # fast host's 3 candidates, all within the cap of 4
+
+    def test_everyone_answers_fast_means_one_stage_with_the_full_cap(self):
+        with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=self.rows("fast")), \
+                mock.patch("tracker.services.scan.fetch_lever", return_value=self.rows("slow")), \
+                override_settings(STILLOPEN_SCAN_FIRST_BATCH=2, STILLOPEN_SCAN_MAX_NEW=5):
+            run = scan.start_run(self.u, background=False)
+        self.assertEqual(run.added, 5)
+
+    def test_a_host_that_never_answers_still_ends_the_search(self):
+        import threading
+        release = threading.Event()
+
+        def stuck(token):
+            release.wait(10)
+            return []
+
+        try:
+            with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=self.rows("fast")), \
+                    mock.patch("tracker.services.scan.fetch_lever", side_effect=stuck), \
+                    override_settings(STILLOPEN_SCAN_FIRST_WAIT_SECONDS=0.2, STILLOPEN_SCAN_DEADLINE_SECONDS=1):
+                run = scan.start_run(self.u, background=False)
+        finally:
+            release.set()
+        self.assertEqual(run.added, 3)
+        self.assertIn("Took too long", run.entries.get(source_name="Slow").error)
+        self.assertFalse(ScanRun.objects.get(pk=run.pk).running)
+
+
+class LoadingIndicator(TestCase):
+    def setUp(self):
+        self.u = person()
+        self.client.login(username="rina", password=PW)
+
+    def page(self):
+        return self.client.get(reverse("dashboard")).content.decode()
+
+    def test_the_progress_area_exists_even_before_the_first_search_so_pressing_search_shows_something(self):
+        page = self.page()
+        self.assertIn('id="scan-log-card"', page)
+        self.assertRegex(page, r'id="scan-log-card"[^>]*\shidden(?:\s|>)')
+        self.assertIn('id="scan-progress-bar"', page)
+        self.assertIn("showProgress('Starting the search...'", page)  # pressing the button reveals it at once
+
+    def test_while_running_it_shows_spinner_animated_bar_and_how_long_it_takes(self):
+        ScanRun.objects.create(owner=self.u, running=True, total=100, done=40)
+        page = self.page()
+        self.assertNotRegex(page, r'id="scan-log-card"[^>]*\shidden(?:\s|>)')
+        self.assertIn("progress-bar-striped progress-bar-animated", page)
+        self.assertIn('style="width:40%"', page)
+        self.assertIn('aria-valuenow="40"', page)
+        self.assertNotRegex(page, r'id="scan-spinner"[^>]*\shidden(?:\s|>)')
+        self.assertIn("Usually about a minute", page)
+        self.assertNotRegex(page, r'id="scan-hint"[^>]*\shidden(?:\s|>)')
+
+    def test_when_finished_the_bar_and_spinner_are_hidden_and_the_summary_stays(self):
+        ScanRun.objects.create(owner=self.u, running=False, total=100, done=100, found=500, added=7)
+        page = self.page()
+        self.assertRegex(page, r'id="scan-spinner"[^>]*\shidden(?:\s|>)')
+        self.assertRegex(page, r'id="scan-progress"[^>]*\shidden(?:\s|>)')
+        self.assertIn("7 new for you", page)
+
+    def test_when_every_source_is_read_the_bar_is_full(self):
+        ScanRun.objects.create(owner=self.u, running=True, total=118, done=118)
+        self.assertIn('style="width:100%"', self.page())
+
+    def test_the_page_reloads_itself_when_the_first_jobs_arrive_and_never_in_a_loop(self):
+        run = ScanRun.objects.create(owner=self.u, running=True, total=10, done=3, added=0)
+        self.assertIn("const renderedAdded = 0;", self.page())
+        ScanRun.objects.filter(pk=run.pk).update(added=25)
+        self.assertIn("const renderedAdded = 25;", self.page())  # the reload renders the new number, so it settles
+
+    def test_the_status_api_reports_what_the_bar_needs(self):
+        ScanRun.objects.create(owner=self.u, running=True, total=118, done=57, added=25)
+        data = self.client.get(reverse("scan_status")).json()
+        self.assertEqual((data["running"], data["done"], data["total"], data["added"]), (True, 57, 118, 25))
+
+    def test_empty_state_has_a_spinner_while_searching(self):
+        ScanRun.objects.create(owner=self.u, running=True, total=118, done=5)
+        self.assertIn("spinner-border", self.page().split("We are searching 118 job sources")[0][-300:])
+
+    def test_the_welcome_button_shows_progress_and_cannot_be_pressed_twice(self):
+        self.u = User.objects.create_user("new", email="new@example.com", password=PW)
+        self.client.login(username="new", password=PW)
+        page = self.client.get(reverse("welcome")).content.decode()
+        self.assertIn("Finding jobs for you...", page)
+        self.assertIn("button.disabled = true", page)
