@@ -481,6 +481,7 @@ def profile(request):
             "email": request.user.email,
             "jobs": mine(request).count(),
             "cv_versions": request.user.cv_versions.count(),
+            "cover_letters": request.user.cover_letters.count(),
             "documents": KnowledgeSource.objects.filter(owner=request.user).exclude(key__in=["profile-cv", "careerops:cv.md"]).count(),
             "google": request.user.socialaccount_set.filter(provider="google").exists(),
         },
@@ -570,6 +571,11 @@ def export_data(request):
             {"label": v.label, "kind": v.kind, "source": v.source, "created": v.created_at.isoformat(),
              "for_job": f"{v.application.company} - {v.application.role}" if v.application else None, "content": v.content}
             for v in user.cv_versions.select_related("application")
+        ],
+        "cover_letters": [
+            {"for_job": f"{l.application.company} - {l.application.role}", "source": l.source,
+             "created": l.created_at.isoformat(), "content": l.content}
+            for l in user.cover_letters.select_related("application")
         ],
         "applications": [
             {

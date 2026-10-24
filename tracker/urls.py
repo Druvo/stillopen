@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_apply, views_cv
+from . import views, views_apply, views_cover, views_cv
 
 urlpatterns = [
     path("", views.landing, name="landing"),
@@ -28,6 +28,11 @@ urlpatterns = [
     path("cv/<int:pk>/print/", views_cv.cv_print, name="cv_print"),
     path("cv/<int:pk>/download/<str:fmt>/", views_cv.cv_download, name="cv_download"),
     path("jobs/<int:pk>/tailor/", views_cv.tailor_cv, name="tailor_cv"),
+    path("jobs/<int:pk>/cover-letter/", views_cover.write_cover_letter, name="write_cover_letter"),
+    path("cover/<int:pk>/", views_cover.cover_detail, name="cover_detail"),
+    path("cover/<int:pk>/approve/", views_cover.cover_approve, name="cover_approve"),
+    path("cover/<int:pk>/delete/", views_cover.cover_delete, name="cover_delete"),
+    path("cover/<int:pk>/download/<str:fmt>/", views_cover.cover_download, name="cover_download"),
     path("jobs/<int:pk>/edit/", views.job_edit, name="job_edit"),
     path("jobs/<int:pk>/redetect/", views.job_redetect, name="job_redetect"),
     path("jobs/<int:pk>/apply/", views_apply.apply_page, name="apply_page"),

@@ -47,6 +47,11 @@
     <button type="submit" formaction="{% url 'tailor_cv' app.pk %}" formnovalidate class="btn btn-outline-secondary">Tailor a CV for this job</button>
     <span class="text-secondary">Makes a new version from your own CV; you review it before it can be sent.</span>
   </div>
+  <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <button type="submit" formaction="{% url 'write_cover_letter' app.pk %}" formnovalidate class="btn btn-outline-secondary">Write a cover letter</button>
+    <span class="text-secondary">Short, from your own material, checked before you can use it.</span>
+    {% for l in app.cover_letters.all %}<a class="btn btn-sm btn-link" href="{% url 'cover_detail' l.pk %}">Letter of {{ l.created_at|date:"j M" }}{% if l.flagged and not l.approved %} (needs review){% endif %}</a>{% endfor %}
+  </div>
 
   <h3>3. Apply on the employer's site</h3>
   <div class="card mb-3">

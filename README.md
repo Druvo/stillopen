@@ -111,7 +111,7 @@ Press **Tailor CV** on a job to make a CV for that role from your own CV and doc
 - **Export.** DOCX (plain single column, real headings and bullets, no tables or images) and a print view for "Save as PDF". The output is Markdown you can also download.
 - **Claude Code.** The `list_cv_versions`, `get_cv_version` and `save_tailored_cv` MCP tools let an AI client write a tailored CV; it goes through the same check and cannot approve its own work.
 
-Limits: 200 versions and 20 tailorings per hour per person (`STILLOPEN_MAX_CV_VERSIONS`, `STILLOPEN_CVGEN_PER_HOUR`). Not built yet: cover letters.
+Limits: 200 versions and 20 tailorings per hour per person (`STILLOPEN_MAX_CV_VERSIONS`, `STILLOPEN_CVGEN_PER_HOUR`). **Cover letters.** On the apply page, "Write a cover letter" makes a short letter from your own material (an AI if you have connected one, otherwise your own most relevant CV bullets in a plain frame). It goes through the same fact check; a flagged letter is locked until you edit it or approve it, and any edit re-checks it and withdraws the approval. DOCX and plain-text download; it is never sent for you.
 
 ## Applying
 

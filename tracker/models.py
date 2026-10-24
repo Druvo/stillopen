@@ -747,6 +747,39 @@ class CVVersion(models.Model):
         return self.kind == "master" or self.approved or not self.check_report
 
 
+class CoverLetter(models.Model):
+    """A cover letter for one job. Unlike a CV version it is a plain draft the person edits in place; every save
+    re-runs the fact check and withdraws any earlier approval, so what is exported was always the text that was
+    checked (or approved) last."""
+
+    SOURCES = [("ai", "AI"), ("keywords", "Built from your CV (no AI)"), ("manual", "Written or edited by hand")]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cover_letters")
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="cover_letters")
+    content = models.TextField(help_text="The letter, plain text.")
+    source = models.CharField(max_length=10, choices=SOURCES, default="manual")
+    provider = models.CharField(max_length=40, blank=True)
+    check_report = models.JSONField(default=list, blank=True)
+    approved = models.BooleanField(default=False)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"Cover letter for {self.application.company} - {self.application.role}"
+
+    @property
+    def flagged(self) -> bool:
+        return bool(self.check_report)
+
+    @property
+    def exportable(self) -> bool:
+        return self.approved or not self.check_report
+
+
 class Document(models.Model):
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="documents")
     kind = models.ForeignKey(DocumentKind, on_delete=models.PROTECT, related_name="documents")
