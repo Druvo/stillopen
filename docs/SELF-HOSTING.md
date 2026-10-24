@@ -189,6 +189,11 @@ docker compose -f docker-compose.selfhost.yml cp stillopen:/data/backup.sqlite3 
 # PostgreSQL: pg_dump -Fc stillopen > stillopen.dump
 ```
 
+**Automatic, for the Docker + PostgreSQL setup:** `deploy/backup-postgres.sh` writes a verified dump to `~/stillopen-backups` (and keeps a copy of the secret key),
+and prunes backups older than 14 days. `deploy/crontab.docker.example` schedules it nightly at 02:30, together with the board refresh, interview
+reminders, follow-up and job-alert emails. Paste it with `crontab -e`. A backup on the same machine does not survive losing the machine, so also copy
+that folder somewhere else (rsync, rclone, a NAS). Restore command: see the top of the script.
+
 Keep the secret key (`DJANGO_SECRET_KEY`, or `/data/.secret_key` in the Docker volume) with the backup: stored API keys cannot be decrypted without it.
 To restore, put the file back and start the app.
 
