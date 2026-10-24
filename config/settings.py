@@ -37,6 +37,8 @@ def _secret_key() -> str:
 SECRET_KEY = _secret_key()
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
+if "127.0.0.1" not in ALLOWED_HOSTS and "*" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("127.0.0.1")  # the container's own health check calls it by this address, whatever public host name is set
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
 
 INSTALLED_APPS = [

@@ -105,3 +105,8 @@ class TwoStepSignIn(TestCase):
         code = totp.format_hotp_value(totp.hotp_value(secret, int(time.time() // 30)))
         self.client.post(reverse("mfa_authenticate"), {"code": code})
         self.assertIn("_auth_user_id", self.client.session)
+
+
+class HealthCheckHost(TestCase):
+    def test_local_health_check_address_is_always_allowed(self):
+        self.assertIn("127.0.0.1", settings.ALLOWED_HOSTS)
