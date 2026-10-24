@@ -90,10 +90,9 @@ All merged unless said otherwise.
 - PostgreSQL support: CI job, `docker-compose.postgres.yml`, `copy_to_postgres`; Caddy HTTPS via `docker-compose.caddy.yml`.
 - Prep plans, phases 1 and 2: `docs/design/prep-plans.md`.
 
-**Open PR you should look at first**
+**Open PRs**
 
-- **#14 "Backups and schedules for the Docker setup"** is green but **not merged**. It adds `deploy/backup-postgres.sh` and `deploy/crontab.docker.example`. The production
-  crontab already references the backup script, so **until #14 is merged and the server updated, the nightly backup fails** (see section 8).
+- Backups and schedules (#14) was merged on 2026-10-25 and the production server now runs it (a verified backup was written and the nightly job is installed).
 - #4 to #9, #11, #12: Dependabot bumps. #4 to #7, #9 and #11 are green; the gunicorn, whitenoise and Docker-related ones are not exercised by tests (the suite does not run gunicorn), so
   try them in a staging container first. #12 (Django 6.1) is a major jump; skip until planned.
 
@@ -108,7 +107,7 @@ All merged unless said otherwise.
 
 ## 8. Known issues and risks (honest list)
 
-1. **Backups need #14** (above). After merging: `git pull` on the VM, then run `./deploy/backup-postgres.sh` once by hand and check `~/stillopen-backups`. Also copy that folder off the machine; a backup on the same VM does not survive losing it.
+1. **Backups** run nightly at 02:30 into `~/stillopen-backups` on the VM and are verified (the dump is read back). They live on the same machine as the database, so also copy that folder somewhere else; a backup on the same VM does not survive losing it.
 2. **Email is not set up** in production (no SMTP credentials yet). Until it is, confirmation, reminders and alerts do not send. Brevo's free plan (300 a day) is the plan; enter it in admin > Site configuration > Email, then use the test page.
 3. **Social login keys are not entered** yet; the buttons stay hidden until a provider has keys and its switch on.
 4. **Prep plans have not been run against a real AI provider.** Everything is tested with a stand-in model. Expect to tune the three prompts in `services/prep.py` (`GAPS_SYSTEM`, `SYLLABUS_SYSTEM`, `QUESTIONS_SYSTEM`) once real output is seen; the validators are deliberately strict, so poor output fails a plan rather than saving bad content.
@@ -133,7 +132,7 @@ All merged unless said otherwise.
 
 ## 10. Where to go next (suggested order)
 
-1. Merge #14 and confirm backups (section 8.1). Then decide the Dependabot PRs.
+1. Copy the backups off the VM (section 8.1). Then decide the Dependabot PRs.
 2. Owner steps that unblock the product: Brevo SMTP, Google and GitHub keys, legal text, a public contact address, two-step sign-in on the admin account.
 3. Try prep plans with a real key; tune the prompts; look at the draft page with real output.
 4. Prep plans phase 3: source read-back check (does the cited page support the answer), mock interview, mark milestones on the job timeline (design: `docs/design/prep-plans.md`).
