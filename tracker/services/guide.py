@@ -21,7 +21,7 @@ def greeting(user, now) -> str:
     return f"{part}, {name}" if name else part
 
 
-def next_step(profile, cards, has_areas: bool = True, searching: bool = False) -> dict | None:
+def next_step(profile, cards, has_areas: bool = True, searching: bool = False, prep_due=None) -> dict | None:
     """The single most useful next move, as {headline, body, label, url}; None when there is nothing to suggest."""
     if not profile.is_complete:
         missing = " and ".join(profile.missing_fields)
@@ -67,5 +67,12 @@ def next_step(profile, cards, has_areas: bool = True, searching: bool = False) -
             "headline": f"{c['app'].company} looks like a good fit. Tailor your CV for it?",
             "body": "We reshape your own CV toward the posting. Nothing is invented, and you review it before it counts.",
             "label": "Take me there", "url": f"#job-{c['app'].pk}",
+        }
+    if prep_due:
+        plan = prep_due[0]
+        return {
+            "headline": "Today's practice is ready",
+            "body": f"A few questions for your plan \"{plan.title}\". It takes about five minutes, and the answers come with the reading behind them.",
+            "label": "Start", "url": reverse("prep_today", args=[plan.pk]),
         }
     return None
