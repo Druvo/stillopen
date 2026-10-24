@@ -1,0 +1,85 @@
+{% extends "tracker/base_app.html" %}
+{% block title %}Connect an AI assistant{% endblock %}
+{% block page_title %}Connect an AI assistant{% endblock %}
+{% block content %}
+<p class="text-secondary">Make a private token and give it to Claude Code or any other AI assistant that supports MCP. The assistant can then read and update <strong>your</strong> job search here: list your jobs, judge fit from your CV, tailor a CV, add notes and track interviews. It never sees anyone else's data, it can never delete anything, and it never applies to a job or sends a message for you.</p>
+
+{% if new_token %}
+<div class="card border-success mb-3">
+  <div class="card-body">
+    <h3 class="card-title">Your new token: {{ new_record.name }}</h3>
+    <p class="text-danger fw-bold mb-2">Copy it now. It is shown only once and cannot be recovered. Treat it like a password.</p>
+    <p class="mb-1">Token</p>
+    <pre class="border rounded p-2 mb-3" style="user-select:all;white-space:pre-wrap;word-break:break-all"><code>{{ new_token }}</code></pre>
+    <p class="mb-1"><strong>Claude Code:</strong> paste this in a terminal (one line)</p>
+    <pre class="border rounded p-2 mb-3" style="user-select:all;white-space:pre-wrap;word-break:break-all"><code>claude mcp add --transport http stillopen {{ endpoint }} --header "Authorization: Bearer {{ new_token }}"</code></pre>
+    <p class="mb-1"><strong>Other assistants</strong> (Cursor, Windsurf and similar): add this to their MCP settings</p>
+    <pre class="border rounded p-2 mb-3" style="user-select:all;white-space:pre-wrap;word-break:break-all"><code>{
+  "mcpServers": {
+    "stillopen": {
+      "type": "http",
+      "url": "{{ endpoint }}",
+      "headers": { "Authorization": "Bearer {{ new_token }}" }
+    }
+  }
+}</code></pre>
+    <p class="text-secondary mb-0">{% if new_record.can_write %}This token can read and make changes (add jobs, notes, interviews, saved evaluations and tailored CVs).{% else %}This token is read-only.{% endif %} {% if new_record.expires_at %}It stops working on {{ new_record.expires_at|date:"j M Y" }}.{% else %}It does not expire.{% endif %} If you refresh this page, a second token is made.</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h3 class="card-title">Make a token</h3>
+    <form method="post" action="{% url 'assistant_create' %}" class="row g-3 align-items-end">
+      {% csrf_token %}
+      <div class="col-12 col-md-4"><label class="form-label" for="name">What is it for?</label><input class="form-control" id="name" name="name" maxlength="60" placeholder="Claude Code on my laptop" required></div>
+      <div class="col-6 col-md-3"><label class="form-label" for="access">Access</label>
+        <select class="form-select" id="access" name="access"><option value="read">Read only</option><option value="write">Read and make changes</option></select></div>
+      <div class="col-6 col-md-3"><label class="form-label" for="expires">Stops working after</label>
+        <select class="form-select" id="expires" name="expires">{% for days, label in expiry_choices %}<option value="{{ days }}" {% if days == 90 %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="col-12 col-md-2"><button class="btn btn-primary w-100" type="submit">Make token</button></div>
+    </form>
+    <p class="text-secondary mt-3 mb-0" style="font-size:.85rem">You can have {{ limit }} active tokens. Start with read only; switch to making changes when you trust the assistant with it. What it reads (your CV and notes) goes to the AI company behind that assistant, so use one you are comfortable with.</p>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h3 class="card-title">Your tokens</h3>
+    {% if tokens %}
+    <div class="table-responsive"><table class="table table-vcenter mb-0">
+      <thead><tr><th>Name</th><th>Starts with</th><th>Access</th><th>Last used</th><th>Stops working</th><th></th></tr></thead>
+      <tbody>
+      {% for t in tokens %}
+      <tr>
+        <td>{{ t.name }}{% if t.state != "Active" %} <span class="badge bg-secondary-lt">{{ t.state }}</span>{% endif %}</td>
+        <td><code>{{ t.hint }}…</code></td>
+        <td>{% if t.can_write %}Read and change{% else %}Read only{% endif %}</td>
+        <td>{% if t.last_used_at %}{{ t.last_used_at|timesince }} ago{% else %}Never{% endif %}</td>
+        <td>{% if t.expires_at %}{{ t.expires_at|date:"j M Y" }}{% else %}Never{% endif %}</td>
+        <td class="text-end">{% if not t.revoked_at %}<form method="post" action="{% url 'assistant_revoke' t.pk %}">{% csrf_token %}<button class="btn btn-outline-danger btn-sm" type="submit">Revoke</button></form>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <p class="text-secondary mb-0">No tokens yet. Make one above, then paste the command it gives you into Claude Code.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h3 class="card-title">What to try</h3>
+    <p class="mb-2">Once connected, ask your assistant things like:</p>
+    <ul class="mb-2">
+      <li>“Give me a summary of my job search and what to apply to next.”</li>
+      <li>“Look at my saved jobs, judge each against my CV and save an honest match.”</li>
+      <li>“Tailor my CV for the Acme role, using only what my CV says.”</li>
+      <li>“Add a note that I had a phone screen on Tuesday, and record the interview.”</li>
+    </ul>
+    <p class="text-secondary mb-0">Lost a laptop or shared a token by mistake? Revoke it above and it stops working immediately. The address the assistant connects to is <code>{{ endpoint }}</code>.</p>
+  </div>
+</div>
+{% endblock %}

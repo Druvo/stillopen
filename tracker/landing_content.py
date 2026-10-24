@@ -72,6 +72,8 @@ FAQ = [
      "Jobs come from sources around the world, and you choose where you would work, such as your own country, remote work, or places like Malaysia and the Gulf. Coverage is strongest for remote and international employers; local job sites that publish no open feed are not included."),
     ("What happens to my CV and data?",
      "Only you can see it. It is stored to run the service for you, never sold, and never used to advertise to you. You can download everything or delete your account and all of it from your profile at any time."),
+    ("Is it open source? Can I run it myself?",
+     "Yes to both. The code is public under the Apache-2.0 licence. You can use this site or run your own private copy with one Docker command, and your data then stays on your own machine. The self-hosting guide on GitHub walks through it."),
     ("What if a posting has closed?",
      "Jobs that have not been seen for a few days disappear from the public list, and in your own list the 'Are they still open?' check marks closed ones. Always confirm on the employer's page before applying."),
 ]

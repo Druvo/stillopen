@@ -1,5 +1,42 @@
 # StillOpen
 
+**Stop visiting job sites one by one.** StillOpen is free, open-source, self-hostable software that searches hundreds of company career pages and job boards for you, keeps the jobs you can really take, tailors your CV and cover letter for each one, and tracks every application. You press apply yourself; it never sends anything to an employer.
+
+[![Tests](https://github.com/Druvo/stillopen/actions/workflows/tests.yml/badge.svg)](https://github.com/Druvo/stillopen/actions/workflows/tests.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+![StillOpen landing page](docs/images/landing.jpg)
+
+## Why run your own
+
+- **Your data stays yours.** CV, notes and applications live in one database on your machine or server. Export or delete everything any time.
+- **No subscription, no lock-in, no tracking.** No ads and no third-party scripts, fonts or images on any page.
+- **No AI key needed.** Search, fit scoring, CV tailoring and cover letters all work without one. Bring your own key later for a deeper read.
+- **Read every line.** Apache-2.0 licensed. Contributions welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Quick start
+
+With Docker (about five minutes, no other setup):
+
+```bash
+git clone https://github.com/Druvo/stillopen.git
+cd stillopen
+docker compose -f docker-compose.selfhost.yml up -d --build
+docker compose -f docker-compose.selfhost.yml exec stillopen python manage.py createsuperuser
+```
+
+Open <http://localhost:8000>. Full guide (email, HTTPS, backups, updates): [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md). Running it as a shared service for many people: [docs/HOSTING.md](docs/HOSTING.md).
+
+## Use it from Claude Code or any AI assistant
+
+People can make a personal token under **Profile > Connect an AI assistant** and give it to Claude Code (or any MCP client) to work with their own job search from the assistant: [docs/MCP.md](docs/MCP.md).
+
+## Project
+
+[Self-hosting](docs/SELF-HOSTING.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Changelog](CHANGELOG.md) · [License (Apache-2.0)](LICENSE)
+
+## What it is
+
 Job-search dashboard on Django. Each person registers, adds the roles they want and their CV, tracks the jobs they are chasing, and sees a match percentage and whether each posting is still open. Optional AI scoring with your own key, retrieval over your own documents, an MCP server for Claude Code, Paperless-ngx for documents, and a career-ops import for admins. Everything that changes behaviour is a row in the admin, not code.
 
 It runs two ways: on your own machine for one person, or as a shared service for many people (each only ever sees their own data). Hosting guide: [docs/HOSTING.md](docs/HOSTING.md).
@@ -255,6 +292,8 @@ claude mcp add stillopen -- <path-to>/.venv/Scripts/python.exe <path-to>/mcp_ser
 
 `.mcp.example.json` shows the same for other clients. It runs locally over stdio against the same database; nothing listens on the network.
 
+**Over the web instead:** on any StillOpen website, each person can make a personal token under Profile > Connect an AI assistant (read only or read and change, with expiry and revoke) and register `https://your-site/mcp/` with Claude Code. Details and limits: [docs/MCP.md](docs/MCP.md).
+
 | Tool | Use |
 | --- | --- |
 | `summary`, `list_applications`, `get_application` | See the pipeline and a role in full |
@@ -275,3 +314,7 @@ By design there is no delete tool, and no way to read settings, API keys, tokens
 ```bash
 .venv\Scripts\python.exe manage.py test
 ```
+
+## License
+
+Copyright 2026 Zahid Hasan and the StillOpen contributors. Licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE) for third-party components. Job postings shown by the app belong to the employers and sites that published them.

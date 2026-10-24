@@ -1,4 +1,4 @@
-"""django-allauth adapters: sign-up follows the admin switch; Google sign-in needs a verified email."""
+"""django-allauth adapters: sign-up follows the admin switch; Google and GitHub sign-in need a verified email, Facebook's is confirmed by link."""
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account.models import EmailAddress
 from allauth.account.utils import has_verified_email
@@ -55,13 +55,20 @@ class AccountAdapter(DefaultAccountAdapter):
         return None
 
 
+# Facebook does not vouch for an address the way Google and GitHub do, so a new Facebook person is let in on the usual email
+# confirmation instead (AccountAdapter.pre_login), and the address is never used to attach to an existing account.
+UNVERIFIED_OK = {"facebook"}
+
+
 def _verified_emails(sociallogin) -> list[str]:
     return [a.email for a in sociallogin.email_addresses if a.verified and a.email]
 
 
 def _may_register(config: SiteConfig, sociallogin) -> bool:
-    """Open sign-up admits any verified Google email; closed sign-up needs the allowlist."""
+    """Open sign-up admits anyone with a usable email; closed sign-up needs the allowlist."""
     emails = _verified_emails(sociallogin)
+    if not emails and sociallogin.account.provider in UNVERIFIED_OK:
+        emails = [a.email for a in sociallogin.email_addresses if a.email]
     if not emails:
         return False
     return config.signup_open or any(config.google_email_allowed(e) for e in emails)
@@ -70,21 +77,28 @@ def _may_register(config: SiteConfig, sociallogin) -> bool:
 class SocialAdapter(DefaultSocialAccountAdapter):
     def pre_social_login(self, request, sociallogin):
         config = SiteConfig.load()
-        if not config.google_login_enabled:
-            messages.error(request, "Google sign-in is turned off.")
+        provider = sociallogin.account.provider
+        if not config.social_enabled(provider):
+            messages.error(request, f"{provider.title()} sign-in is turned off.")
             raise ImmediateHttpResponse(redirect("account_login"))
         if sociallogin.is_existing:
             return
         if not _may_register(config, sociallogin):
-            messages.error(request, "Registration is closed, or that Google account has no verified email.")
+            messages.error(request, "Registration is closed, or that account has no usable email address.")
             raise ImmediateHttpResponse(redirect("account_login"))
 
     def is_open_for_signup(self, request, sociallogin):
         config = SiteConfig.load()
-        return config.google_login_enabled and _may_register(config, sociallogin)
+        return config.social_enabled(sociallogin.account.provider) and _may_register(config, sociallogin)
 
     def populate_user(self, request, sociallogin, data):
         user = super().populate_user(request, sociallogin, data)
-        user.is_staff = False  # Google users get the dashboard, never the admin
+        user.is_staff = False  # social users get the dashboard, never the admin
         user.is_superuser = False
+        return user
+
+    def save_user(self, request, sociallogin, form=None):
+        user = super().save_user(request, sociallogin, form)
+        if not _verified_emails(sociallogin):  # no address the provider vouched for: make them confirm it like anyone who signs up
+            UserProfile.objects.update_or_create(user=user, defaults={"self_registered": True})
         return user

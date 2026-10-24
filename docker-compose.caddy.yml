@@ -1,0 +1,30 @@
+# Automatic HTTPS for the self-host setup, using Caddy. Use it together with the other files:
+#
+#   docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml -f docker-compose.caddy.yml up -d --build
+#
+# Put these in .env first (replace jobs.example.com with your domain, whose A record must point at this machine, with ports 80 and 443 open):
+#   STILLOPEN_HOST=jobs.example.com
+#   DJANGO_ALLOWED_HOSTS=jobs.example.com
+#   DJANGO_CSRF_TRUSTED_ORIGINS=https://jobs.example.com
+#   DJANGO_HTTPS=1
+#   DJANGO_BEHIND_PROXY=1
+#   ALLAUTH_TRUSTED_PROXY_COUNT=1
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - stillopen
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      STILLOPEN_HOST: ${STILLOPEN_HOST:?set STILLOPEN_HOST in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

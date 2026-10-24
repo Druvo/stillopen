@@ -1,3 +1,2 @@
-# Optional: only for the MCP server (Claude Code or any MCP client).
+# The MCP package is part of the main requirements now (the website has its own MCP endpoint).
 -r requirements.txt
-mcp>=2,<3

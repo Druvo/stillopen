@@ -8,6 +8,7 @@ Rules this follows (from the sources' own terms and from Google's job-posting gu
     passing their jobs to Google Jobs;
   * an opening's own page is not offered to search engines unless the admin switches that on (thin copied content).
 """
+from datetime import timedelta
 from xml.sax.saxutils import escape as xml_escape
 
 from django.conf import settings
@@ -15,6 +16,7 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.urls import reverse
 from django.views.decorators.cache import cache_page
 from django.views.decorators.http import require_GET
@@ -22,7 +24,7 @@ from django.views.decorators.vary import vary_on_cookie
 
 from .models import Posting, SiteConfig
 from . import landing_content
-from .services import geo, public
+from .services import countries as countries_all, geo, public
 
 
 def public_cache(view):
@@ -58,12 +60,28 @@ def landing(request):
     return render(request, "tracker/landing.html", context)
 
 
+TYPES = [("full_time", "Full-time"), ("part_time", "Part-time"), ("contract", "Contract"), ("freelance", "Freelance"), ("internship", "Internship")]
+LEVELS = [("junior", "Junior"), ("mid", "Mid-level"), ("senior", "Senior"), ("lead", "Lead or staff"), ("principal", "Principal or architect"), ("manager", "Manager")]
+WITHIN = [("1", "Last 24 hours"), ("3", "Last 3 days"), ("7", "Last week"), ("30", "Last month")]
+
+
 def _filters(request):
-    q = " ".join(request.GET.get("q", "").split())[:80]
-    country = request.GET.get("country", "").strip().upper()
-    if country and not (len(country) == 2 and country.isalpha()):
+    """Every filter, cleaned: unknown values are dropped rather than trusted."""
+    get = request.GET
+    country = get.get("country", "").strip().upper()
+    if country not in countries_all.ALL:
         country = ""
-    return q, country, request.GET.get("remote") == "1"
+    pick = lambda key, options: get.get(key, "") if get.get(key, "") in dict(options) else ""
+    return {
+        "q": " ".join(get.get("q", "").split())[:80],
+        "country": country,
+        "remote": get.get("remote") == "1",
+        "visa": get.get("visa") == "1",
+        "relocation": get.get("relocation") == "1",
+        "type": pick("type", TYPES),
+        "level": pick("level", LEVELS),
+        "within": pick("within", WITHIN),
+    }
 
 
 @require_GET
@@ -73,7 +91,8 @@ def openings(request):
     if _board_off(config):
         raise Http404("The public job board is switched off.")
     public.refresh_if_stale()
-    q, country, remote = _filters(request)
+    f = _filters(request)
+    q, country, remote = f["q"], f["country"], f["remote"]
     base = public.public_postings()
     qs = base
     for word in q.split():
@@ -82,20 +101,31 @@ def openings(request):
         qs = qs.filter(country=country)
     if remote:
         qs = qs.filter(remote=True)
+    if f["visa"]:
+        qs = qs.filter(sponsorship="yes")
+    if f["relocation"]:
+        qs = qs.filter(relocation="yes")
+    if f["type"]:
+        qs = qs.filter(employment_type=f["type"])
+    if f["level"]:
+        qs = qs.filter(seniority=f["level"])
+    if f["within"]:
+        qs = qs.filter(first_seen_at__gte=timezone.now() - timedelta(days=int(f["within"])))
     qs = qs.order_by("-first_seen_at", "-pk")
     page = Paginator(qs, settings.STILLOPEN_PUBLIC_PAGE_SIZE).get_page(request.GET.get("page"))
-    countries = [
-        {"code": row["country"], "name": geo.country_name(row["country"]), "n": row["n"]}
-        for row in base.exclude(country="").values("country").annotate(n=Count("id")).order_by("-n")[:40]
-    ]
+    counts = {row["country"]: row["n"] for row in base.exclude(country="").values("country").annotate(n=Count("id"))}
+    with_jobs = sorted(({"code": c, "name": countries_all.name(c), "n": n} for c, n in counts.items() if c in countries_all.ALL), key=lambda r: r["name"])
+    without = [{"code": c, "name": n} for c, n in countries_all.sorted_items() if c not in counts]
     rows = [{"p": p, "credit": public.credit_for(p), "slug": public.slug_for(p), "where": public.location_label(p)} for p in page]
     keep = request.GET.copy()
     keep.pop("page", None)
-    filtered = bool(q or country or remote)
+    filtered = any(f.values())
     stats = public.stats()
     return render(request, "tracker/openings.html", {
-        "config": config, "page": page, "rows": rows, "q": q, "country": country, "remote": remote, "countries": countries,
+        "config": config, "page": page, "rows": rows, "q": q, "country": country, "remote": remote, "f": f,
+        "countries_with_jobs": with_jobs, "countries_without": without, "types": TYPES, "levels": LEVELS, "within_options": WITHIN,
         "country_name": geo.country_name(country) if country else "", "total": paginator_total(page), "filtered": filtered,
+        "country_empty": bool(country) and not counts.get(country),
         "qs": keep.urlencode(), "credits": stats["credits"], "stats": stats,
         # filtered and deep pages are for people, not search results
         "noindex": filtered or page.number > 1,

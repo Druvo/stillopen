@@ -1,0 +1,5 @@
+# HTTPS in front of StillOpen. {$STILLOPEN_HOST} is your domain (set in .env); Caddy gets and renews the certificate by itself.
+{$STILLOPEN_HOST} {
+	encode zstd gzip
+	reverse_proxy stillopen:8000
+}

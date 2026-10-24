@@ -592,9 +592,10 @@ class Registration(TestCase):
 class GoogleRegistration(TestCase):
     def sociallogin(self, email, verified=True):
         from allauth.account.models import EmailAddress
-        from allauth.socialaccount.models import SocialLogin
+        from allauth.socialaccount.models import SocialAccount, SocialLogin
 
-        return SocialLogin(user=User(email=email), email_addresses=[EmailAddress(email=email, verified=verified)])
+        return SocialLogin(user=User(email=email), account=SocialAccount(provider="google", uid="1"),
+                           email_addresses=[EmailAddress(email=email, verified=verified)])
 
     def request(self):
         from django.contrib.messages.storage.fallback import FallbackStorage
@@ -690,3 +691,24 @@ class PublicPages(TestCase):
     def test_legal_text_is_escaped(self):
         SiteConfig.objects.filter(pk=1).update(terms_text="<script>alert(1)</script>")
         self.assertNotContains(self.client.get(reverse("terms")), "<script>alert(1)</script>")
+
+
+class WebAssistantTokens(TestCase):
+    """The web MCP endpoint acts as the token's owner only; the full set of checks is in tests_mcp_http.py."""
+
+    def test_a_token_never_reaches_another_persons_data(self):
+        from django.urls import reverse
+        import json
+
+        a, b = User.objects.create_user("tok-a", password="x" * 20), User.objects.create_user("tok-b", password="x" * 20)
+        status = Status.objects.get(name="Evaluated")
+        Application.objects.create(owner=a, company="OnlyAnnCo", role="R", status=status)
+        Application.objects.create(owner=b, company="OnlyBobCo", role="R", status=status)
+        from tracker.models import ApiToken
+
+        _, raw = ApiToken.issue(b, "b", can_write=True)
+        body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "list_applications", "arguments": {}}}
+        r = self.client.post(reverse("mcp_endpoint"), data=json.dumps(body), content_type="application/json", HTTP_AUTHORIZATION=f"Bearer {raw}")
+        text = json.dumps(r.json())
+        self.assertIn("OnlyBobCo", text)
+        self.assertNotIn("OnlyAnnCo", text)

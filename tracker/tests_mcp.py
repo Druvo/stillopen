@@ -155,6 +155,7 @@ class ServerProtocolTests(SimpleTestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             env = {**os.environ, "STILLOPEN_DB": str(Path(tmp) / "mcp.sqlite3"), "CAREEROPS_PATH": ""}
+            env.pop("DATABASE_URL", None)  # the throwaway sqlite file above, not whatever database the suite itself runs on
             subprocess.run([sys.executable, "manage.py", "migrate", "-v", "0"], cwd=ROOT, env=env, check=True, capture_output=True)
             subprocess.run(
                 [sys.executable, "manage.py", "shell", "-c",

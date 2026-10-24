@@ -1,0 +1,30 @@
+name: Suggest a job source
+description: A job board or hiring system StillOpen should search
+labels: [job-source]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We only add sources that publish an **open, documented, key-free feed or API** and whose terms allow automated reading.
+        LinkedIn, Indeed, Glassdoor, bdjobs and JobStreet forbid it and will not be added.
+  - type: input
+    id: name
+    attributes:
+      label: Name and website
+    validations:
+      required: true
+  - type: input
+    id: api
+    attributes:
+      label: Link to the API or feed documentation
+    validations:
+      required: true
+  - type: textarea
+    id: terms
+    attributes:
+      label: What do their terms say about reuse and republishing?
+      description: Quote or link the relevant lines. This decides whether the openings may appear on the public job board.
+  - type: input
+    id: coverage
+    attributes:
+      label: Which countries or kinds of job does it cover?

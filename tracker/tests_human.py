@@ -215,7 +215,8 @@ class Wording(TestCase):
     def test_landing_page_speaks_to_the_person_not_the_server_owner(self):
         page = self.client.get(reverse("landing")).content.decode()
         self.assertIn("Your first ten minutes", page)
-        self.assertNotIn("Self-hosted", page)
+        self.assertIn("Free software you can read, run and keep", page)
+        self.assertIn("Apache-2.0", page)
         self.assertNotIn("Paperless", page)
         self.assertNotIn("Configurable from the admin", page)
 

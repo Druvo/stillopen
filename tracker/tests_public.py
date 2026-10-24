@@ -26,11 +26,11 @@ def source(connector="greenhouse", name="Acme", show_publicly=True, **kw):
     return JobSource.objects.create(name=name, connector=connector, board_token=f"tok{n}", show_publicly=show_publicly, **kw)
 
 
-def posting(src, title="Backend Engineer", company="Acme", location="Remote", country="", remote=False, excerpt="", seen_days_ago=0, first_days_ago=0, url=None):
+def posting(src, title="Backend Engineer", company="Acme", location="Remote", country="", remote=False, excerpt="", seen_days_ago=0, first_days_ago=0, url=None, **terms):
     n = next(_n)
     p = Posting.objects.create(
         source=src, url=url or f"https://jobs.test/{n}", title=title, company=company, title_key=f"{company}::{title}::{n}".lower(),
-        location=location, country=country, remote=remote, excerpt=excerpt,
+        location=location, country=country, remote=remote, excerpt=excerpt, **terms,
     )
     now = timezone.now()
     Posting.objects.filter(pk=p.pk).update(last_seen_at=now - timedelta(days=seen_days_ago), first_seen_at=now - timedelta(days=first_days_ago))
@@ -572,3 +572,48 @@ class TextIsCleanBeforeItIsShown(TestCase):
         resp.json.return_value = {"jobs": [{"title": "Eng", "absolute_url": "https://x.test/1", "location": {"name": "KL"}, "content": "&lt;p&gt;We build &lt;b&gt;things&lt;/b&gt;&lt;/p&gt;"}]}
         with mock.patch("tracker.services.scan.safe_get", return_value=resp):
             self.assertEqual(scan.fetch_greenhouse("x")[0]["description"], "We build things")
+
+
+class BoardFilters(PublicTestCase):
+    def setUp(self):
+        super().setUp()
+        self.src = source("greenhouse", "Acme")
+        posting(self.src, title="Visa job", country="DE", sponsorship="yes", relocation="yes", employment_type="full_time", seniority="senior")
+        posting(self.src, title="No visa job", country="DE", sponsorship="no", employment_type="contract", seniority="junior", first_days_ago=20)
+        posting(self.src, title="Silent job", country="MY")
+
+    def titles(self, **q):
+        return {x["p"].title for x in self.client.get(reverse("openings"), q).context["rows"]}
+
+    def test_visa_relocation_type_level_and_age_filters(self):
+        self.assertEqual(self.titles(visa="1"), {"Visa job"})
+        self.assertEqual(self.titles(relocation="1"), {"Visa job"})
+        self.assertEqual(self.titles(type="contract"), {"No visa job"})
+        self.assertEqual(self.titles(level="senior"), {"Visa job"})
+        self.assertEqual(self.titles(within="7"), {"Visa job", "Silent job"})
+        self.assertEqual(self.titles(visa="1", country="MY"), set())
+
+    def test_junk_filter_values_are_ignored(self):
+        self.assertEqual(len(self.titles(type="<x>", level="zzz", within="-1")), 3)
+
+    def test_every_country_in_the_world_is_selectable_and_a_quiet_one_says_so(self):
+        r = self.client.get(reverse("openings"), {"country": "BD"})
+        self.assertContains(r, 'value="BD"')
+        self.assertContains(r, 'value="ZW"')
+        self.assertContains(r, "None of the sources we read have an opening in Bangladesh")
+        self.assertEqual(len(r.context["countries_with_jobs"]) + len(r.context["countries_without"]), 249)
+
+    def test_cards_show_the_visa_badge(self):
+        self.assertContains(self.client.get(reverse("openings")), "Visa sponsorship</span>")
+
+
+class TermsRecorded(PublicTestCase):
+    def test_a_scan_records_what_the_posting_says(self):
+        src = source("greenhouse", "Acme")
+        scan.record_sightings(src, [
+            {"title": "Senior Engineer", "url": "https://x.test/1", "location": "Berlin, Germany", "company": "Acme", "description": "<p>We offer visa sponsorship and a relocation package. Full-time.</p>"},
+            {"title": "Cook", "url": "https://x.test/2", "location": "Berlin, Germany", "company": "Acme", "description": "Make food."},
+        ])
+        a, b = Posting.objects.get(url="https://x.test/1"), Posting.objects.get(url="https://x.test/2")
+        self.assertEqual((a.sponsorship, a.relocation, a.employment_type, a.seniority), ("yes", "yes", "full_time", "senior"))
+        self.assertEqual((b.sponsorship, b.relocation), ("", ""))

@@ -1,9 +1,10 @@
 Django>=5.2,<5.3
 django-jazzmin>=3.0,<4
 requests>=2.32
-django-allauth[socialaccount]>=65,<66
+django-allauth[socialaccount,mfa]>=65,<66
 cryptography>=43
 pypdf>=5
 python-docx>=1.1
 gunicorn>=23.0
 whitenoise>=6.7
+mcp>=2,<3

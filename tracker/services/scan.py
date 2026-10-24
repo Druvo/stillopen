@@ -128,6 +128,21 @@ def excerpt_of(text: str) -> str:
     return text[:EXCERPT_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:-") + "..."
 
 
+_TERM_HINT = re.compile(r"sponsor|visa|work permit|right to work|relocat|authori[sz]ation|full[- ]time|part[- ]time|permanent|contract|fixed[- ]term|freelance|intern", re.I)
+
+
+def _terms_of(title: str, description: str) -> dict:
+    """Visa, relocation, contract and level facts for one posting, as Posting fields. The cheap hint test first keeps this
+    off the regexes for the many postings that say none of it (a first search reads ~20,000)."""
+    raw = (description or "")[:12000]
+    if not (_TERM_HINT.search(raw) or _TERM_HINT.search(title)):
+        found = geo.detect_terms(title, "")
+    else:
+        text = re.sub(r"<[^>]+>", " ", html.unescape(raw))
+        found = geo.detect_terms(title, re.sub(r"\s+", " ", text)[:6000])
+    return {name: found.get(name, "") for name in ("sponsorship", "relocation", "employment_type", "seniority")}
+
+
 def record_sightings(source: JobSource, postings: list[dict], seen_date=None) -> None:
     """record_sighting for a whole list of postings from one source in a handful of queries instead of two per
     posting (a first search reads ~20,000 openings). Same result: the Posting is created or refreshed and marked seen today."""
@@ -147,11 +162,13 @@ def record_sightings(source: JobSource, postings: list[dict], seen_date=None) ->
             country=next(iter(codes)) if len(codes) == 1 else "",
             remote=bool(_REMOTE_WORDS.search(f"{location} {p['title']}")),
             excerpt=excerpt_of(p.get("description", "")),
+            **_terms_of(p["title"], p.get("description", "")),
         ))
     for i in range(0, len(rows), 500):
         Posting.objects.bulk_create(
             rows[i:i + 500], update_conflicts=True, unique_fields=["source", "url"],
-            update_fields=["title", "company", "title_key", "location", "country", "remote", "excerpt", "last_seen_at"],
+            update_fields=["title", "company", "title_key", "location", "country", "remote", "excerpt",
+                           "sponsorship", "relocation", "employment_type", "seniority", "last_seen_at"],
         )
     ids = {}
     ordered = list(urls)
@@ -861,7 +878,8 @@ def _worker(run_id: int):
         ScanRun.objects.filter(pk=run_id).update(error=str(exc)[:500])
     finally:
         ScanRun.objects.filter(pk=run_id).update(running=False, finished_at=timezone.now())
-        connections.close_all()
+        if threading.current_thread() is not threading.main_thread():
+            connections.close_all()  # a background thread owns its connection; the caller's own is never closed under it
 
 
 def current_run(owner) -> ScanRun | None:

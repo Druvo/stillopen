@@ -63,7 +63,7 @@ class SiteConfigAdmin(admin.ModelAdmin):
         (
             "Dashboard",
             {
-                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "auto_scan_hours"),
+                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "auto_scan_hours", "mcp_remote_enabled"),
                 "description": "Follow-up emails need SMTP (EMAIL_HOST in the environment) and `manage.py send_followup_emails` on a schedule (e.g. daily cron) -- enabling this alone does not send anything by itself.",
             },
         ),
@@ -90,13 +90,15 @@ class SiteConfigAdmin(admin.ModelAdmin):
         ("career-ops import (site admins only)", {"fields": ("careerops_path", "node_command")}),
         ("Open / closed check", {"fields": ("liveness_mode", "liveness_timeout")}),
         (
-            "Google sign-in",
+            "Social sign-in (Google, GitHub, Facebook)",
             {
-                "fields": ("google_login_enabled", "google_allowed_emails"),
+                "fields": ("google_login_enabled", "github_login_enabled", "facebook_login_enabled", "google_allowed_emails"),
                 "description": (
-                    "Create an OAuth client in Google Cloud Console (Web application). Authorized redirect URI: "
-                    "<code>&lt;your site&gt;/accounts/google/login/callback/</code>. Then add it under "
-                    "<strong>Social applications</strong> (provider Google, choose your Site) and tick the box below."
+                    "All three are free. Create an OAuth app with the provider, using the redirect address "
+                    "<code>&lt;your site&gt;/accounts/google/login/callback/</code> (or <code>github</code>, <code>facebook</code> "
+                    "in place of <code>google</code>). Then add it under <strong>Social applications</strong> (choose the provider and "
+                    "your Site), or set <code>GOOGLE_CLIENT_ID</code>/<code>_SECRET</code> (and the GITHUB_ and FACEBOOK_ ones) in the "
+                    "environment, and tick the box. See docs/SELF-HOSTING.md."
                 ),
             },
         ),

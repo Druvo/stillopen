@@ -7,12 +7,14 @@
 <p class="text-secondary mb-3">Welcome back. Sign in to pick up where you left off.</p>
 
 {% get_providers as providers %}
-{% if google_login_on and providers %}
-  <form method="post" action="{% provider_login_url 'google' process='login' %}" class="mb-3">
+{% if providers and enabled_social %}
+  {% for p in providers %}{% if p.id in enabled_social %}
+  <form method="post" action="{% provider_login_url p.id process='login' %}" class="mb-2">
     {% csrf_token %}
     {{ redirect_field }}
-    <button type="submit" class="btn btn-outline-secondary w-100">Continue with Google</button>
+    <button type="submit" class="btn btn-outline-secondary w-100">Continue with {{ p.name }}</button>
   </form>
+  {% endif %}{% endfor %}
   <div class="hr-text">or</div>
 {% endif %}
 
