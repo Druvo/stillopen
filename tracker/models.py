@@ -168,7 +168,7 @@ class SiteConfig(PersonalSettings):
     )
     followup_emails_enabled = models.BooleanField(
         default=False,
-        help_text="Send a daily digest email when someone has a follow-up due. Needs SMTP (EMAIL_HOST) configured -- "
+        help_text="Send a daily digest email when someone has a follow-up due. Needs email set up (Site configuration > Email) -- "
         "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
     )
 
@@ -185,7 +185,7 @@ class SiteConfig(PersonalSettings):
     )
     scan_emails_enabled = models.BooleanField(
         default=False,
-        help_text="Allow the scheduled job search to email people who opted in (Profile > Job alerts). Needs SMTP configured -- "
+        help_text="Allow the scheduled job search to email people who opted in (Profile > Job alerts). Needs email set up (Site configuration > Email) -- "
         "without it, emails only print to the server console. Run `manage.py scheduled_scan` on a schedule (e.g. daily cron).",
     )
 

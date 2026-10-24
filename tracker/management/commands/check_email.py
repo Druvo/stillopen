@@ -22,7 +22,7 @@ class Command(BaseCommand):
         if cfg is None:
             self.stdout.write(self.style.WARNING(
                 "Email is NOT set up. Messages are only printed to this console, so nobody receives them.\n"
-                "Fill in Site configuration > Email sending in the admin (or set EMAIL_HOST and friends in .env), then run this again.\n"
+                "Fill in Site configuration > Email in the admin (or set EMAIL_HOST and friends in .env), then run this again.\n"
                 f"Consequence today: new sign-ups are not email-verified (confirmation is {'on' if integrations.require_email_confirmation() else 'off'})."
             ))
             return

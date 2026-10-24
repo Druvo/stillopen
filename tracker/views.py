@@ -67,7 +67,7 @@ def email_test(request):
     result = None
     if request.method == "POST":
         if cfg is None:
-            result = ("error", "Email is not set up yet. Fill in Email sending in Site configuration first.")
+            result = ("error", "Email is not set up yet. Fill in the Email tab in Site configuration first.")
         elif not request.user.email:
             result = ("error", "Your admin account has no email address. Add one to your profile first.")
         else:

@@ -74,14 +74,14 @@ app (Google Authenticator, Aegis, 1Password...), a hardware security key, and on
 | GitHub | GitHub > Settings > Developer settings > OAuth Apps | The app asks for the person's verified email; only a verified one is trusted |
 | Facebook | developers.facebook.com > Create app > Facebook Login | The app must be switched to Live and have a privacy policy URL (use `/privacy/`). Facebook's email is not treated as verified, so a new person confirms it with the usual email link and is never attached to an existing account |
 
-Paste each provider's client ID and secret in the admin under **Site configuration > Sign-in with Google, GitHub or Facebook** and tick its box; it applies at once, no restart.
+Paste each provider's client ID and secret in the admin under **Site configuration > Social sign-in** and tick its box; it applies at once, no restart.
 (Or set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` and the `GITHUB_` and `FACEBOOK_` ones in `.env`; the environment takes precedence.) The page lists the exact redirect addresses to give each provider. While sign-up is *Closed*, only emails on the allowed list may use a social button;
 with sign-up *Open*, anyone with a usable email may.
 
 ## Email
 
 Without email set up, you can still use everything: sign-ups are not email-confirmed (the admin shows a notice) and reminders only print to the server log.
-The easiest way: admin > **Site configuration > Email sending**. Fill in the server, port, login, password and sender, save, then open the
+The easiest way: admin > **Site configuration > Email**. Fill in the server, port, login, password and sender, save, then open the
 **send yourself a test email** link on that page. It applies at once. (Or set these in `.env`, which takes precedence; copy `.env.example`.)
 
 ```

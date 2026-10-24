@@ -126,8 +126,8 @@ class AdminForm(TestCase):
         self.client.force_login(boss)
         page = self.client.get(reverse("admin:tracker_siteconfig_change", args=[config.pk]))
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, "Email sending")
-        self.assertContains(page, "Sign-in with Google, GitHub or Facebook")
+        self.assertContains(page, "SMTP")
+        self.assertContains(page, "Social sign-in")
         self.assertNotContains(page, "never-shown")
 
 

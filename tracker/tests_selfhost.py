@@ -104,3 +104,24 @@ class NoThirdPartyAssets(TestCase):
             html = response.content.decode()
             self.assertNotIn("fonts.googleapis.com", html, url)
             self.assertIsNone(EXTERNAL_ASSET.search(html), url)
+
+
+class AdminLooksAndSelfHosts(TestCase):
+    """The admin (Unfold) keeps its fonts, icons and scripts on this server and its main pages render."""
+
+    def test_admin_pages_render_and_load_nothing_from_third_party_hosts(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        self.assertEqual(self.client.get(reverse("admin:login")).status_code, 200)
+        self.assertIsNone(EXTERNAL_ASSET.search(self.client.get(reverse("admin:login")).content.decode()))
+        boss = get_user_model().objects.create_superuser("themeboss", "boss@example.com", "x" * 20)
+        self.client.force_login(boss)
+        for name in ("admin:index", "admin:tracker_siteconfig_change", "admin:tracker_application_changelist", "admin:auth_user_changelist",
+                     "admin:tracker_knowledgesource_changelist", "admin:tracker_jobsource_changelist"):
+            args = [1] if name.endswith("_change") else []
+            page = self.client.get(reverse(name, args=args))
+            self.assertEqual(page.status_code, 200, name)
+            html = page.content.decode()
+            self.assertIsNone(EXTERNAL_ASSET.search(html), f"{name} loads something from a third-party host")
+            self.assertNotIn("fonts.googleapis.com", html, name)

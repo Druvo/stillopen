@@ -1,12 +1,11 @@
 {% extends "admin/login.html" %}
 {% load socialaccount %}
-{% block content %}
+{% block login_before %}
 {% get_providers as providers %}
 {% if google_login_on and providers %}
-  <form method="post" action="{% provider_login_url 'google' process='login' next='/admin/' %}" style="margin-bottom:12px">
+  <form method="post" action="{% provider_login_url 'google' process='login' next='/admin/' %}" class="mb-6">
     {% csrf_token %}
-    <div class="submit-row"><input type="submit" value="Continue with Google"></div>
+    <button type="submit" class="w-full border border-base-200 dark:border-base-700 rounded-default px-3 py-2 font-medium text-sm hover:bg-base-50 dark:hover:bg-base-800">Continue with Google</button>
   </form>
 {% endif %}
-{{ block.super }}
 {% endblock %}
