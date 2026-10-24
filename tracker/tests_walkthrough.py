@@ -544,3 +544,194 @@ class LoadingIndicator(TestCase):
         page = self.client.get(reverse("welcome")).content.decode()
         self.assertIn("Finding jobs for you...", page)
         self.assertIn("button.disabled = true", page)
+
+
+class FullTextWhenItIsNeeded(TestCase):
+    """A search keeps a short excerpt; the whole posting is read from its link the first time a check needs it."""
+
+    def setUp(self):
+        self.u = person(cv=CV)
+        self.cfg = SiteConfig.for_user(self.u)
+
+    def app(self, **kw):
+        fields = {"owner": self.u, "company": "Acme", "role": "Backend Engineer", "url": "https://jobs.example.com/1",
+                  "description": "short excerpt of the posting", "description_is_excerpt": True,
+                  "status": __import__("tracker.models", fromlist=["Status"]).Status.objects.first()}
+        fields.update(kw)
+        return Application.objects.create(**fields)
+
+    def test_an_excerpt_is_replaced_by_the_full_posting_once(self):
+        from tracker.services import ai
+        app = self.app()
+        with mock.patch("tracker.services.ai.fetch_description", return_value=BIG + " and much more detail about the role") as fetch:
+            ai.ensure_description(app, self.cfg)
+            ai.ensure_description(app, self.cfg)
+        self.assertEqual(fetch.call_count, 1)
+        app.refresh_from_db()
+        self.assertIn("much more detail", app.description)
+        self.assertFalse(app.description_is_excerpt)
+
+    def test_if_the_fetch_fails_the_excerpt_is_kept_and_tried_again_next_time(self):
+        from tracker.services import ai
+        from tracker.services.netguard import FetchError
+        app = self.app()
+        with mock.patch("tracker.services.ai.fetch_description", side_effect=FetchError("HTTP 403")):
+            ai.ensure_description(app, self.cfg)  # no error: the check goes ahead on the excerpt
+        app.refresh_from_db()
+        self.assertEqual(app.description, "short excerpt of the posting")
+        self.assertTrue(app.description_is_excerpt)
+
+    def test_a_shorter_page_does_not_replace_the_excerpt(self):
+        from tracker.services import ai
+        app = self.app(description="a reasonably long excerpt of the posting with plenty of words in it")
+        with mock.patch("tracker.services.ai.fetch_description", return_value="Sign in to continue"):
+            ai.ensure_description(app, self.cfg)
+        app.refresh_from_db()
+        self.assertIn("plenty of words", app.description)
+        self.assertFalse(app.description_is_excerpt)  # asked once; do not keep hitting a login wall
+
+    def test_full_descriptions_and_hand_added_jobs_are_never_refetched(self):
+        from tracker.services import ai
+        app = self.app(description_is_excerpt=False)
+        with mock.patch("tracker.services.ai.fetch_description") as fetch:
+            ai.ensure_description(app, self.cfg)
+        fetch.assert_not_called()
+
+    def test_an_excerpt_with_no_link_is_used_as_it_is(self):
+        from tracker.services import ai
+        app = self.app(url="")
+        with mock.patch("tracker.services.ai.fetch_description") as fetch:
+            ai.ensure_description(app, self.cfg)
+        fetch.assert_not_called()
+
+    def test_searches_mark_what_they_save_as_an_excerpt_and_hand_added_jobs_are_not(self):
+        cache.clear()
+        JobSource.objects.create(name="Acme", connector="greenhouse", board_token="acme")
+        with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=[job(description=BIG)]):
+            scan.start_run(self.u, background=False)
+        self.assertTrue(Application.objects.get(owner=self.u, company="Acme").description_is_excerpt)
+        self.assertFalse(Application.objects.create(owner=self.u, company="Hand", role="x", status=Application.objects.first().status).description_is_excerpt)
+
+    def test_the_cover_letter_and_cv_paths_get_the_full_text_too(self):
+        from tracker.services import coverletter
+        app = self.app()
+        with mock.patch("tracker.services.ai.fetch_description", return_value=BIG + " extra") as fetch:
+            coverletter.generate(app, self.cfg, mode="keywords")
+        fetch.assert_called_once()
+
+
+class BestAreaIsNamed(TestCase):
+    def setUp(self):
+        self.u = person()
+        self.areas = [
+            SearchArea.objects.create(owner=self.u, place="Bangladesh", allow_remote=True, allow_hybrid=True, allow_onsite=True),
+            SearchArea.objects.create(owner=self.u, place="Anywhere", allow_remote=True),
+            SearchArea.objects.create(owner=self.u, place="Malaysia", allow_remote=True, allow_hybrid=True, allow_onsite=True),
+        ]
+
+    def text(self, **kw):
+        from tracker.services import fit
+        from tracker.models import Status
+        app = Application(owner=self.u, company="x", role="y", status=Status.objects.first(), **kw)
+        return fit.fit_flags(app, self.areas, UserProfile.objects.get(user=self.u))[0]["text"]
+
+    def test_a_worldwide_remote_job_is_described_by_anywhere(self):
+        self.assertIn("fits your search area: Anywhere", self.text(arrangement="remote", location_text="Anywhere in the World"))
+
+    def test_a_job_in_a_named_country_is_described_by_that_country(self):
+        self.assertIn("fits your search area: Malaysia", self.text(arrangement="onsite", country="MY", location_text="Kuala Lumpur"))
+
+    def test_a_remote_job_limited_to_a_country_names_that_country_not_anywhere(self):
+        self.assertIn("fits your search area: Malaysia", self.text(arrangement="remote", country="MY", location_text="Remote (Malaysia)"))
+
+    def test_fewer_requirements_still_win_over_specificity(self):
+        SearchArea.objects.filter(pk=self.areas[2].pk).update(needs_visa_sponsorship=True)
+        self.assertIn("fits your search area: Anywhere", self.text(arrangement="remote", location_text="Anywhere in the World"))
+
+
+class DashboardShowsEverythingThenFilters(TestCase):
+    def setUp(self):
+        from datetime import date, timedelta
+        from tracker.models import Status
+        self.u = person()
+        self.client.login(username="rina", password=PW)
+        ev, applied, rejected = (Status.objects.get(name=n) for n in ("Evaluated", "Applied", "Rejected"))
+
+        def make(company, status=ev, **kw):
+            return Application.objects.create(owner=self.u, company=company, role="Backend Engineer", status=status, **kw)
+
+        self.a = make("Alpha", score=4.5, country="MY", arrangement="onsite", location_text="Kuala Lumpur", found_date=date.today())
+        self.b = make("Bravo", score=2.0, country="BD", arrangement="hybrid", location_text="Dhaka", found_date=date.today() - timedelta(days=30))
+        self.c = make("Charlie", status=applied, applied_date=date.today())
+        self.d = make("Delta", status=rejected, score=3.0, arrangement="remote", location_text="Remote")
+        UserProfile.objects.filter(user=self.u).update(onboarding_done=True)
+
+    def page(self):
+        return self.client.get(reverse("dashboard")).content.decode()
+
+    def test_every_job_is_in_one_list_before_any_filter_is_applied(self):
+        page = self.page()
+        self.assertEqual(page.count("<article id=\"job-"), 4)
+        self.assertEqual(page.count('id="job-list"'), 1)
+        self.assertNotIn("data-panel", page)  # no more hiding jobs behind tabs
+        self.assertNotIn('role="tablist"', page)
+        self.assertIn("Showing all 4", page)
+        for name in ("Alpha", "Bravo", "Charlie", "Delta"):
+            self.assertIn(name, page)
+
+    def test_all_comes_first_and_stage_chips_carry_counts(self):
+        page = self.page()
+        self.assertRegex(page, r'data-stage=""[^>]*>All \(4\)')
+        self.assertRegex(page, r'data-stage="apply"[^>]*>To apply \(2\)')
+        self.assertRegex(page, r'data-stage="pending"[^>]*>Applied &amp; pending \(1\)')
+        self.assertRegex(page, r'data-stage="closed"[^>]*>Closed &amp; skipped \(1\)')
+        self.assertLess(page.index('data-stage=""'), page.index('data-stage="apply"'))
+
+    def test_best_match_is_the_default_order(self):
+        page = self.page()
+        self.assertLess(page.index("Alpha"), page.index("Delta"))
+        self.assertLess(page.index("Delta"), page.index("Bravo"))
+
+    def test_each_card_carries_what_the_filters_read(self):
+        page = self.page()
+        card = re.search(r'<article id="job-%d".*?>' % self.a.pk, page, re.S).group(0)
+        for attr in ('data-bucket="apply"', 'data-work="onsite"', 'data-country="MY"', 'data-percent="90"', 'data-found="'):
+            self.assertIn(attr, card)
+        self.assertIn("alpha backend engineer kuala lumpur", card)
+        unchecked = re.search(r'<article id="job-%d".*?>' % self.c.pk, page, re.S).group(0)
+        self.assertIn('data-percent=""', unchecked)
+
+    def test_the_filter_controls_exist_and_use_the_real_bands_and_countries(self):
+        page = self.page()
+        for control in ("f-q", "f-fit", "f-band", "f-work", "f-country", "f-live", "f-found", "f-sort"):
+            self.assertIn(f'id="{control}"', page)
+        for label in ("Strong", "Fair", "A stretch"):
+            self.assertIn(f'<option value="{label}">', page)
+        self.assertIn('<option value="MY">Malaysia</option>', page)
+        self.assertIn('<option value="BD">Bangladesh</option>', page)
+        self.assertNotIn('<option value="DE">', page)  # only countries that appear among the jobs
+        self.assertIn("Clear filters", page)
+
+    def test_the_sort_choices_include_newest_company_and_deadline(self):
+        page = self.page()
+        for value in ("best", "newest", "oldest", "company", "deadline"):
+            self.assertIn(f'<option value="{value}">', page)
+
+    def test_user_text_in_the_filter_data_is_escaped(self):
+        from tracker.models import Status
+        Application.objects.create(owner=self.u, company='"><script>alert(1)</script>', role="x", status=Status.objects.first())
+        page = self.page()
+        self.assertNotIn("<script>alert(1)</script>", page)
+
+    def test_a_person_with_no_jobs_sees_the_helpful_empty_state_not_filters_over_nothing(self):
+        Application.objects.all().delete()
+        page = self.page()
+        self.assertIn('id="job-list-empty"', page)
+        self.assertIn("No jobs yet", page)
+
+    def test_only_my_jobs_are_in_the_list_or_the_filter_options(self):
+        other = person("sam")
+        Application.objects.create(owner=other, company="Secretco", role="x", country="DE", status=Application.objects.first().status)
+        page = self.page()
+        self.assertNotIn("Secretco", page)
+        self.assertNotIn('<option value="DE">', page)

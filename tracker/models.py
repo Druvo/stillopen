@@ -7,7 +7,7 @@ from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from django.utils import timezone
 
-from . import crypto
+from . import crypto, legal
 
 # Settings that belong to one person. SiteConfig holds legacy values (used to seed the first user);
 # every request works with SiteConfig.for_user(user), which overlays the person's own profile.
@@ -133,19 +133,8 @@ class PersonalSettings(models.Model):
         return ""
 
 
-DEFAULT_PRIVACY = """What we store: your account (email, username), the CV text and documents you add, your job preferences, and the jobs you track with their notes and evaluations. API keys you add are stored encrypted.
-
-Who sees it: only you. Site administrators can access the database for maintenance.
-
-AI features: only when you press Evaluate, the job description, your preferences and the relevant parts of your CV are sent to the AI provider you configured, using your own key. We do not send your data to any AI provider you have not chosen.
-
-Your control: you can export all of your data and delete your account, with everything attached to it, from the Profile page at any time.
-
-(Site owner: replace this text in the admin under Site configuration > Legal with your own policy, including who operates the service and how to contact you.)"""
-
-DEFAULT_TERMS = """This service is provided as is. You are responsible for the content you add and for checking any job posting yourself before applying. The match percentages and summaries are automated estimates, not advice, and can be wrong.
-
-(Site owner: replace this text in the admin under Site configuration > Legal.)"""
+DEFAULT_PRIVACY = legal.PRIVACY
+DEFAULT_TERMS = legal.TERMS
 
 
 class SiteConfig(PersonalSettings):
@@ -622,6 +611,11 @@ class Application(models.Model):
     ARRANGEMENTS = [("", "Unknown"), ("remote", "Remote"), ("hybrid", "Hybrid"), ("onsite", "On-site")]
     YES_NO = [("", "Not stated"), ("yes", "Yes"), ("no", "No")]
     SOURCES_OF_DETAILS = [("", ""), ("detected", "Detected from the posting"), ("manual", "Set by you")]
+    description_is_excerpt = models.BooleanField(
+        default=False,
+        help_text="The saved description is only the start of the posting (a job search keeps a short excerpt). "
+        "The full text is fetched from the posting's link the first time a check or tailoring needs it.",
+    )
     location_text = models.CharField(max_length=160, blank=True, help_text="As the posting says it, e.g. Kuala Lumpur, Malaysia or Remote.")
     country = models.CharField(max_length=2, blank=True, help_text="Two-letter country code where you must be based, if known (MY, BD, AE). Blank = not stated.")
     arrangement = models.CharField(max_length=10, choices=ARRANGEMENTS, blank=True)

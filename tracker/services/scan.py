@@ -791,7 +791,7 @@ def _worker(run_id: int):
                 app = Application(
                     owner=owner, company=item["company"][:160], role=p["title"][:200], url=p["url"][:600],
                     location_text=(probe.location_text or "")[:160], description=probe.description, status=default_status,
-                    found_date=today, posting=posting,
+                    description_is_excerpt=bool(probe.description.strip()), found_date=today, posting=posting,
                     **{k: getattr(probe, k) for k in found if k != "location_text"},
                 )
                 if found:

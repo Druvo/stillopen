@@ -512,15 +512,25 @@ def _skill_coverage(description: str, cv: str, ignore, distinctive: list[str], h
 # --- entry point --------------------------------------------------------------------------------
 
 def ensure_description(app: Application, config: SiteConfig) -> None:
-    if app.description.strip():
+    """Make sure the job has text to work from. A search keeps only a short excerpt of each posting; the first time a check,
+    tailoring or cover letter needs the whole thing, it is read from the posting's own link (the excerpt is kept if that fails)."""
+    have = app.description.strip()
+    if have and not app.description_is_excerpt:
         return
     if not app.url:
+        if have:
+            return
         raise AIError("Add the job description (or a URL to fetch it from).")
     try:
-        app.description = fetch_description(app.url, config)
+        fetched = fetch_description(app.url, config)
     except FetchError as exc:
+        if have:
+            return  # keep the excerpt: a check on a short text is better than none
         raise AIError(str(exc)) from exc
-    app.save(update_fields=["description"])
+    if len(fetched.strip()) > len(have):
+        app.description = fetched
+    app.description_is_excerpt = False
+    app.save(update_fields=["description", "description_is_excerpt"])
     geo.fill_details(app)
 
 

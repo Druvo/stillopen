@@ -372,3 +372,245 @@ def set_job_details(
     app.details_source = "detected"
     app.save()
     return {"id": app.pk, "fit_with_what_the_person_wants": [f"{f['level']}: {f['text']}" for f in fit_service.fit_flags(app)]}
+
+
+# --- after "Applied": interviews, contacts and referrals, offers -------------------------------------------------
+# Owner-scoped like everything here. No delete tools, and nothing here contacts anyone: these only record what the person tells you.
+
+def _capped(model, label: str) -> None:
+    from django.conf import settings
+
+    if model.objects.filter(owner=_owner()).count() >= settings.STILLOPEN_MAX_PIPELINE:
+        raise ValueError(f"The person has reached the limit of {settings.STILLOPEN_MAX_PIPELINE} saved {label}.")
+
+
+def _when(text: str):
+    from datetime import datetime
+
+    try:
+        value = datetime.fromisoformat((text or "").strip())
+    except ValueError:
+        raise ValueError('when must be an ISO date and time such as "2026-11-03T14:30" (the person\'s own time zone).') from None
+    return timezone.make_aware(value) if timezone.is_naive(value) else value
+
+
+def _interview(interview_id: int):
+    from .models import Interview
+
+    item = Interview.objects.select_related("application").filter(owner=_owner(), pk=interview_id).first()
+    if not item:
+        raise ValueError(f"No interview with id {interview_id}.")
+    return item
+
+
+def _interview_row(i) -> dict:
+    return {
+        "id": i.pk, "application_id": i.application_id, "company": i.application.company, "role": i.application.role,
+        "when": timezone.localtime(i.scheduled_at).isoformat(timespec="minutes"), "kind": i.kind, "where": i.where,
+        "notes": i.notes, "outcome": i.outcome,
+    }
+
+
+def list_interviews(upcoming_only: bool = True, limit: int = 30) -> list[dict]:
+    """The person's interviews, soonest first. upcoming_only=False includes past and cancelled ones."""
+    from .models import Interview
+
+    qs = Interview.objects.filter(owner=_owner()).select_related("application")
+    if upcoming_only:
+        qs = qs.filter(outcome="pending", scheduled_at__gte=timezone.now())
+    return [_interview_row(i) for i in qs.order_by("scheduled_at")[: max(1, min(limit, 100))]]
+
+
+def add_interview(app_id: int, when: str, kind: str = "video", where: str = "", notes: str = "") -> dict:
+    """Record an interview the PERSON has been invited to. when: ISO date and time. kind: phone | video | technical | onsite | final | other.
+    where: an address or call link. notes: who they meet and what to prepare. This schedules nothing and contacts no one."""
+    from .models import Interview
+
+    app = _app(app_id)
+    if kind not in dict(Interview.KINDS):
+        raise ValueError(f"kind must be one of: {', '.join(dict(Interview.KINDS))}.")
+    _capped(Interview, "interviews")
+    item = Interview.objects.create(
+        owner=_owner(), application=app, scheduled_at=_when(when), kind=kind, where=_clip(where, 300), notes=_clip(notes, 4000),
+    )
+    Event.objects.create(application=app, kind="interview", text=f"{item.get_kind_display()} scheduled for {timezone.localtime(item.scheduled_at):%d %b %Y %H:%M}")
+    return _interview_row(item)
+
+
+def set_interview_outcome(interview_id: int, outcome: str) -> dict:
+    """How an interview went: pending | done | passed | rejected | cancelled. Confirm with the person before marking rejected."""
+    from .models import Interview
+
+    item = _interview(interview_id)
+    if outcome not in dict(Interview.OUTCOMES):
+        raise ValueError(f"outcome must be one of: {', '.join(dict(Interview.OUTCOMES))}.")
+    item.outcome = outcome
+    item.save(update_fields=["outcome"])
+    Event.objects.create(application=item.application, kind="interview", text=f"{item.get_kind_display()}: {item.get_outcome_display()}")
+    return _interview_row(item)
+
+
+def _contact_row(c) -> dict:
+    return {
+        "id": c.pk, "name": c.name, "company": c.company, "title": c.title, "email": c.email, "link": c.link, "notes": c.notes,
+        "last_contacted": c.last_contacted.isoformat() if c.last_contacted else None,
+        "referrals": [
+            {"id": r.pk, "application_id": r.application_id, "company": r.application.company, "role": r.application.role,
+             "status": r.status, "note": r.note}
+            for r in c.referrals.all()
+        ],
+    }
+
+
+def list_contacts(query: str = "") -> list[dict]:
+    """People the person knows at or near companies they are applying to, with any referrals. query matches name or company."""
+    from django.db.models import Q
+
+    from .models import Contact
+
+    qs = Contact.objects.filter(owner=_owner()).prefetch_related("referrals__application")
+    if query.strip():
+        qs = qs.filter(Q(name__icontains=query.strip()) | Q(company__icontains=query.strip()))
+    return [_contact_row(c) for c in qs[:100]]
+
+
+def add_contact(name: str, company: str = "", title: str = "", email: str = "", link: str = "", notes: str = "") -> dict:
+    """Save someone the person knows. link must be an http(s) address. This never contacts the person; the user does that themselves."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import URLValidator, validate_email
+
+    from .models import Contact
+
+    name = _clip(name, 120)
+    if not name:
+        raise ValueError("name is required.")
+    try:
+        if email.strip():
+            validate_email(email.strip())
+        if link.strip():
+            URLValidator(schemes=["http", "https"])(link.strip())
+    except ValidationError:
+        raise ValueError("email must be a valid address and link a valid http(s) address.") from None
+    _capped(Contact, "contacts")
+    c = Contact.objects.create(
+        owner=_owner(), name=name, company=_clip(company, 160), title=_clip(title, 160), email=email.strip(), link=link.strip(), notes=_clip(notes, 2000),
+    )
+    return _contact_row(c)
+
+
+def add_referral(contact_id: int, app_id: int, status: str = "thinking", note: str = "") -> dict:
+    """Note that a contact might refer the person for a job. status: thinking | asked | agreed | submitted | declined.
+    Only record what the person says happened; this never asks anyone for anything."""
+    from .models import Contact, Referral
+
+    contact = Contact.objects.filter(owner=_owner(), pk=contact_id).first()
+    if not contact:
+        raise ValueError(f"No contact with id {contact_id}.")
+    app = _app(app_id)
+    if status not in dict(Referral.STATUSES):
+        raise ValueError(f"status must be one of: {', '.join(dict(Referral.STATUSES))}.")
+    _capped(Referral, "referrals")
+    r = Referral.objects.create(owner=_owner(), contact=contact, application=app, status=status, note=_clip(note, 300))
+    Event.objects.create(application=app, kind="note", text=f"Referral with {contact.name}: {r.get_status_display()}")
+    return {"id": r.pk, "contact_id": contact.pk, "application_id": app.pk, "status": r.status}
+
+
+def set_referral_status(referral_id: int, status: str) -> dict:
+    """Update a referral: thinking | asked | agreed | submitted | declined."""
+    from .models import Referral
+
+    r = Referral.objects.select_related("application", "contact").filter(owner=_owner(), pk=referral_id).first()
+    if not r:
+        raise ValueError(f"No referral with id {referral_id}.")
+    if status not in dict(Referral.STATUSES):
+        raise ValueError(f"status must be one of: {', '.join(dict(Referral.STATUSES))}.")
+    r.status = status
+    r.save(update_fields=["status"])
+    Event.objects.create(application=r.application, kind="note", text=f"Referral with {r.contact.name}: {r.get_status_display()}")
+    return {"id": r.pk, "status": r.status}
+
+
+def _offer_row(o) -> dict:
+    return {
+        "id": o.pk, "application_id": o.application_id, "company": o.application.company, "role": o.application.role,
+        "status": o.status, "currency": o.currency, "base": str(o.base), "period": o.period, "bonus_per_year": str(o.bonus),
+        "equity_value_per_year": str(o.equity), "other_benefits_per_year": str(o.other_benefits), "signing_bonus": str(o.signing),
+        "yearly_total": str(o.yearly_total), "first_year_total": str(o.first_year_total),
+        "reply_by": o.deadline.isoformat() if o.deadline else None, "notes": o.notes,
+    }
+
+
+def list_offers() -> list[dict]:
+    """The person's job offers in plain numbers, with yearly totals."""
+    from .models import Offer
+
+    return [_offer_row(o) for o in Offer.objects.filter(owner=_owner()).select_related("application")]
+
+
+def add_offer(app_id: int, base: float, currency: str, period: str = "year", bonus: float = 0, equity: float = 0,
+              other_benefits: float = 0, signing: float = 0, reply_by: str = "", notes: str = "") -> dict:
+    """Record an offer the person received. base is pay per `period` (year or month); bonus, equity (yearly value of shares or options)
+    and other_benefits are per year; signing is one-off. currency is a 3-letter code. reply_by: ISO date. Amounts are never converted between currencies."""
+    import re
+    from datetime import date
+    from decimal import Decimal, InvalidOperation
+
+    from .models import Offer
+
+    app = _app(app_id)
+    currency = (currency or "").strip().upper()
+    if not re.fullmatch(r"[A-Z]{3}", currency):
+        raise ValueError("currency must be a three-letter code such as USD, BDT or MYR.")
+    if period not in dict(Offer.PERIODS):
+        raise ValueError("period must be year or month.")
+    amounts = {}
+    for label, value in (("base", base), ("bonus", bonus), ("equity", equity), ("other_benefits", other_benefits), ("signing", signing)):
+        try:
+            amount = Decimal(str(value))
+        except InvalidOperation:
+            raise ValueError(f"{label} must be a number.") from None
+        if not amount.is_finite() or amount < 0 or amount > Decimal("9999999999.99"):
+            raise ValueError(f"{label} must be between 0 and 9,999,999,999.")
+        amounts[label] = amount.quantize(Decimal("0.01"))
+    deadline = None
+    if reply_by.strip():
+        try:
+            deadline = date.fromisoformat(reply_by.strip())
+        except ValueError:
+            raise ValueError("reply_by must be an ISO date such as 2026-11-20.") from None
+    _capped(Offer, "offers")
+    o = Offer.objects.create(
+        owner=_owner(), application=app, currency=currency, period=period, deadline=deadline, notes=_clip(notes, 2000),
+        base=amounts["base"], bonus=amounts["bonus"], equity=amounts["equity"], other_benefits=amounts["other_benefits"], signing=amounts["signing"],
+    )
+    Event.objects.create(application=app, kind="note", text="Offer recorded")
+    return _offer_row(o)
+
+
+def set_offer_status(offer_id: int, status: str) -> dict:
+    """open (deciding) | accepted | declined. Confirm with the person before accepting or declining."""
+    from .models import Offer
+
+    o = Offer.objects.select_related("application").filter(owner=_owner(), pk=offer_id).first()
+    if not o:
+        raise ValueError(f"No offer with id {offer_id}.")
+    if status not in dict(Offer.STATUSES):
+        raise ValueError(f"status must be one of: {', '.join(dict(Offer.STATUSES))}.")
+    o.status = status
+    o.save(update_fields=["status"])
+    Event.objects.create(application=o.application, kind="note", text=f"Offer: {o.get_status_display()}")
+    return _offer_row(o)
+
+
+def compare_offers() -> list[dict]:
+    """The open and accepted offers ranked by yearly total, one group per currency (never converted), with the gap to the best."""
+    from .models import Offer
+    from .views_pipeline import comparison
+
+    groups = comparison(list(Offer.objects.filter(owner=_owner()).select_related("application")))
+    return [
+        {"currency": g["currency"], "offers": [
+            {**_offer_row(r["offer"]), "behind_best_per_year": str(r["behind"]), "is_best": r["best"]} for r in g["rows"]
+        ]}
+        for g in groups
+    ]

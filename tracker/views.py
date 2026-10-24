@@ -138,13 +138,18 @@ def dashboard(request):
     tabs = {b.pk: [] for b in buckets}
     for app in apps:
         bucket = app.effective_bucket(config)
-        tabs.setdefault(bucket.pk, []).append(card_for(app, config, bands, areas, profile))
+        card = card_for(app, config, bands, areas, profile)
+        card["bucket_key"] = bucket.key
+        tabs.setdefault(bucket.pk, []).append(card)
 
     def sort_key(card):
         urgent_first = 0 if card["urgent"] else 1
         return (urgent_first, -(card["percent"] if card["percent"] is not None else -1))
 
     tab_list = [{"bucket": b, "cards": sorted(tabs.get(b.pk, []), key=sort_key)} for b in buckets]
+    # Everything in one list, best first; the page filters and re-sorts it (stage, text, fit, match, work, country, ...).
+    all_cards = sorted((c for t in tab_list for c in t["cards"]), key=sort_key)
+    country_options = sorted({(c["app"].country, geo.country_name(c["app"].country)) for c in all_cards if c["app"].country}, key=lambda x: x[1])
     submitted = [c for t in tab_list for c in t["cards"] if c["app"].status.counts_as_applied]
     scored = [c["percent"] for t in tab_list for c in t["cards"] if c["percent"] is not None]
     paperless_on = request.user.is_staff and config.paperless_enabled and bool(config.effective_paperless_url)
@@ -152,6 +157,9 @@ def dashboard(request):
         "config": config,
         "profile": profile,
         "tabs": tab_list,
+        "all_cards": all_cards,
+        "band_options": [b.label for b in bands],
+        "country_options": country_options,
         "statuses": statuses,
         "stats": {
             "total": apps.count(),

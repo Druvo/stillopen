@@ -43,6 +43,10 @@ Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboar
 
 Import is idempotent: new tracker rows are created, existing rows refresh only evaluation data (score, summary, strengths, gaps, deadline, PDFs). Your local status, notes and URL are never overwritten unless you run `import_careerops --sync-status`.
 
+## The dashboard: everything first, then filters
+
+The dashboard lists **every** job you have, best match first, with nothing hidden behind tabs. Narrow it down with the bar above the list: stage chips (All, To apply, Applied & pending, Closed & skipped, each with a count), a text search over company, role and place, and filters for fit to your places, how well you match, remote/hybrid/on-site, country, whether the posting is open, and when it was found. Sort by best match, newest, oldest, company or closing soonest. "Showing 6 of 40" says what is filtered and "Clear filters" undoes it. Your choices are remembered for the browser tab.
+
 ## Jobs found for you, with no setup and no AI
 
 A new install already knows where to look: it ships with about 100 job sources (8 remote-job feeds such as Remotive, RemoteOK, We Work Remotely, Himalayas, Jobicy, Working Nomads, Arbeitnow and The Muse, plus the public hiring boards of ~90 well-known companies on Greenhouse, Lever, Ashby, SmartRecruiters and Recruitee). All of them are open, documented, key-free endpoints. They are added by the migration, or by `python manage.py seed_sources` on an existing install, and the admin can pause or remove any.
@@ -54,7 +58,8 @@ Candidates do nothing. When someone opens their dashboard and their last search 
 3. Leaves out postings that clearly cannot work for the person's search areas. The country comes from the feed's own location field (so a company calling itself "global" cannot turn a United States only job into a worldwide one), including US state codes and names, "Remote (Spain)" and multi-country lists like "Hong Kong; Singapore", which need one of the person's places. A posting that does not say enough is never excluded. Everything seen stays under **All postings**. The welcome page asks where the person would work (their country, remote anywhere, and other places) and turns the answers into editable search areas.
 4. Skips what is already tracked, including the same job on two sites.
 5. Gives each new job a free skill-coverage score and saves the posting text, so the dashboard already shows a percentage and a fit label. The score is how many of the person's main skills the posting mentions, ignoring filler words that nearly every posting repeats (measured from the postings just read). A posting with too little text to judge (some boards publish only a title) gets no score instead of a fake one.
-6. Adds at most `STILLOPEN_SCAN_MAX_NEW` (40) per search, the best first (clear fits, then listed roles, then CV match), and at most `STILLOPEN_SCAN_MAX_PER_COMPANY` (5) from one employer so one big company cannot fill the list. Search again later for the next batch.
+6. The saved job text is a short excerpt (so a search stays fast); the first time a fit check, tailored CV or cover letter needs the whole posting, it is read from the posting's own link, and the excerpt is kept if that fails.
+7. Adds at most `STILLOPEN_SCAN_MAX_NEW` (40) per search, the best first (clear fits, then listed roles, then CV match), and at most `STILLOPEN_SCAN_MAX_PER_COMPANY` (5) from one employer so one big company cannot fill the list. Search again later for the next batch.
 
 ### Bangladesh, Malaysia and the Gulf
 
@@ -66,6 +71,21 @@ Few job sites in these markets publish an open feed, so coverage comes from thre
 
 Not included on purpose: LinkedIn, Indeed, Glassdoor, **bdjobs** (its robots.txt says other crawlers will not spider, and it publishes no feed) and **JobStreet** (its robots.txt disallows crawling its job pages and job-search API). Paste one of their links into **Add job** instead. Jobs in the same place from the same employer with the same title are collapsed to one per search, because big employers post the same role once per team.
 
+## Running it: checks, schedules and CI
+
+| Command | What it is for |
+| --- | --- |
+| `python manage.py check_email` | Shows how email is set up (never the password) and sends one test message. Run it before your first real sign-up. Without `EMAIL_HOST` it says plainly that nothing is delivered. |
+| `python manage.py check_jooble` | Tries your Jooble key with one real search (`--place bd/my/ae/...`, `--role "..."`). The key is never printed. |
+| `python manage.py update_legal_text` | Puts the current privacy and terms templates in place, but only where the old unedited default is still there (`--force` replaces anything). A migration already does this for untouched defaults. |
+| `python manage.py seed_sources` | Adds any missing default job source. |
+
+**Schedules.** None are needed to use the app (the search runs when someone opens the dashboard). The emails need them: `deploy/crontab.example` (Linux/macOS) and `deploy/windows/schedule-stillopen.ps1` (Windows Task Scheduler, `-Remove` undoes it) set up interview reminders hourly, follow-up emails and job alerts daily, and a weekly source refresh.
+
+**Privacy and terms.** The shipped texts describe what the app really does (the search, Jooble, AI use, cookies, export and deletion) in plain words. They are templates: fill in the `[bracketed parts]` under Site configuration > Legal and have them reviewed for your country. While sign-up is open and blanks remain, admins see a warning on their dashboard.
+
+**Tests in CI.** `.github/workflows/tests.yml` runs the whole suite and checks that no model change is missing its migration on every pull request and push to `main`.
+
 ## Your own company job boards
 
 Under **Job sources** in the sidebar, anyone can add the companies they care about. Pick the hiring system the company uses (Greenhouse, Lever, Ashby, SmartRecruiters or Recruitee), then type the company's name from its careers page address or paste the address itself (`jobs.lever.co/acme` gives `acme`). The app reads that company's public job list once to make sure it works, and only then saves it. Your boards are searched only for you and are invisible to everyone else; the boards the site owner added are searched for everyone. Limits per person: `STILLOPEN_MAX_OWN_SOURCES` (20) boards and `STILLOPEN_SOURCE_ADDS_PER_HOUR` (20) additions an hour.
@@ -73,6 +93,9 @@ Under **Job sources** in the sidebar, anyone can add the companies they care abo
 Why this is safe to offer: nobody enters a web address. They choose from a fixed list of hiring systems, and the app builds the real address itself on that system's own host, through the same guarded fetch every scan uses. Boards for sites that need a browser or break a site's terms (LinkedIn, and aggregators like RemoteOK) stay site-owner only or unsupported.
 
 ## After you apply: interviews, contacts, offers
+
+All of this is also available to an AI client through the MCP server: `list_interviews`, `add_interview`, `set_interview_outcome`, `list_contacts`, `add_contact`, `add_referral`, `set_referral_status`, `list_offers`, `add_offer`, `set_offer_status` and `compare_offers`. They are validated and owner-scoped like everything else, there is still no delete tool, and none of them contacts anyone.
+
 
 Three pages in the sidebar, all private to you and none of them contacts anyone:
 
