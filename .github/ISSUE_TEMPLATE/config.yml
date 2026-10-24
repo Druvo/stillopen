@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Druvo/stillopen/security/advisories/new
+    about: Please report security problems privately, not as a public issue.
+  - name: Self-hosting help
+    url: https://github.com/Druvo/stillopen/blob/main/docs/SELF-HOSTING.md
+    about: Read the self-hosting guide first; it covers installing, email, backups and updating.

@@ -1,0 +1,13 @@
+StillOpen
+Copyright 2026 Zahid Hasan and the StillOpen contributors
+
+This product is licensed under the Apache License, Version 2.0 (see the LICENSE file).
+
+It includes third-party software under its own licences:
+
+  * Tabler 1.7.0 (MIT), served from static/vendor/tabler/. See static/vendor/tabler/NOTICE.md.
+  * Python packages listed in requirements*.txt, each under its own licence
+    (Django, django-allauth, django-jazzmin, requests, cryptography, pypdf, python-docx,
+    gunicorn, whitenoise, and, optionally, mcp, claude-agent-sdk, psycopg, dj-database-url).
+
+Job postings shown or processed by this software belong to the employers and sites that published them.

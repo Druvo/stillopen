@@ -57,7 +57,9 @@
           {% if config.public_board_enabled %}<li><a href="{% url 'openings' %}">Browse jobs</a></li>{% endif %}
           <li><a href="{% url 'landing' %}#how">How it works</a></li>
           <li><a href="{% url 'landing' %}#faq">FAQ</a></li>
-          {% if config.landing_github_url %}<li><a href="{{ config.landing_github_url }}" rel="noopener">GitHub</a></li>{% endif %}
+          <li><a href="{% url 'landing' %}#open-source">Open source</a></li>
+          <li><a href="{% firstof config.landing_github_url 'https://github.com/Druvo/stillopen' %}" rel="noopener">Source on GitHub</a></li>
+          <li><a href="{% firstof config.landing_github_url 'https://github.com/Druvo/stillopen' %}/blob/main/docs/SELF-HOSTING.md" rel="noopener">Run it yourself</a></li>
         </ul>
       </div>
       <div class="col-6 col-md-4">
@@ -76,7 +78,7 @@
       We show a short excerpt only. Check the original for the latest details.{% if config.contact_email %} Employers can ask for a listing to be removed at <a href="mailto:{{ config.contact_email }}">{{ config.contact_email }}</a>.{% endif %}
     </p>
     {% endif %}
-    <p class="text-secondary mt-3 mb-0" style="font-size:.85rem">&copy; {% now "Y" %} {{ config.site_title }}</p>
+    <p class="text-secondary mt-3 mb-0" style="font-size:.85rem">&copy; {% now "Y" %} {{ config.site_title }}. Open source under the Apache-2.0 licence.</p>
   </div>
 </footer>
 {% block extra_scripts %}{% endblock %}

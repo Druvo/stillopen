@@ -281,6 +281,35 @@
   </div>
 </section>
 
+{# ---------------------------------------------------------------- open source and self-hosting #}
+<section class="so-section" id="open-source" aria-labelledby="oss-h">
+  <div class="container-xl">
+    <div class="text-center mb-4">
+      <span class="so-eyebrow">Open source</span>
+      <h2 class="display-6 fw-bold mt-1" id="oss-h">Free software you can read, run and keep</h2>
+      <p class="so-lead mx-auto" style="max-width:44rem">The whole app is open source under the Apache-2.0 licence. Use this site, or run your own copy on your computer or a small server, so your CV and notes never leave your hands.</p>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-4"><div class="card h-100"><div class="card-body">
+        <h3 class="h5">Read every line</h3>
+        <p class="text-secondary mb-0">Nothing is hidden. The code, the sources it reads and the rules it follows are public, and anyone can suggest a change.</p>
+      </div></div></div>
+      <div class="col-md-4"><div class="card h-100"><div class="card-body">
+        <h3 class="h5">Run it yourself</h3>
+        <p class="text-secondary mb-0">One command with Docker starts your own private copy. Your data sits in one folder you control and can back up or delete.</p>
+      </div></div></div>
+      <div class="col-md-4"><div class="card h-100"><div class="card-body">
+        <h3 class="h5">No lock-in</h3>
+        <p class="text-secondary mb-0">No subscription and no tracking. Export everything any time, and change how it behaves from the admin without touching code.</p>
+      </div></div></div>
+    </div>
+    <div class="d-flex justify-content-center flex-wrap gap-2 mt-4">
+      <a class="btn btn-primary" href="{% firstof config.landing_github_url 'https://github.com/Druvo/stillopen' %}" rel="noopener">View the source</a>
+      <a class="btn btn-outline-secondary" href="{% firstof config.landing_github_url 'https://github.com/Druvo/stillopen' %}/blob/main/docs/SELF-HOSTING.md" rel="noopener">Self-hosting guide</a>
+    </div>
+  </div>
+</section>
+
 {# ---------------------------------------------------------------- FAQ #}
 <section class="so-section so-alt" id="faq">
   <div class="container-xl" style="max-width:860px">
