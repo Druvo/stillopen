@@ -516,3 +516,71 @@ class AllPostingsViewTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get(reverse("all_postings")).status_code, 302)
         self.assertEqual(self.client.post(reverse("add_posting", args=[self.p1.pk])).status_code, 302)
+
+
+class ScheduledScanTests(TestCase):
+    def setUp(self):
+        from allauth.account.models import EmailAddress
+        from django.core.management import call_command
+
+        self.call = call_command
+        self.EmailAddress = EmailAddress
+        self.source = JobSource.objects.create(name="Acme", connector="greenhouse", board_token="acme")
+
+    def person(self, name, alerts=True, verified=True):
+        u = User.objects.create_user(name, email=f"{name}@example.com", password=PW)
+        UserProfile.objects.filter(user=u).update(target_roles="Backend Engineer", scan_digest_enabled=alerts)
+        if verified:
+            self.EmailAddress.objects.create(user=u, email=u.email, verified=True, primary=True)
+        return u
+
+    def run_cmd(self, **kw):
+        from django.core import mail
+        from tracker.models import SiteConfig
+
+        SiteConfig.objects.filter(pk=1).update(scan_emails_enabled=True)
+        with mock.patch("tracker.services.scan.safe_get") as get:
+            get.return_value.status_code = 200
+            get.return_value.json.return_value = GREENHOUSE_PAYLOAD
+            self.call("scheduled_scan", stdout=mock.MagicMock(), **kw)
+        return mail.outbox
+
+    def test_off_by_default_sends_nothing(self):
+        from django.core import mail
+
+        self.person("ann")
+        self.call("scheduled_scan", stdout=mock.MagicMock())
+        self.assertEqual(mail.outbox, [])
+        self.assertEqual(ScanRun.objects.count(), 0)
+
+    def test_emails_only_people_who_opted_in_with_their_own_matches(self):
+        ann, bob = self.person("ann"), self.person("bob", alerts=False)
+        outbox = self.run_cmd()
+        self.assertEqual(len(outbox), 1)
+        self.assertEqual(outbox[0].to, [ann.email])
+        self.assertIn("Senior Backend Engineer", outbox[0].body)
+        self.assertNotIn("Marketing Manager", outbox[0].body)
+        self.assertEqual(Application.objects.filter(owner=bob).count(), 0)
+        self.assertEqual(ScanRun.objects.get(owner=ann).added_ids, list(Application.objects.filter(owner=ann).values_list("pk", flat=True)))
+
+    def test_second_run_adds_nothing_so_sends_nothing(self):
+        self.person("ann")
+        self.run_cmd()
+        self.assertEqual(self.run_cmd(), self.run_cmd())  # same outbox object; no new mail after the first
+        from django.core import mail
+
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_unverified_address_gets_no_email_but_jobs_are_still_saved(self):
+        ann = self.person("ann", verified=False)
+        self.assertEqual(self.run_cmd(), [])
+        self.assertEqual(Application.objects.filter(owner=ann).count(), 1)
+
+    def test_alert_checkbox_saved_from_profile_form(self):
+        u = self.person("ann", alerts=False)
+        UserProfile.objects.filter(user=u).update(onboarding_done=True)
+        self.client.login(username="ann", password=PW)
+        page = self.client.get(reverse("profile"))
+        self.assertContains(page, "Job alerts")
+        self.client.post(reverse("profile"), {"target_roles": "Backend Engineer", "scan_digest_enabled": "on", "areas-TOTAL_FORMS": "0", "areas-INITIAL_FORMS": "0", "areas-MIN_NUM_FORMS": "0", "areas-MAX_NUM_FORMS": "1000"})
+        self.assertTrue(UserProfile.objects.get(user=u).scan_digest_enabled)

@@ -183,6 +183,12 @@ class SiteConfig(PersonalSettings):
         "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
     )
 
+    scan_emails_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow the scheduled job search to email people who opted in (Profile > Job alerts). Needs SMTP configured -- "
+        "without it, emails only print to the server console. Run `manage.py scheduled_scan` on a schedule (e.g. daily cron).",
+    )
+
     careerops_path = models.CharField(
         max_length=500,
         blank=True,
@@ -335,6 +341,10 @@ class UserProfile(PersonalSettings):
     salary_floor = models.CharField(max_length=60, blank=True, help_text="Your minimum, with currency and period (e.g. 100,000 BDT/month).")
     deal_breakers = models.TextField(blank=True, help_text="Things you will not accept, one per line.")
     about = models.TextField(blank=True, help_text="Anything else the AI should know when judging fit.")
+    scan_digest_enabled = models.BooleanField(
+        default=False, verbose_name="Search for new jobs for me and email me what is found",
+        help_text="Runs your saved search on a schedule and emails one short list of new matches. Off until you turn it on.",
+    )
     onboarding_done = models.BooleanField(
         default=False, editable=False,
         help_text="The person has seen (or skipped) the short welcome questions after signing up.",
@@ -897,6 +907,7 @@ class ScanRun(models.Model):
     done = models.PositiveIntegerField(default=0, help_text="Sources checked so far.")
     found = models.PositiveIntegerField(default=0, help_text="Postings seen across all sources.")
     added = models.PositiveIntegerField(default=0, help_text="New applications created.")
+    added_ids = models.JSONField(default=list, blank=True, help_text="Primary keys of the applications this run created.")
     error = models.TextField(blank=True)
 
     class Meta:

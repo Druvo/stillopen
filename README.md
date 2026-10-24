@@ -43,6 +43,10 @@ Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboar
 
 Import is idempotent: new tracker rows are created, existing rows refresh only evaluation data (score, summary, strengths, gaps, deadline, PDFs). Your local status, notes and URL are never overwritten unless you run `import_careerops --sync-status`.
 
+## Job alerts
+
+Each person can tick **Profile > Job alerts** to have their saved search run on a schedule and get one email listing what was added. The site owner switches this on with `scan_emails_enabled` (Site configuration > Dashboard), configures SMTP, and runs `python manage.py scheduled_scan` daily from cron or Task Scheduler. Nothing is sent when nothing new was found, or to an unverified address.
+
 ## Open/closed check
 
 - `node` mode runs career-ops `check-liveness.mjs` (Playwright). Use this: it renders JavaScript pages, so it catches closed postings that a plain HTTP check misses.

@@ -128,7 +128,7 @@ class ProfileForm(forms.ModelForm):
         model = UserProfile
         fields = [
             "target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages",
-            "notice_period", "salary_floor", "deal_breakers", "about", "profile_cv",
+            "notice_period", "salary_floor", "deal_breakers", "about", "profile_cv", "scan_digest_enabled",
         ]
         widgets = {
             "target_roles": forms.Textarea(attrs={"rows": 3, "placeholder": "Senior Backend Engineer\nSolutions Architect"}),

@@ -28,6 +28,17 @@
 
   <div class="card mb-3">
     <div class="card-body">
+    <h3 class="mt-0">Job alerts</h3>
+    <label class="form-check">
+      {{ form.scan_digest_enabled|bootstrap_field }}
+      <span class="form-check-label">{{ form.scan_digest_enabled.label }}</span>
+    </label>
+    <small class="form-hint">{{ form.scan_digest_enabled.help_text }}{% if not site_config.scan_emails_enabled %} The site owner has not switched scheduled emails on yet, so nothing is sent for now.{% endif %}</small>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
     <h3 class="mt-0">Where you would work</h3>
     <p class="text-secondary">One row per place. Say which kinds of work you accept there and what you need from the employer. Jobs are checked against these rows; a job outside them is flagged, never hidden.</p>
     <p class="form-hint">Examples: <em>Bangladesh, city Dhaka: on-site, hybrid</em> &middot; <em>Anywhere: remote</em> &middot; <em>Malaysia: on-site, hybrid, only with visa sponsorship</em> &middot; <em>Gulf: on-site, sponsorship and relocation support, minimum 8,000 USD per month</em>. A place can be a country, a region (Gulf, Europe, Southeast Asia) or <em>Anywhere</em>.</p>

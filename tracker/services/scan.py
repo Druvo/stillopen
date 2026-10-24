@@ -361,6 +361,7 @@ def _worker(run_id: int):
                     existing.add(p["url"])
                     entry.added += 1
                     run.added += 1
+                    run.added_ids.append(app.pk)
                     room -= 1
             except (FetchError, KeyError, ValueError) as exc:
                 entry.error = str(exc)[:300]
@@ -369,7 +370,7 @@ def _worker(run_id: int):
             entry.save()
             run.found += entry.found
             run.done += 1
-            run.save(update_fields=["done", "found", "added"])
+            run.save(update_fields=["done", "found", "added", "added_ids"])
             if capped:
                 run.error = (
                     f"Stopped early: you're at your {settings.STILLOPEN_MAX_APPLICATIONS}-job tracker limit. "
@@ -406,3 +407,37 @@ def start_run(owner, background: bool = True) -> ScanRun:
         _worker(run.pk)
         run.refresh_from_db()
     return run
+
+
+def scan_digest_text(apps) -> str:
+    lines = ["New jobs matching your search on StillOpen:", ""]
+    for app in apps:
+        where = f" ({app.location_text})" if app.location_text else ""
+        lines.append(f"- {app.company} - {app.role}{where}")
+        if app.url:
+            lines.append(f"  {app.url}")
+    lines += ["", "They are saved on your dashboard. Open it to check each fit and decide what to apply to.",
+              "Turn these emails off any time under Profile > Job alerts."]
+    return "\n".join(lines)
+
+
+def send_scan_digest(owner, run: ScanRun) -> bool:
+    """One email per person per scheduled run listing what that run added. Nothing is sent when nothing was added,
+    or when the person has no verified address."""
+    from allauth.account.models import EmailAddress
+    from django.core.mail import send_mail
+
+    apps = list(Application.objects.filter(owner=owner, pk__in=run.added_ids))
+    if not apps:
+        return False
+    if not EmailAddress.objects.filter(user=owner, email=owner.email, verified=True).exists():
+        return False
+    count = len(apps)
+    send_mail(
+        subject=f"StillOpen: {count} new job{'s' if count != 1 else ''} for you",
+        message=scan_digest_text(apps),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[owner.email],
+        fail_silently=False,
+    )
+    return True
