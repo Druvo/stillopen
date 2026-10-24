@@ -113,6 +113,21 @@ def record_sighting(source: JobSource, title: str, url: str, location: str, comp
     return posting
 
 
+_REMOTE_WORDS = re.compile(r"\bremote\b|\banywhere\b|\bworldwide\b|work from home|\bdistributed\b", re.I)
+EXCERPT_CHARS = 400
+
+
+def excerpt_of(text: str) -> str:
+    """The first few lines of a posting for the public board, cut at a word: enough to recognise the job, never the whole text
+    (the full posting stays with the employer, one click away)."""
+    text = html.unescape(text or "")
+    text = re.sub(r"<[^>]+>", " ", text)  # belt and braces: never let markup reach a public page as text
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= EXCERPT_CHARS:
+        return text
+    return text[:EXCERPT_CHARS].rsplit(" ", 1)[0].rstrip(" ,;:-") + "..."
+
+
 def record_sightings(source: JobSource, postings: list[dict], seen_date=None) -> None:
     """record_sighting for a whole list of postings from one source in a handful of queries instead of two per
     posting (a first search reads ~20,000 openings). Same result: the Posting is created or refreshed and marked seen today."""
@@ -124,14 +139,19 @@ def record_sightings(source: JobSource, postings: list[dict], seen_date=None) ->
             continue
         urls.add(url)
         company = (p.get("company") or source.name).strip()
+        location = (p.get("location") or "")[:160]
+        codes = geo.location_codes(location)
         rows.append(Posting(
             source=source, url=url, title=p["title"][:300], company=company[:160],
-            title_key=title_key(f"{company} :: {p['title']}"), location=(p.get("location") or "")[:160],
+            title_key=title_key(f"{company} :: {p['title']}"), location=location,
+            country=next(iter(codes)) if len(codes) == 1 else "",
+            remote=bool(_REMOTE_WORDS.search(f"{location} {p['title']}")),
+            excerpt=excerpt_of(p.get("description", "")),
         ))
     for i in range(0, len(rows), 500):
         Posting.objects.bulk_create(
             rows[i:i + 500], update_conflicts=True, unique_fields=["source", "url"],
-            update_fields=["title", "company", "title_key", "location", "last_seen_at"],
+            update_fields=["title", "company", "title_key", "location", "country", "remote", "excerpt", "last_seen_at"],
         )
     ids = {}
     ordered = list(urls)
@@ -197,9 +217,14 @@ def _tidy_place(text: str) -> str:
 
 
 def _blurb(raw_html: str, limit: int = 2000) -> str:
-    """Plain text from an HTML description field, trimmed -- only ever used for skill-term overlap, never
-    stored or shown, so a few KB of context is plenty and keeps per-posting parsing cheap."""
-    return html_to_text(raw_html or "")[:limit] if raw_html else ""
+    """Plain text from an HTML description field, trimmed. Some sources (Greenhouse) send their HTML escaped (&lt;p&gt;), so that
+    is undone first, otherwise the tags would survive as visible text and pollute the words used for scoring. Used for skill
+    matching, the saved job text and the public excerpt, so a couple of KB is plenty and keeps per-posting parsing cheap."""
+    if not raw_html:
+        return ""
+    if "&lt;" in raw_html:
+        raw_html = html.unescape(raw_html)
+    return html_to_text(raw_html)[:limit]
 
 
 def fetch_greenhouse(token: str) -> list[dict]:

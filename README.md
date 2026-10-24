@@ -43,6 +43,32 @@ Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboar
 
 Import is idempotent: new tracker rows are created, existing rows refresh only evaluation data (score, summary, strengths, gaps, deadline, PDFs). Your local status, notes and URL are never overwritten unless you run `import_careerops --sync-status`.
 
+## The public site: landing page and job board
+
+Visitors need no account to see what the app does and what is open.
+
+- **Landing page** (`/`): leads with the idea that nobody should visit job sites one by one, then shows live numbers (open jobs, employers, countries, sources searched), the latest openings, a before/after picture, how it works step by step, how a search narrows the list and how "fit" is worked out, live charts (jobs by country, by kind of source, new per day once there is history), the benefits, a comparison table, the privacy promises, the sources, and an FAQ. The headline and sub-headline are editable in the admin; everything else describes what the app really does.
+- **Job board** (`/openings/`): every currently listed opening, newest first, with search, country and remote filters and paging, and a page per opening (`/openings/<id>/<slug>/`) with a short excerpt, a credit link and the apply link unchanged. It is the same for everyone: the personalised part (fit to *your* CV and places, tailored CV, tracking) starts after sign-in.
+- **`robots.txt` and `sitemap.xml`** are generated. Private areas are disallowed.
+
+**The rules it follows** (checked against each source's own terms and Google's job-posting guidelines, 2026-10):
+
+| Rule | Why |
+| --- | --- |
+| Only sources ticked **Show publicly** (admin > Job sources) appear, never a person's own boards | Each source decides what may be republished |
+| **Remotive, We Work Remotely, Working Nomads, The Muse and Jooble are off by default.** Remotive's terms forbid sending its jobs to third-party sites and showing them to collect sign-ups | A public board whose purpose is attracting sign-ups is exactly what that clause bars |
+| RemoteOK, Himalayas, Jobicy and Arbeitnow are shown with a visible credit link; the apply link is the source's own, unchanged | Their terms ask for both |
+| Employer boards (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee) are shown, crediting the employer | They exist to be seen; review them if you want to be stricter |
+| A short excerpt only, never the full posting | The full text stays with its owner, one click away |
+| **No JobPosting structured data** | Google requires the full description on a single-job page; Himalayas and Remotive forbid passing jobs to Google Jobs |
+| An opening not seen for `STILLOPEN_PUBLIC_ACTIVE_DAYS` (3) days answers **410 Gone** and drops off the board | Google and the sources require expired jobs to be removed |
+| An opening's own page is `noindex` unless you switch on `public_details_indexable` | Short excerpts of other people's postings can be judged thin or copied content; the landing page, board and sitemap stay indexable |
+| Filtered and deeper pages are `noindex,follow` | They are for people, not search results |
+
+Freshness needs no person: the board refreshes itself in the background when a visitor arrives and it is older than `STILLOPEN_PUBLIC_REFRESH_HOURS` (6), at most once an hour, or run `python manage.py refresh_postings` from cron (it is in `deploy/`). Public pages are cached for `STILLOPEN_PUBLIC_CACHE_SECONDS` (300). Under **Site configuration > Public job board** you can switch the whole board off, allow indexing of opening pages, and set a contact email that appears in the footer for employers who want a listing removed.
+
+**The look.** A standard, familiar style: light by default for everyone, a toggle to dark that is remembered, one brand colour, system fonts only (no external fonts or scripts), a skip link, labelled forms, charts drawn as accessible inline SVG with titles and descriptions, and no sideways scrolling on small screens.
+
 ## The dashboard: everything first, then filters
 
 The dashboard lists **every** job you have, best match first, with nothing hidden behind tabs. Narrow it down with the bar above the list: stage chips (All, To apply, Applied & pending, Closed & skipped, each with a count), a text search over company, role and place, and filters for fit to your places, how well you match, remote/hybrid/on-site, country, whether the posting is open, and when it was found. Sort by best match, newest, oldest, company or closing soonest. "Showing 6 of 40" says what is filtered and "Clear filters" undoes it. Your choices are remembered for the browser tab.

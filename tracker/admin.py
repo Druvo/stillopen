@@ -78,6 +78,14 @@ class SiteConfigAdmin(admin.ModelAdmin):
             },
         ),
         ("Landing page", {"fields": ("landing_enabled", "landing_headline", "landing_subheadline", "landing_github_url")}),
+        (
+            "Public job board",
+            {
+                "fields": ("public_board_enabled", "public_details_indexable", "contact_email"),
+                "description": "The public job board (/openings/) shows openings from sources marked 'Show publicly' under Job sources, each with a short excerpt "
+                "and a credit link to the original. Remotive's terms forbid this, so it is off for Remotive.",
+            },
+        ),
         ("Legal", {"fields": ("privacy_text", "terms_text"), "description": "Shown at /privacy/ and /terms/. Replace the defaults."}),
         ("career-ops import (site admins only)", {"fields": ("careerops_path", "node_command")}),
         ("Open / closed check", {"fields": ("liveness_mode", "liveness_timeout")}),
@@ -417,9 +425,9 @@ class LivenessRunAdmin(admin.ModelAdmin):
 
 @admin.register(JobSource)
 class JobSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "connector", "board_token", "owner", "enabled")
-    list_editable = ("enabled",)
-    list_filter = ("connector", "enabled", "owner")
+    list_display = ("name", "connector", "board_token", "owner", "enabled", "show_publicly")
+    list_editable = ("enabled", "show_publicly")
+    list_filter = ("connector", "enabled", "show_publicly", "owner")
     search_fields = ("name", "board_token")
 
 

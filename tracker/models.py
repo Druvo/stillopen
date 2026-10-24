@@ -7,7 +7,7 @@ from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from django.utils import timezone
 
-from . import crypto, legal
+from . import copy, crypto, legal
 
 # Settings that belong to one person. SiteConfig holds legacy values (used to seed the first user);
 # every request works with SiteConfig.for_user(user), which overlays the person's own profile.
@@ -232,14 +232,19 @@ class SiteConfig(PersonalSettings):
     landing_enabled = models.BooleanField(
         default=True, help_text="Show the public landing page at the site root. Off sends visitors straight to sign-in."
     )
-    landing_headline = models.CharField(max_length=140, default="Stop applying to jobs that are already closed.")
-    landing_subheadline = models.CharField(
-        max_length=300,
-        default=(
-            "StillOpen tracks every role you are chasing, scores how well it fits you, "
-            "and checks whether each posting is still open."
-        ),
+    landing_headline = models.CharField(max_length=140, default=copy.HEADLINE)
+    landing_subheadline = models.CharField(max_length=300, default=copy.SUBHEADLINE)
+    public_board_enabled = models.BooleanField(
+        default=True,
+        help_text="Show the public job board (/openings/) and its live numbers on the landing page. Only openings from sources marked "
+        "'show publicly' appear, and only ones seen in the last few days.",
     )
+    public_details_indexable = models.BooleanField(
+        default=False,
+        help_text="Let search engines index each opening's own page. Off by default: those pages are short excerpts of other people's "
+        "postings, which search engines can treat as thin or copied content. The board, landing page and country views stay indexable.",
+    )
+    contact_email = models.EmailField(blank=True, help_text="Shown on the public pages for employers who want a listing removed, and for questions.")
     landing_github_url = models.URLField(blank=True, help_text="Optional. Adds a GitHub link to the landing page.")
 
     privacy_text = models.TextField(default=DEFAULT_PRIVACY, help_text="Shown at /privacy/. Replace with your own policy.")
@@ -1039,6 +1044,11 @@ class JobSource(models.Model):
         validators=[RegexValidator(r"^[A-Za-z0-9._-]+$", "Only letters, digits, dot, dash and underscore.")],
     )
     enabled = models.BooleanField(default=True)
+    show_publicly = models.BooleanField(
+        default=False,
+        help_text="Show this site-wide source's openings on the public job board (no sign-in needed), each with a credit link to the original. "
+        "Only tick it where the source's own terms allow public display; Remotive's, for example, do not. Never applies to a person's own boards.",
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="job_sources",
         help_text="Empty: a site-wide source the admin manages, searched for everyone. Set: one person's own board, "
@@ -1122,6 +1132,9 @@ class Posting(models.Model):
     title = models.CharField(max_length=300)
     title_key = models.CharField(max_length=300, db_index=True, help_text="Normalized company+title, used to group reposts of the same role.")
     location = models.CharField(max_length=160, blank=True)
+    country = models.CharField(max_length=2, blank=True, db_index=True, help_text="Two-letter country when the location names exactly one.")
+    remote = models.BooleanField(default=False, help_text="The location or title says remote or worldwide.")
+    excerpt = models.TextField(blank=True, help_text="The first few lines of the posting, for the public board. The full text stays at the employer.")
     first_seen_at = models.DateTimeField(auto_now_add=True)
     last_seen_at = models.DateTimeField(auto_now=True)
 

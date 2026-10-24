@@ -66,16 +66,6 @@ def owned_app(request, pk):
     return get_object_or_404(Application, pk=pk, owner=request.user)
 
 
-# --- public pages -------------------------------------------------------------------------------
-
-@require_GET
-def landing(request):
-    config = SiteConfig.load()
-    if not config.landing_enabled:
-        return redirect("dashboard")
-    return render(request, "tracker/landing.html", {"config": config})
-
-
 @require_GET
 def privacy(request):
     config = SiteConfig.load()
