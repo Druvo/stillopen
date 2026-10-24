@@ -216,12 +216,19 @@ class SiteConfig(PersonalSettings):
         default=False,
         help_text="Allow signing in with Google. Also needs a Google app under Social applications.",
     )
+    github_login_enabled = models.BooleanField(
+        default=False, help_text="Allow signing in with GitHub. Also needs a GitHub OAuth app under Social applications.",
+    )
+    facebook_login_enabled = models.BooleanField(
+        default=False, help_text="Allow signing in with Facebook. Also needs a Facebook app under Social applications.",
+    )
     google_allowed_emails = models.TextField(
         blank=True,
+        verbose_name="Allowed emails for social sign-in",
         help_text=(
-            "Who may sign in with Google while sign-up is Closed, one per line: a full address (you@gmail.com) or a whole "
-            "domain (@company.com). With sign-up Open, any Google account with a verified email may register. "
-            "An existing user with the same verified email can always sign in."
+            "Who may sign in with Google, GitHub or Facebook while sign-up is Closed, one per line: a full address (you@gmail.com) or "
+            "a whole domain (@company.com). With sign-up Open, anyone with a verified email may register (a Facebook email is "
+            "confirmed by the usual email link). An existing user with the same verified email can always sign in."
         ),
     )
 
@@ -287,6 +294,9 @@ class SiteConfig(PersonalSettings):
             if config.ai_provider in ("claude_cli", "agent_sdk"):
                 config.ai_provider = "none"
         return config
+
+    def social_enabled(self, provider: str) -> bool:
+        return bool(getattr(self, f"{provider}_login_enabled", False))
 
     def google_email_allowed(self, email: str) -> bool:
         email = (email or "").strip().lower()

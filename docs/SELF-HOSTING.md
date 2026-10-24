@@ -60,6 +60,24 @@ live in process memory) behind a reverse proxy, with `DJANGO_DEBUG=0` and `DJANG
    jobs appear in about a minute. No AI key is needed.
 3. Optional: **AI settings** to bring your own key for a deeper read of a job. Nothing is sent to an AI until you press a button that needs one.
 
+## Sign-in options
+
+**Two-step sign-in** is built in and free: each person can switch it on under Profile > Your account > Two-step sign-in. It supports an authenticator
+app (Google Authenticator, Aegis, 1Password...), a hardware security key, and one-time recovery codes. Nothing to configure.
+
+**Sign in with Google, GitHub or Facebook** is free too, but each needs an OAuth app that you create with the provider. The redirect (callback) address to give the provider is `https://jobs.example.com/accounts/google/login/callback/`, with your own domain, and
+`github` or `facebook` in place of `google` for the others.
+
+| Provider | Where to create the app | Notes |
+| --- | --- | --- |
+| Google | Google Cloud Console > APIs & Services > Credentials > OAuth client ID (Web application) | Verified emails only |
+| GitHub | GitHub > Settings > Developer settings > OAuth Apps | The app asks for the person's verified email; only a verified one is trusted |
+| Facebook | developers.facebook.com > Create app > Facebook Login | The app must be switched to Live and have a privacy policy URL (use `/privacy/`). Facebook's email is not treated as verified, so a new person confirms it with the usual email link and is never attached to an existing account |
+
+Put the keys in `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the `GITHUB_` and `FACEBOOK_` ones), restart, then in the admin under
+**Site configuration > Social sign-in** tick the providers you want. While sign-up is *Closed*, only emails on the allowed list may use a social button;
+with sign-up *Open*, anyone with a usable email may.
+
 ## Email
 
 Without email set up, you can still use everything: sign-ups are not email-confirmed (the admin shows a notice) and reminders only print to the server log.

@@ -65,3 +65,43 @@ class PostgresSupport(TestCase):
             self.skipTest("this run is on PostgreSQL")
         with self.assertRaisesMessage(CommandError, "must point at PostgreSQL"):
             call_command("copy_to_postgres", "--from", "anything.sqlite3")
+
+
+class TwoStepSignIn(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        self.user = get_user_model().objects.create_user("mfauser", email="mfa@example.com", password="x" * 20)
+
+    def test_profile_links_to_two_step_setup_and_the_page_loads(self):
+        self.client.force_login(self.user)
+        self.assertContains(self.client.get(reverse("profile")), reverse("mfa_index"))
+        page = self.client.get(reverse("mfa_index"))
+        self.assertEqual(page.status_code, 200)
+
+    def test_authenticator_app_setup_page_shows_a_qr_code_without_third_parties(self):
+        from tracker.tests_selfhost import EXTERNAL_ASSET
+
+        self.client.post(reverse("account_login"), {"login": "mfauser", "password": "x" * 20})
+        asked = self.client.get(reverse("mfa_activate_totp"))  # allauth first asks for the password again
+        self.assertEqual(asked.status_code, 302)
+        self.client.post(reverse("account_reauthenticate"), {"password": "x" * 20})
+        page = self.client.get(reverse("mfa_activate_totp"))
+        self.assertEqual(page.status_code, 200, page.get("Location"))
+        self.assertContains(page, "<svg")
+        self.assertIsNone(EXTERNAL_ASSET.search(page.content.decode()))
+
+    def test_a_person_with_an_authenticator_must_give_a_code_to_sign_in(self):
+        from allauth.mfa.models import Authenticator
+        from allauth.mfa.totp.internal import auth as totp
+
+        secret = totp.generate_totp_secret()
+        Authenticator.objects.create(user=self.user, type=Authenticator.Type.TOTP, data={"secret": secret})
+        r = self.client.post(reverse("account_login"), {"login": "mfauser", "password": "x" * 20})
+        self.assertRedirects(r, reverse("mfa_authenticate"), fetch_redirect_response=False)
+        self.assertNotIn("_auth_user_id", self.client.session)  # signed in only after the second step
+        import time
+
+        code = totp.format_hotp_value(totp.hotp_value(secret, int(time.time() // 30)))
+        self.client.post(reverse("mfa_authenticate"), {"code": code})
+        self.assertIn("_auth_user_id", self.client.session)

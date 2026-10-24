@@ -364,12 +364,17 @@ class GoogleLoginTests(TestCase):
         request._messages = FallbackStorage(request)
         return request
 
-    def _login(self, email, verified=True, existing=False):
+    provider = "google"
+
+    def _login(self, email, verified=True, existing=False, provider=None):
         from allauth.account.models import EmailAddress
-        from allauth.socialaccount.models import SocialLogin
+        from allauth.socialaccount.models import SocialAccount, SocialLogin
 
         user = get_user_model().objects.create_user("existing", email=email) if existing else get_user_model()(email=email)
-        return SocialLogin(user=user, email_addresses=[EmailAddress(email=email, verified=verified)])
+        return SocialLogin(
+            user=user, account=SocialAccount(provider=provider or self.provider, uid="1"),
+            email_addresses=[EmailAddress(email=email, verified=verified)],
+        )
 
     def test_allowlist_rules(self):
         self.config.google_allowed_emails = "Me@Gmail.com\n@acme.com\n"
@@ -426,6 +431,67 @@ class GoogleLoginTests(TestCase):
         from tracker.auth import AccountAdapter
 
         self.assertFalse(AccountAdapter().is_open_for_signup(self._request()))
+
+
+class OtherSocialLoginTests(GoogleLoginTests):
+    """GitHub and Facebook follow the same rules as Google, each with its own switch."""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.sites.models import Site
+        from allauth.socialaccount.models import SocialApp
+
+        for provider in ("github", "facebook"):
+            SocialApp.objects.create(provider=provider, name=provider.title(), client_id="id", secret="secret").sites.add(Site.objects.get_current())
+
+    def test_each_provider_has_its_own_switch_and_button(self):
+        self.config.github_login_enabled = True
+        self.config.save()
+        page = self.client.get(reverse("account_login")).content.decode()
+        self.assertIn("Continue with GitHub", page)
+        self.assertNotIn("Continue with Facebook", page)
+        self.assertNotIn("Continue with Google", page)
+        self.config.facebook_login_enabled = True
+        self.config.signup_mode = "open"
+        self.config.save()
+        page = self.client.get(reverse("account_signup")).content.decode()
+        self.assertIn("Continue with GitHub", page)
+        self.assertIn("Continue with Facebook", page)
+
+    def test_a_switched_off_provider_cannot_be_used(self):
+        from allauth.core.exceptions import ImmediateHttpResponse
+        from tracker.auth import SocialAdapter
+
+        self.config.google_login_enabled = True
+        self.config.google_allowed_emails = "me@gmail.com"
+        self.config.save()
+        with self.assertRaises(ImmediateHttpResponse):
+            SocialAdapter().pre_social_login(self._request(), self._login("me@gmail.com", provider="github"))
+        self.config.github_login_enabled = True
+        self.config.save()
+        SocialAdapter().pre_social_login(self._request(), self._login("me@gmail.com", provider="github"))
+
+    def test_github_needs_a_verified_email_but_facebook_goes_through_email_confirmation(self):
+        from tracker.auth import SocialAdapter
+
+        self.config.github_login_enabled = self.config.facebook_login_enabled = True
+        self.config.google_allowed_emails = "me@gmail.com"
+        self.config.save()
+        adapter = SocialAdapter()
+        self.assertFalse(adapter.is_open_for_signup(self._request(), self._login("me@gmail.com", verified=False, provider="github")))
+        self.assertTrue(adapter.is_open_for_signup(self._request(), self._login("me@gmail.com", verified=False, provider="facebook")))
+        self.assertFalse(adapter.is_open_for_signup(self._request(), self._login("stranger@gmail.com", verified=False, provider="facebook")))
+
+    def test_an_unverified_facebook_email_is_marked_so_they_must_confirm_it(self):
+        from tracker.auth import SocialAdapter
+        from tracker.models import UserProfile
+
+        self.config.facebook_login_enabled = True
+        self.config.signup_mode = "open"
+        self.config.save()
+        sociallogin = self._login("new@example.com", verified=False, provider="facebook")
+        user = SocialAdapter().save_user(self._request(), sociallogin)
+        self.assertTrue(UserProfile.objects.get(user=user).self_registered)
 
 
 class LandingTests(TestCase):

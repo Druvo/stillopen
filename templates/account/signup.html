@@ -5,16 +5,16 @@
 <h2 class="card-title">Create your account</h2>
 <p class="text-secondary mb-3">An email and a password, that is all. Then tell us what you are looking for and we will check each job against it.</p>
 
-{% if google_login_on %}
-  {% load socialaccount %}
-  {% get_providers as providers %}
-  {% if providers %}
-  <form method="post" action="{% provider_login_url 'google' process='login' %}" class="mb-3">
+{% load socialaccount %}
+{% get_providers as providers %}
+{% if providers and enabled_social %}
+  {% for p in providers %}{% if p.id in enabled_social %}
+  <form method="post" action="{% provider_login_url p.id process='login' %}" class="mb-2">
     {% csrf_token %}
-    <button type="submit" class="btn btn-outline-secondary w-100">Continue with Google</button>
+    <button type="submit" class="btn btn-outline-secondary w-100">Continue with {{ p.name }}</button>
   </form>
+  {% endif %}{% endfor %}
   <div class="hr-text">or</div>
-  {% endif %}
 {% endif %}
 
 <form method="post" action="{% url 'account_signup' %}">

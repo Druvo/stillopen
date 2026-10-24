@@ -592,9 +592,10 @@ class Registration(TestCase):
 class GoogleRegistration(TestCase):
     def sociallogin(self, email, verified=True):
         from allauth.account.models import EmailAddress
-        from allauth.socialaccount.models import SocialLogin
+        from allauth.socialaccount.models import SocialAccount, SocialLogin
 
-        return SocialLogin(user=User(email=email), email_addresses=[EmailAddress(email=email, verified=verified)])
+        return SocialLogin(user=User(email=email), account=SocialAccount(provider="google", uid="1"),
+                           email_addresses=[EmailAddress(email=email, verified=verified)])
 
     def request(self):
         from django.contrib.messages.storage.fallback import FallbackStorage

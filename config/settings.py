@@ -51,8 +51,11 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "allauth",
     "allauth.account",
+    "allauth.mfa",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
+    "allauth.socialaccount.providers.github",
+    "allauth.socialaccount.providers.facebook",
     "tracker",
     "django.forms",  # needed for FORM_RENDERER = TemplatesSetting to find Django's own built-in widget templates
 ]
@@ -197,6 +200,15 @@ ACCOUNT_RATE_LIMITS = {
 }
 ALLAUTH_TRUSTED_PROXY_COUNT = int(os.environ.get("ALLAUTH_TRUSTED_PROXY_COUNT", "0"))
 ACCOUNT_PASSWORD_MIN_LENGTH = 10
+# Two-step sign-in, optional and per person (Profile > Your account > Two-step sign-in): an authenticator app, a hardware security
+# key or passkey as a second step, and one-time recovery codes. Runs entirely in this app, no third-party service.
+MFA_SUPPORTED_TYPES = ["totp", "webauthn", "recovery_codes"]
+MFA_TOTP_ISSUER = os.environ.get("STILLOPEN_TOTP_ISSUER", "StillOpen")
+# Without SMTP (a common self-host setup) nobody has a verified email, and allauth would then refuse to let anyone turn this on.
+# Sign-ups that go through the email step are already confirmed before they can sign in.
+MFA_ALLOW_UNVERIFIED_EMAIL = True
+MFA_PASSKEY_LOGIN_ENABLED = False
+MFA_PASSKEY_SIGNUP_ENABLED = False
 if os.environ.get("EMAIL_HOST"):
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = os.environ["EMAIL_HOST"]
@@ -276,15 +288,26 @@ SOCIALACCOUNT_PROVIDERS = {
         "SCOPE": ["profile", "email"],
         "AUTH_PARAMS": {"access_type": "online"},
         "VERIFIED_EMAIL": True,
-    }
+    },
+    # GitHub reports which of a person's addresses it has verified; only a verified one is ever trusted.
+    "github": {"SCOPE": ["read:user", "user:email"]},
+    # Facebook's email is not treated as verified: a new person confirms it by the usual email link, and it is never
+    # used to attach to somebody else's existing account.
+    "facebook": {
+        "METHOD": "oauth2",
+        "SCOPE": ["email", "public_profile"],
+        "FIELDS": ["id", "email", "name", "first_name", "last_name"],
+        "VERIFIED_EMAIL": False,
+    },
 }
-# Optional: configure Google from the environment instead of the admin "Social applications" page.
-if os.environ.get("GOOGLE_CLIENT_ID") and os.environ.get("GOOGLE_CLIENT_SECRET"):
-    SOCIALACCOUNT_PROVIDERS["google"]["APP"] = {
-        "client_id": os.environ["GOOGLE_CLIENT_ID"],
-        "secret": os.environ["GOOGLE_CLIENT_SECRET"],
-        "key": "",
-    }
+# Optional: configure a provider from the environment instead of the admin "Social applications" page.
+for _provider in ("google", "github", "facebook"):
+    if os.environ.get(f"{_provider.upper()}_CLIENT_ID") and os.environ.get(f"{_provider.upper()}_CLIENT_SECRET"):
+        SOCIALACCOUNT_PROVIDERS[_provider]["APP"] = {
+            "client_id": os.environ[f"{_provider.upper()}_CLIENT_ID"],
+            "secret": os.environ[f"{_provider.upper()}_CLIENT_SECRET"],
+            "key": "",
+        }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

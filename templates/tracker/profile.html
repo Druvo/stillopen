@@ -126,6 +126,7 @@
   <div class="btn-list">
     <a class="btn btn-outline-secondary" href="{% url 'account_email' %}">Change or add email</a>
     <a class="btn btn-outline-secondary" href="{% url 'account_change_password' %}">Change password</a>
+    <a class="btn btn-outline-secondary" href="{% url 'mfa_index' %}">Two-step sign-in</a>
     <a class="btn btn-outline-secondary" href="{% url 'socialaccount_connections' %}">Connected accounts</a>
   </div>
   <p class="text-secondary mb-0 mt-2">Stored about you: {{ account.jobs }} job{{ account.jobs|pluralize }}, {{ account.cv_versions }} CV version{{ account.cv_versions|pluralize }}, {{ account.documents }} document{{ account.documents|pluralize }}, {{ areas.initial_form_count }} search area{{ areas.initial_form_count|pluralize }}, and this profile. Everything is in the export below. See the <a href="{% url 'privacy' %}">privacy policy</a>.</p>
