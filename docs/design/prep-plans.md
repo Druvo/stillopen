@@ -1,6 +1,6 @@
 # Design: prep plans (close the gaps for a job you want)
 
-Status: **phase 1 built** (plans are written, checked, reviewed and started; the daily quiz is phase 2). Decisions taken by the owner:
+Status: **phases 1 and 2 built** (plans are written, checked, reviewed and started; the daily practice, scoring, streak and "needs another look" are in `services/quiz.py`). Not built yet: the source read-back check, the mock interview and the shared library (phases 3 and 4). Decisions taken by the owner:
 
 - It lives in StillOpen (Django).
 - Defaults: 4 weeks, 6 hours a week, 3 questions a day (all admin settings).

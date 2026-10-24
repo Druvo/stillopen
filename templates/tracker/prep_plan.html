@@ -38,7 +38,11 @@
 <div class="card mb-3"><div class="card-body">
   <div class="d-flex justify-content-between mb-1"><strong>{{ done }} of {{ total }} lessons done</strong><span class="text-secondary">{{ plan.hours_per_week }} hours a week{% if plan.status == "done" %} &middot; finished{% endif %}</span></div>
   <div class="progress"><div class="progress-bar" style="width: {{ percent }}%" role="progressbar" aria-valuenow="{{ percent }}" aria-valuemin="0" aria-valuemax="100"></div></div>
-  <p class="text-secondary mt-2 mb-0">{{ question_count }} quiz question{{ question_count|pluralize }} are saved for your daily practice, which is coming in the next update. Lessons you tick off here count as studied for this job the next time you check your fit.</p>
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+    <div class="text-secondary">{{ question_count }} quiz question{{ question_count|pluralize }}{% if streak %} &middot; {{ streak }} day{{ streak|pluralize }} in a row{% endif %}. Lessons you tick off count as studied for this job the next time you check your fit.</div>
+    {% if question_count %}<a class="btn {% if done_today %}btn-outline-secondary{% else %}btn-primary{% endif %}" href="{% url 'prep_today' plan.pk %}">{% if done_today %}See today's answers{% else %}Today's practice{% endif %}</a>{% endif %}
+  </div>
+  {% if weak_topics %}<div class="alert alert-info mt-3 mb-0">Worth another look: {% for t in weak_topics %}<strong>{{ t.title }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}. You missed different questions on {% if weak_topics|length == 1 %}it{% else %}them{% endif %} recently, so they will come up again until you have answered well on three separate days.</div>{% endif %}
 </div></div>
 {% endif %}
 

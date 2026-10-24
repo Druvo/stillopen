@@ -145,7 +145,7 @@ class SiteConfigAdmin(ModelAdmin):
             "Prep plans",
             {
                 "classes": ("tab",),
-                "fields": ("prep_enabled", "prep_default_weeks", "prep_default_hours", "prep_max_weeks", "prep_max_active_plans",
+                "fields": ("prep_enabled", "prep_default_weeks", "prep_default_hours", "prep_daily_questions", "prep_max_weeks", "prep_max_active_plans",
                            "prep_questions_per_lesson", "prep_runs_per_day", "prep_check_sources"),
                 "description": "A person can turn a job's skill gaps into a short study plan with quiz questions. It is written by their own AI account "
                 "(it costs you nothing) and nothing starts until they have read it. Every lesson and question must cite an official link.",
