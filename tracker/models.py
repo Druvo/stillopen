@@ -178,6 +178,7 @@ class SiteConfig(PersonalSettings):
     )
     prep_default_weeks = models.PositiveSmallIntegerField(default=4, help_text="Length of a new prep plan unless the person picks another.")
     prep_default_hours = models.PositiveSmallIntegerField(default=6, help_text="Study hours a week a new prep plan assumes.")
+    prep_daily_questions = models.PositiveSmallIntegerField(default=3, help_text="Questions in each day's practice (1 to 10).")
     prep_max_weeks = models.PositiveSmallIntegerField(default=8, help_text="The longest plan a person may ask for.")
     prep_max_active_plans = models.PositiveSmallIntegerField(default=3, help_text="Plans one person can have in progress at once.")
     prep_questions_per_lesson = models.PositiveSmallIntegerField(default=3, help_text="Quiz questions written for each lesson (1 to 6).")
@@ -1315,4 +1316,4 @@ class AIUsageEvent(models.Model):
         constraints = [models.UniqueConstraint(fields=["posting", "seen_date"], name="uniq_posting_seen_date")]
 
 
-from .prep_models import PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, PrepTopic, PrepWeek  # noqa: E402,F401  (registers them with the app)
+from .prep_models import PrepAnswer, PrepChallenge, PrepChallengeItem, PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, PrepTopic, PrepWeek  # noqa: E402,F401  (registers them with the app)

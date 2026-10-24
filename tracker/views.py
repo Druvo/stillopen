@@ -17,10 +17,10 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from . import forms, views_pipeline
 from .models import (
-    AIUsageEvent, Application, Bucket, Document, Event, JobSource, KnowledgeSource, Posting, ScoreBand, SiteConfig,
+    AIUsageEvent, Application, Bucket, PrepAnswer, Document, Event, JobSource, KnowledgeSource, Posting, ScoreBand, SiteConfig,
     Status, UserProfile,
 )
-from .services import ai, careerops, cvversions, jobtext, knowledge, liveness, scan
+from .services import ai, careerops, cvversions, jobtext, knowledge, liveness, quiz, scan
 from .services import apply as apply_service
 from .services import fit as fit_service, geo, guide
 from .services.cvversions import CVError
@@ -196,6 +196,7 @@ def dashboard(request):
         "next_step": guide.next_step(
             profile, [c for t in tab_list for c in t["cards"]], has_areas=bool(areas),
             searching=bool(scan.current_run(request.user) and scan.current_run(request.user).running),
+            prep_due=quiz.due_plans(request.user) if config.prep_enabled else None,
         ),
     }
     return render(request, "tracker/dashboard.html", context)
@@ -607,7 +608,9 @@ def export_data(request):
              "lessons": [{"week": w.order, "title": le.title, "gap": le.gap, "sources": le.sources, "done": bool(le.done_at)}
                          for w in p.weeks.all() for le in w.lessons.all()],
              "questions": [{"prompt": q.prompt, "choices": q.choices, "correct": q.correct, "explanation": q.explanation, "sources": q.sources}
-                           for q in p.questions.filter(removed=False)]}
+                           for q in p.questions.filter(removed=False)],
+             "answers": [{"question": a.question.prompt, "chosen": a.chosen, "correct": a.correct, "day": a.answered_on.isoformat(), "mode": a.mode}
+                         for a in PrepAnswer.objects.filter(owner=user, question__plan=p).select_related("question")]}
             for p in user.prep_plans.select_related("application").prefetch_related("weeks__lessons")
         ],
         "cv_versions": [

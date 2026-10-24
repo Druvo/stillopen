@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import Application, PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, SiteConfig
-from .services import prep
+from .services import prep, quiz
 
 
 def _config(request) -> SiteConfig:
@@ -70,6 +70,9 @@ def prep_plan(request, pk):
     return render(request, "tracker/prep_plan.html", {
         "config": SiteConfig.load(), "plan": plan, "weeks": weeks, "done": done, "total": total, "percent": round(100 * done / total) if total else 0,
         "question_count": plan.questions.filter(removed=False).count(),
+        "streak": quiz.streak(plan) if plan.status in ("active", "done") else 0,
+        "weak_topics": quiz.weak_topics(plan) if plan.status in ("active", "done") else [],
+        "done_today": plan.challenges.filter(day=timezone.localdate(), completed_at__isnull=False).exists(),
         "unchecked_links": sum(1 for q in plan.questions.filter(removed=False) if q.checks.get("sources_reachable") is False),
     })
 
@@ -145,3 +148,53 @@ def prep_tick(request, kind, pk):
             plan.status = new_status
             plan.save(update_fields=["status"])
     return redirect("prep_plan", pk=plan.pk)
+
+
+def _practice_plan(request, pk) -> PrepPlan:
+    plan = _plan(request, pk)
+    if plan.status not in ("active", "done"):
+        raise Http404("Start the plan first.")
+    return plan
+
+
+@login_required
+@require_GET
+def prep_today(request, pk):
+    """Today's practice: the questions to answer, or, once answered, how it went with each explanation."""
+    config = _config(request)
+    plan = _practice_plan(request, pk)
+    try:
+        challenge = quiz.build_challenge(plan, config.prep_daily_questions)
+    except quiz.QuizError as exc:
+        messages.error(request, str(exc))
+        return redirect("prep_plan", pk=plan.pk)
+    finished = challenge.completed_at is not None
+    rows = quiz.results(challenge) if finished else [
+        {"question": item.question, "review": item.is_review} for item in challenge.items.select_related("question__topic")]
+    right = sum(1 for r in rows if r.get("correct"))
+    return render(request, "tracker/prep_today.html", {
+        "config": SiteConfig.load(), "plan": plan, "challenge": challenge, "rows": rows, "finished": finished,
+        "right": right, "total": len(rows), "streak": quiz.streak(plan), "weak_topics": quiz.weak_topics(plan),
+    })
+
+
+@login_required
+@require_POST
+def prep_answer(request, pk):
+    config = _config(request)
+    plan = _practice_plan(request, pk)
+    challenge = quiz.build_challenge(plan, config.prep_daily_questions)
+    choices = {}
+    for item in challenge.items.all():
+        values = []
+        for raw in request.POST.getlist(f"q{item.question_id}"):
+            value = _int(raw)
+            if value is not None:
+                values.append(value)
+        choices[item.question_id] = values
+    try:
+        quiz.submit(challenge, choices)
+    except quiz.QuizError as exc:
+        messages.error(request, str(exc))
+    return redirect("prep_today", pk=plan.pk)
+

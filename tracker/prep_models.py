@@ -109,3 +109,50 @@ class PrepQuestion(models.Model):
 
     class Meta:
         ordering = ["id"]
+
+
+class PrepChallenge(models.Model):
+    """One day's practice for one plan: a handful of questions, the same however many times the page is opened that day."""
+
+    plan = models.ForeignKey(PrepPlan, on_delete=models.CASCADE, related_name="challenges")
+    number = models.PositiveIntegerField()
+    day = models.DateField()
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-day"]
+        constraints = [
+            models.UniqueConstraint(fields=["plan", "day"], name="uniq_prep_challenge_day"),
+            models.UniqueConstraint(fields=["plan", "number"], name="uniq_prep_challenge_number"),
+        ]
+
+
+class PrepChallengeItem(models.Model):
+    challenge = models.ForeignKey(PrepChallenge, on_delete=models.CASCADE, related_name="items")
+    question = models.ForeignKey(PrepQuestion, on_delete=models.CASCADE, related_name="challenge_items")
+    position = models.PositiveSmallIntegerField()
+    is_review = models.BooleanField(default=False, help_text="Picked because its topic needs another look.")
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [models.UniqueConstraint(fields=["challenge", "question"], name="uniq_prep_challenge_question")]
+
+
+class PrepAnswer(models.Model):
+    """What a person chose for one question. `owner` is stored so answers can be listed and exported without a join."""
+
+    MODES = [("daily", "Daily"), ("review", "Review")]
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="prep_answers")
+    question = models.ForeignKey(PrepQuestion, on_delete=models.CASCADE, related_name="answers")
+    challenge = models.ForeignKey(PrepChallenge, null=True, blank=True, on_delete=models.CASCADE, related_name="answers")
+    chosen = models.JSONField(default=list)
+    correct = models.BooleanField()
+    answered_on = models.DateField()
+    answered_at = models.DateTimeField(auto_now_add=True)
+    mode = models.CharField(max_length=6, choices=MODES, default="daily")
+
+    class Meta:
+        ordering = ["-answered_at"]
+        constraints = [models.UniqueConstraint(fields=["challenge", "question"], name="uniq_prep_answer_once")]
+
