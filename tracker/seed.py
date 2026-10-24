@@ -54,12 +54,15 @@ EXPIRED_PHRASES = [
 def ensure_default_sources(job_source_model) -> int:
     """Add every default job source that is missing (matched on connector + token among the site-wide ones). Returns how
     many were added. Existing rows are left exactly as they are, so an admin's pause or rename survives."""
-    from tracker.seed_sources import DEFAULT_SOURCES
+    from tracker.seed_sources import DEFAULT_SOURCES, PUBLIC_OK_CONNECTORS
 
+    # Old migrations call this with the model as it was then, before the public-board switch existed; migration 0040 sets it for them.
+    has_public_switch = any(f.name == "show_publicly" for f in job_source_model._meta.get_fields())
     added = 0
     for name, connector, token in DEFAULT_SOURCES:
-        _, created = job_source_model.objects.get_or_create(
-            owner=None, connector=connector, board_token=token, defaults={"name": name, "enabled": True},
-        )
+        defaults = {"name": name, "enabled": True}
+        if has_public_switch:
+            defaults["show_publicly"] = connector in PUBLIC_OK_CONNECTORS
+        _, created = job_source_model.objects.get_or_create(owner=None, connector=connector, board_token=token, defaults=defaults)
         added += int(created)
     return added

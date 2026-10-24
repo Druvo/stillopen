@@ -1,102 +1,308 @@
-{% load static %}
-<!doctype html>
-<html lang="en" data-bs-theme="dark">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ config.site_title }} — {{ config.landing_headline }}</title>
-<meta name="description" content="{{ config.landing_subheadline }}">
-<meta property="og:title" content="{{ config.site_title }}">
-<meta property="og:description" content="{{ config.landing_subheadline }}">
-<link href="{% static 'vendor/tabler/tabler.min.css' %}" rel="stylesheet">
-<style>html{scroll-behavior:smooth}</style>
-</head>
-<body>
-<div class="container-xl">
-  <nav class="d-flex justify-content-between align-items-center py-3">
-    <a class="navbar-brand" href="{% url 'landing' %}">{{ config.site_title }}</a>
-    <div class="btn-list">
-      {% if config.landing_github_url %}<a class="btn btn-link" href="{{ config.landing_github_url }}" rel="noopener">GitHub</a>{% endif %}
-      {% if user.is_authenticated %}<a class="btn btn-primary" href="{% url 'dashboard' %}">Open dashboard</a>
-      {% else %}<a class="btn btn-outline-secondary" href="{% url 'account_login' %}">Sign in</a>{% if config.signup_open %}<a class="btn btn-primary" href="{% url 'account_signup' %}">Create account</a>{% endif %}{% endif %}
-    </div>
-  </nav>
+{% extends "tracker/public_base.html" %}
+{% load charts humanize %}
+{% block title %}{{ config.site_title }}: {{ config.landing_headline }}{% endblock %}
 
-  <div class="row align-items-center py-5">
-    <div class="col-lg-7">
-      <h1 class="display-5 fw-bold" style="letter-spacing:-.02em">{{ config.landing_headline }}</h1>
-      <p class="text-secondary fs-4 mb-4">{{ config.landing_subheadline }}</p>
-      <div class="btn-list">
-        {% if user.is_authenticated %}<a class="btn btn-primary" href="{% url 'dashboard' %}">Open dashboard</a>
-        {% elif config.signup_open %}<a class="btn btn-primary" href="{% url 'account_signup' %}">Create a free account</a>
-        <a class="btn btn-outline-secondary" href="{% url 'account_login' %}">Sign in</a>
-        {% else %}<a class="btn btn-primary" href="{% url 'account_login' %}">Sign in</a>{% endif %}
-        <a class="btn btn-link" href="#features">See what it does</a>
-      </div>
-    </div>
-
-    <div class="col-lg-5" aria-label="Example of the dashboard">
-      <div class="text-secondary text-uppercase" style="font-size:11px;letter-spacing:.06em">Example with made-up data</div>
-      <div class="card mt-2">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-start">
-            <div><strong>Northwind Labs</strong> <span class="text-secondary">— Backend Engineer (.NET)</span></div>
-            <div class="h2 text-success mb-0">86%</div>
-          </div>
-          <div class="progress progress-sm my-2"><div class="progress-bar bg-success" style="width:86%"></div></div>
-          <div class="d-flex gap-2 flex-wrap">
-            <span class="badge bg-blue-lt">Applied</span>
-            <span class="badge bg-green-lt">Open</span>
-            <span class="badge bg-warning-lt">Deadline in 3 days</span>
-          </div>
-          <div class="text-secondary mt-2" style="font-size:14px">Strong C# and SQL fit. Gap: no Kubernetes experience listed.</div>
+{% block main %}
+{# ---------------------------------------------------------------- hero #}
+<section class="so-hero">
+  <div class="container-xl py-5">
+    <div class="row align-items-center g-5 py-lg-4">
+      <div class="col-lg-7">
+        <span class="so-pill mb-3">All-in-one job search</span>
+        <h1 class="display-5 fw-bold mb-3">{{ config.landing_headline }}</h1>
+        <p class="so-lead mb-4">{{ config.landing_subheadline }}</p>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          {% if user.is_authenticated %}<a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Open dashboard</a>
+          {% elif config.signup_open %}<a class="btn btn-primary btn-lg" href="{% url 'account_signup' %}">Create a free account</a>
+          <a class="btn btn-outline-secondary btn-lg" href="{% url 'account_login' %}">Sign in</a>
+          {% else %}<a class="btn btn-primary btn-lg" href="{% url 'account_login' %}">Sign in</a>{% endif %}
+          {% if board_on and stats and stats.total %}<a class="btn btn-link btn-lg" href="{% url 'openings' %}">Browse {{ stats.total|intcomma }} open jobs &rarr;</a>{% endif %}
         </div>
+        <p class="text-secondary mb-0" style="font-size:.95rem">Free &middot; no card &middot; no AI key needed &middot; we never apply for you</p>
       </div>
-      <div class="card mt-2">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-start">
-            <div><strong>Contoso Retail</strong> <span class="text-secondary">— Software Engineer</span></div>
-            <div class="h2 text-warning mb-0">72%</div>
+      <div class="col-lg-5">
+        <div class="text-secondary text-uppercase mb-2" style="font-size:11px;letter-spacing:.08em">What you get after sign-in &middot; example with made-up data</div>
+        <div class="card mb-2"><div class="card-body">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div><strong>Northwind Labs</strong> <span class="text-secondary">&mdash; Backend Engineer (.NET)</span><div class="text-secondary" style="font-size:.9rem">Kuala Lumpur &middot; hybrid</div></div>
+            <div class="h2 mb-0" style="color:var(--so-success)">86%</div>
           </div>
-          <div class="progress progress-sm my-2"><div class="progress-bar bg-warning" style="width:72%"></div></div>
-          <div class="d-flex gap-2 flex-wrap align-items-center">
-            <span class="badge bg-red-lt">Closed</span>
-            <span class="text-secondary" style="font-size:14px">Moved to the closed tab automatically.</span>
+          <div class="progress progress-sm my-2"><div class="progress-bar" style="width:86%;background:var(--so-success)"></div></div>
+          <div class="d-flex gap-2 flex-wrap"><span class="badge bg-green-lt">Fits your places</span><span class="badge bg-blue-lt">CV tailored</span><span class="badge bg-warning-lt">Closes in 3 days</span></div>
+          <div class="text-secondary mt-2" style="font-size:.9rem">9 of your 30 main skills appear in this posting. Gap: no Kubernetes listed on your CV.</div>
+        </div></div>
+        <div class="card"><div class="card-body">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div><strong>Contoso Retail</strong> <span class="text-secondary">&mdash; Software Engineer</span><div class="text-secondary" style="font-size:.9rem">Remote &middot; Worldwide</div></div>
+            <div class="h2 mb-0" style="color:var(--so-warning)">64%</div>
           </div>
-        </div>
+          <div class="progress progress-sm my-2"><div class="progress-bar" style="width:64%;background:var(--so-warning)"></div></div>
+          <span class="badge bg-secondary-lt">Cover letter ready</span>
+        </div></div>
       </div>
     </div>
   </div>
+</section>
 
-  <section id="features" class="py-5 border-top">
-    <h2>Job hunting is tiring. This part doesn't have to be.</h2>
-    <p class="text-secondary mb-4">Here is what it does for you, in plain terms.</p>
-    <div class="row row-cards">
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Tells you what is still open</h3><p class="text-secondary mb-0">Postings close quietly. We look at each link for you, so you stop spending an evening on a job that is already gone.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Shows how well you fit</h3><p class="text-secondary mb-0">Add a job and see, in a sentence and a number, where you are strong and where you are not. Honest, never harsh.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Tailors your CV, truthfully</h3><p class="text-secondary mb-0">We reshape your own CV toward each job. Nothing is invented, every version is kept, and you approve it.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Remembers for you</h3><p class="text-secondary mb-0">What you sent to whom, and a gentle nudge when it is time to follow up. You always press apply yourself.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Knows where you can work</h3><p class="text-secondary mb-0">Remote, on-site or hybrid, in your country or abroad. Tell us once and jobs that don't fit are flagged.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Private to you</h3><p class="text-secondary mb-0">Your jobs, CV and notes are yours alone. You can download or delete everything whenever you like.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Works with or without AI</h3><p class="text-secondary mb-0">A quick keyword check is built in. Connect your own AI later if you want a more careful read.</p></div></div></div>
-      <div class="col-md-6 col-lg-3"><div class="card card-sm"><div class="card-body"><h3 class="h4">Free to start</h3><p class="text-secondary mb-0">An email and a password, then three questions. No card, nothing to install.</p></div></div></div>
+{# ---------------------------------------------------------------- live numbers #}
+{% if stats and stats.total %}
+<section class="so-alt" style="border-bottom:1px solid var(--so-border)" aria-label="StillOpen in numbers">
+  <div class="container-xl py-3">
+    <div class="row g-0 text-center">
+      <div class="col-6 col-md so-stat"><div class="so-num">{{ stats.total|intcomma }}</div><div class="so-cap">open jobs right now</div></div>
+      <div class="col-6 col-md so-stat"><div class="so-num">{{ stats.companies|intcomma }}</div><div class="so-cap">employers</div></div>
+      <div class="col-6 col-md so-stat"><div class="so-num">{{ stats.countries }}</div><div class="so-cap">countries</div></div>
+      <div class="col-6 col-md so-stat"><div class="so-num">{{ stats.sources_searched }}</div><div class="so-cap">sources searched for you</div></div>
+      <div class="col-12 col-md so-stat"><div class="so-num">{% if stats.new_today %}{{ stats.new_today }}{% else %}{{ remote_share }}%{% endif %}</div><div class="so-cap">{% if stats.new_today %}new in the last 24 hours{% else %}of jobs are remote{% endif %}</div></div>
     </div>
-  </section>
+  </div>
+</section>
+{% endif %}
 
-  <section class="py-5 border-top">
-    <h2>Your first ten minutes</h2>
-    <p class="text-secondary mb-4">Nothing to learn. Here is how it goes.</p>
-    <div class="row">
-      <div class="col-md-4 mb-3"><div class="d-flex gap-3"><div class="avatar bg-secondary-lt">1</div><div><strong class="d-block">Tell us what you want</strong><span class="text-secondary" style="font-size:14px">The kind of work, where you live, and your CV. You can skip it and come back.</span></div></div></div>
-      <div class="col-md-4 mb-3"><div class="d-flex gap-3"><div class="avatar bg-secondary-lt">2</div><div><strong class="d-block">Paste a job link</strong><span class="text-secondary" style="font-size:14px">We read the posting and tell you how well it fits and whether it is still open.</span></div></div></div>
-      <div class="col-md-4 mb-3"><div class="d-flex gap-3"><div class="avatar bg-secondary-lt">3</div><div><strong class="d-block">Tailor and apply</strong><span class="text-secondary" style="font-size:14px">Get a CV shaped for that job, apply on the employer's site, and we keep track from there.</span></div></div></div>
+{# ---------------------------------------------------------------- the big idea: one place instead of many #}
+<section class="so-section" id="why">
+  <div class="container-xl">
+    <div class="text-center mb-5">
+      <span class="so-eyebrow">The problem</span>
+      <h2 class="display-6 fw-bold mt-1">You should not have to visit every job site one by one</h2>
+      <p class="so-lead mx-auto">A normal job hunt is dozens of tabs: job boards, company career pages, a spreadsheet, five versions of your CV. {{ config.site_title }} replaces that with one search and one list.</p>
     </div>
-  </section>
+    <div class="row g-4 align-items-stretch">
+      <div class="col-lg-5">
+        <div class="card h-100"><div class="card-body">
+          <h3 class="h4">Before: tab by tab</h3>
+          <p class="text-secondary">Check each site every day. Re-read the same postings. Lose track of what you sent where.</p>
+          <div aria-hidden="true">
+            <span class="so-tab">Job board A</span><span class="so-tab">Job board B</span><span class="so-tab">Company career page</span><span class="so-tab">Another career page</span>
+            <span class="so-tab">Remote jobs site</span><span class="so-tab">Spreadsheet of applications</span><span class="so-tab">cv_final_v7.docx</span><span class="so-tab">cv_final_FINAL.docx</span>
+            <span class="so-tab">Cover letter draft</span><span class="so-tab">Is it still open?</span><span class="so-tab">Follow up?</span>
+          </div>
+        </div></div>
+      </div>
+      <div class="col-lg-2 d-flex align-items-center justify-content-center">
+        <svg width="72" height="72" viewBox="0 0 72 72" role="img" aria-label="becomes" class="d-none d-lg-block"><path d="M12 36h40M40 22l14 14-14 14" fill="none" stroke="var(--tblr-primary)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg width="56" height="56" viewBox="0 0 72 72" role="img" aria-label="becomes" class="d-lg-none"><path d="M36 10v40M22 38l14 14 14-14" fill="none" stroke="var(--tblr-primary)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="col-lg-5">
+        <div class="card h-100" style="border:2px solid var(--tblr-primary)"><div class="card-body">
+          <h3 class="h4">After: one place</h3>
+          <p class="text-secondary">One search across {% if stats %}{{ stats.sources_searched }}{% else %}many{% endif %} sources, filtered to where you can work and ranked against your CV.</p>
+          <ul class="list-unstyled mb-0">
+            <li class="mb-2"><span class="so-yes">&#10003;</span> Jobs from every source in one ranked list</li>
+            <li class="mb-2"><span class="so-yes">&#10003;</span> Only roles that fit your places and skills</li>
+            <li class="mb-2"><span class="so-yes">&#10003;</span> A CV and cover letter tailored to each job, honestly</li>
+            <li class="mb-2"><span class="so-yes">&#10003;</span> Every application, interview and offer tracked</li>
+            <li><span class="so-yes">&#10003;</span> Found one elsewhere? Paste the link and it joins the list</li>
+          </ul>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
 
-  <footer class="d-flex justify-content-between flex-wrap gap-2 py-4 border-top text-secondary">
-    <span>{{ config.site_title }}</span>
-    <span><a href="{% url 'privacy' %}">Privacy</a> · <a href="{% url 'terms' %}">Terms</a> · {% if user.is_authenticated %}<a href="{% url 'dashboard' %}">Dashboard</a>{% else %}<a href="{% url 'account_login' %}">Sign in</a>{% endif %}</span>
-  </footer>
-</div>
-</body>
-</html>
+{# ---------------------------------------------------------------- latest jobs (public, real) #}
+{% if latest %}
+<section class="so-section so-alt" aria-labelledby="latest-h">
+  <div class="container-xl">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-4">
+      <div><span class="so-eyebrow">Live from the search</span><h2 class="fw-bold mt-1 mb-0" id="latest-h">Fresh openings, right now</h2></div>
+      <a class="btn btn-outline-primary" href="{% url 'openings' %}">See all {{ stats.total|intcomma }} jobs &rarr;</a>
+    </div>
+    <div class="row g-3">
+      {% for p in latest %}
+      <div class="col-md-6 col-lg-3">
+        <article class="card so-job h-100"><div class="card-body position-relative">
+          <h3 class="h5 mb-1"><a class="stretched-link" href="{% url 'opening_detail_bare' p.pk %}">{{ p.title|truncatechars:70 }}</a></h3>
+          <div class="text-secondary">{{ p.company }}</div>
+          <div class="mt-2 d-flex flex-wrap gap-1"><span class="badge bg-secondary-lt">{% if p.location %}{{ p.location|truncatechars:34 }}{% elif p.remote %}Remote{% else %}Location not stated{% endif %}</span>{% if p.remote %}<span class="badge bg-green-lt">Remote</span>{% endif %}</div>
+        </div></article>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="text-secondary mt-3 mb-0" style="font-size:.9rem">Create a free account to see how well each one fits <em>you</em>, with your CV, places and skills.</p>
+  </div>
+</section>
+{% endif %}
+
+{# ---------------------------------------------------------------- how it works #}
+<section class="so-section" id="how">
+  <div class="container-xl">
+    <div class="text-center mb-5">
+      <span class="so-eyebrow">How it works</span>
+      <h2 class="display-6 fw-bold mt-1">Your first ten minutes</h2>
+      <p class="so-lead mx-auto">Four steps, nothing to install. Everything in step 2 and 3 happens by itself.</p>
+    </div>
+    <div class="row g-4">
+      <div class="col-md-6 col-lg-3"><div class="card so-step"><div class="card-body">
+        <span class="so-badge mb-3">1</span><h3 class="h4">Tell us what you want</h3>
+        <p class="text-secondary mb-0">The roles you are after, where you could work (your country, remote, other countries) and your CV. Three questions, and you can skip them.</p>
+      </div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card so-step"><div class="card-body">
+        <span class="so-badge mb-3">2</span><h3 class="h4">We search everywhere</h3>
+        <p class="text-secondary mb-0">One search reads {% if stats %}{{ stats.sources_searched }}{% else %}many{% endif %} company career pages and job boards at once. The first jobs appear in under half a minute.</p>
+      </div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card so-step"><div class="card-body">
+        <span class="so-badge mb-3">3</span><h3 class="h4">We keep what fits</h3>
+        <p class="text-secondary mb-0">Jobs outside your places are dropped. The rest are scored against your own skills, best first. No AI is needed, and none is used unless you connect one.</p>
+      </div></div></div>
+      <div class="col-md-6 col-lg-3"><div class="card so-step"><div class="card-body">
+        <span class="so-badge mb-3">4</span><h3 class="h4">You tailor and apply</h3>
+        <p class="text-secondary mb-0">Get a CV and cover letter shaped for the job, apply on the employer's site yourself, and we track the follow-ups, interviews and offers.</p>
+      </div></div></div>
+    </div>
+
+    <div class="row g-4 mt-4 align-items-stretch">
+      <div class="col-lg-6">
+        <div class="card h-100"><div class="card-body">
+          <h3 class="h4">How a search narrows the list</h3>
+          <p class="text-secondary">One real search for a backend engineer who could work in Bangladesh, Malaysia or the Gulf:</p>
+          <div class="so-funnel-row"><div class="so-funnel-bar" style="width:100%">23,935</div><span class="text-secondary">openings read</span></div>
+          <div class="so-funnel-row"><div class="so-funnel-bar" style="width:34%;background:var(--so-c2)">3,387</div><span class="text-secondary">fit the roles or skills</span></div>
+          <div class="so-funnel-row"><div class="so-funnel-bar" style="width:15%;background:var(--so-c3)">810</div><span class="text-secondary">left out: wrong place</span></div>
+          <div class="so-funnel-row"><div class="so-funnel-bar" style="width:8%;background:var(--so-c4)">40</div><span class="text-secondary">shown first, best match on top</span></div>
+          <p class="text-secondary mb-0 mt-3" style="font-size:.85rem">Numbers from an actual run; yours depends on your roles and places.</p>
+        </div></div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card h-100"><div class="card-body">
+          <h3 class="h4">How "fit" is worked out, honestly</h3>
+          <p class="text-secondary">We count how many of <em>your</em> main skills a posting mentions, ignoring filler words every posting repeats.</p>
+          <div class="mb-2"><div class="text-secondary" style="font-size:.85rem">Skills from your CV</div>
+            <span class="so-chip so-hit">C#</span><span class="so-chip so-hit">SQL Server</span><span class="so-chip so-hit">Docker</span><span class="so-chip">Kubernetes</span><span class="so-chip so-hit">REST APIs</span><span class="so-chip">AWS</span></div>
+          <div class="mb-3"><div class="text-secondary" style="font-size:.85rem">Words in the job posting</div>
+            <span class="so-chip so-hit">C#</span><span class="so-chip so-hit">SQL Server</span><span class="so-chip so-hit">Docker</span><span class="so-chip so-hit">REST APIs</span><span class="so-chip">Terraform</span><span class="so-chip">payments</span></div>
+          <p class="mb-1"><strong>4 of 6 skills match &rarr; about 67%.</strong> Green is a match; grey is a gap worth knowing.</p>
+          <p class="text-secondary mb-0" style="font-size:.85rem">It is a quick, honest estimate, not a verdict on you. Connect your own AI later for a more careful read.</p>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ---------------------------------------------------------------- live market charts #}
+{% if stats and stats.total %}
+<section class="so-section so-alt" aria-labelledby="market-h">
+  <div class="container-xl">
+    <div class="text-center mb-5">
+      <span class="so-eyebrow">Live data</span>
+      <h2 class="display-6 fw-bold mt-1" id="market-h">What is open right now</h2>
+      <p class="so-lead mx-auto">Counts of the openings currently listed here, updated every few hours.</p>
+    </div>
+    <div class="row g-4">
+      <div class="col-lg-7"><div class="card h-100"><div class="card-body">
+        <h3 class="h4">Where the jobs are</h3>
+        {% hbar_chart country_rows "Open jobs by country" "Bar chart of open jobs for the countries with the most openings." %}
+      </div></div></div>
+      <div class="col-lg-5"><div class="card h-100"><div class="card-body">
+        <h3 class="h4">Where they come from</h3>
+        <div class="d-flex align-items-center gap-4 flex-wrap">
+          <div style="width:190px">{% donut_chart kinds "Open jobs by kind of source" "Share of openings from employer career pages and from remote job boards." %}</div>
+          <ul class="list-unstyled mb-0">
+            {% for label, n in kinds %}<li class="mb-2"><span class="so-dot so-c{{ forloop.counter }}"></span>{{ label }} <strong>{{ n|intcomma }}</strong></li>{% endfor %}
+            <li class="text-secondary" style="font-size:.9rem">{{ remote_share }}% of all jobs are remote</li>
+          </ul>
+        </div>
+      </div></div></div>
+      {% if day_rows %}
+      <div class="col-12"><div class="card"><div class="card-body">
+        <h3 class="h4">New openings, last 14 days</h3>
+        {% column_chart day_rows "New openings per day" "Column chart of how many new openings were first seen on each of the last fourteen days." %}
+      </div></div></div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{# ---------------------------------------------------------------- winning points #}
+<section class="so-section" id="features">
+  <div class="container-xl">
+    <div class="text-center mb-5">
+      <span class="so-eyebrow">Why people use it</span>
+      <h2 class="display-6 fw-bold mt-1">Everything a job hunt needs, in one place</h2>
+    </div>
+    <div class="row g-4">
+      {% for icon, title, text in features %}
+      <div class="col-md-6 col-lg-4"><div class="card so-feature h-100"><div class="card-body">
+        <span class="so-icon" aria-hidden="true">{{ icon }}</span>
+        <h3 class="h4">{{ title }}</h3><p class="text-secondary mb-0">{{ text }}</p>
+      </div></div></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{# ---------------------------------------------------------------- comparison #}
+<section class="so-section so-alt" aria-labelledby="compare-h">
+  <div class="container-xl">
+    <div class="text-center mb-4"><span class="so-eyebrow">Compared</span><h2 class="display-6 fw-bold mt-1" id="compare-h">One tool instead of a pile of tabs</h2></div>
+    <div class="table-responsive"><table class="table so-compare card-table">
+      <thead><tr><th scope="col"></th><th scope="col" class="text-center">Doing it by hand</th><th scope="col" class="text-center">A spreadsheet or notes app</th><th scope="col" class="text-center so-us">{{ config.site_title }}</th></tr></thead>
+      <tbody>
+        {% for row, hand, sheet in comparison %}
+        <tr><th scope="row" class="fw-normal">{{ row }}</th>
+          <td class="text-center {% if hand %}so-yes{% else %}so-no{% endif %}">{% if hand %}&#10003;<span class="visually-hidden"> yes</span>{% else %}&ndash;<span class="visually-hidden"> no</span>{% endif %}</td>
+          <td class="text-center {% if sheet %}so-yes{% else %}so-no{% endif %}">{% if sheet %}&#10003;<span class="visually-hidden"> yes</span>{% else %}&ndash;<span class="visually-hidden"> no</span>{% endif %}</td>
+          <td class="text-center so-us so-yes">&#10003;<span class="visually-hidden"> yes</span></td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+{# ---------------------------------------------------------------- trust #}
+<section class="so-section" aria-labelledby="trust-h">
+  <div class="container-xl">
+    <div class="row g-4 align-items-center">
+      <div class="col-lg-6">
+        <span class="so-eyebrow">Trust</span>
+        <h2 class="fw-bold mt-1" id="trust-h">Private to you, honest about its limits</h2>
+        <ul class="list-unstyled so-lead mb-0" style="font-size:1.05rem">
+          <li class="mb-2"><span class="so-yes">&#10003;</span> Your CV, jobs and notes are visible only to you. Download or delete all of it any time.</li>
+          <li class="mb-2"><span class="so-yes">&#10003;</span> No ads, no tracking cookies, and no third-party scripts on any page.</li>
+          <li class="mb-2"><span class="so-yes">&#10003;</span> We never apply for you or message an employer. You press apply.</li>
+          <li class="mb-2"><span class="so-yes">&#10003;</span> Tailored CVs never invent anything: unsupported claims are flagged and locked until you approve them.</li>
+          <li><span class="so-yes">&#10003;</span> Match scores are estimates and we say so. Always check the posting yourself.</li>
+        </ul>
+      </div>
+      <div class="col-lg-6">
+        <div class="card"><div class="card-body">
+          <h3 class="h4">Where the jobs come from</h3>
+          <p class="text-secondary">Only public, openly published sources. Each job links back to its original.</p>
+          <ul class="mb-3">
+            <li>Employers' own hiring pages (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee)</li>
+            {% for name, url in credits %}<li><a href="{{ url }}" rel="noopener">{{ name }}</a></li>{% endfor %}
+            <li>Anything you add: paste a link from any site and it joins your list</li>
+          </ul>
+          <p class="text-secondary mb-0" style="font-size:.85rem">Job posts belong to their employers and sources. Sites that do not allow automated reading are never scraped.</p>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ---------------------------------------------------------------- FAQ #}
+<section class="so-section so-alt" id="faq">
+  <div class="container-xl" style="max-width:860px">
+    <div class="text-center mb-4"><span class="so-eyebrow">Questions</span><h2 class="display-6 fw-bold mt-1">Everything you need to know</h2></div>
+    {% for question, answer in faq %}
+    <details class="so-faq"><summary>{{ question }}</summary><p>{{ answer }}</p></details>
+    {% endfor %}
+  </div>
+</section>
+
+{# ---------------------------------------------------------------- final call #}
+<section class="so-hero">
+  <div class="container-xl py-5 text-center">
+    <h2 class="display-6 fw-bold">Stop opening tabs. Start applying.</h2>
+    <p class="so-lead mx-auto">Create your free account, answer three questions, and your first matches appear in about a minute.</p>
+    <div class="d-flex justify-content-center flex-wrap gap-2">
+      {% if user.is_authenticated %}<a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Open dashboard</a>
+      {% elif config.signup_open %}<a class="btn btn-primary btn-lg" href="{% url 'account_signup' %}">Create a free account</a>
+      <a class="btn btn-outline-secondary btn-lg" href="{% url 'account_login' %}">Sign in</a>
+      {% else %}<a class="btn btn-primary btn-lg" href="{% url 'account_login' %}">Sign in</a>{% endif %}
+      {% if board_on and stats and stats.total %}<a class="btn btn-link btn-lg" href="{% url 'openings' %}">Browse the jobs first</a>{% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

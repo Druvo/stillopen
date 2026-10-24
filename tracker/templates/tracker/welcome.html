@@ -24,4 +24,12 @@
 <form id="skip-form" method="post" action="{% url 'welcome_skip' %}">{% csrf_token %}</form>
 <p class="text-secondary mt-3" style="font-size:13px">Your answers stay private to you. Nothing is ever sent to an employer, and we never apply for you.</p>
 </div></div>
+<script>
+// Pressing the button shows that something is happening, and stops a second press from sending the form twice.
+document.querySelectorAll('form[enctype="multipart/form-data"]').forEach(form => form.addEventListener('submit', () => {
+  const button = form.querySelector('button[type="submit"].btn-primary');
+  if (!button) return;
+  setTimeout(() => { button.disabled = true; button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Finding jobs for you...'; }, 0);
+}));
+</script>
 {% endblock %}
