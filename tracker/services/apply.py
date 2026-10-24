@@ -40,7 +40,7 @@ def checklist(app: Application, config: SiteConfig, versions: list[CVVersion]) -
     elif app.live_state == "active":
         items.append({"level": "ok", "text": "The posting was open the last time it was checked."})
     else:
-        items.append({"level": "info", "text": "Not checked yet whether the posting is still open. Use Check open/closed on the dashboard."})
+        items.append({"level": "info", "text": "Not checked yet whether the posting is still open. Press “Are they still open?” on the dashboard."})
     days = app.days_left()
     if days is not None:
         if days < 0:

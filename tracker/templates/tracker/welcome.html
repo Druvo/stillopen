@@ -2,7 +2,7 @@
 {% load form_tags %}
 {% block title %}Welcome{% endblock %}
 {% block page_title %}Welcome. Let's get you started.{% endblock %}
-{% block page_subtitle %}Three quick questions so the first job you add is judged against you. You can skip this and fill it in later.{% endblock %}
+{% block page_subtitle %}A few quick questions so we can find jobs that fit you, and where you could really do them. You can skip this and fill it in later.{% endblock %}
 {% block content %}
 <div class="row"><div class="col-lg-8">
 <form method="post" enctype="multipart/form-data" class="card card-body">
@@ -17,7 +17,7 @@
   </div>
   {% endfor %}
   <div class="d-flex gap-2 align-items-center">
-    <button type="submit" class="btn btn-primary">Save and add my first job</button>
+    <button type="submit" class="btn btn-primary">Find jobs for me</button>
     <button type="submit" form="skip-form" class="btn btn-link text-secondary">Skip for now</button>
   </div>
 </form>

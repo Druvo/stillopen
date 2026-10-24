@@ -27,7 +27,13 @@ def person(name="rina", roles="Backend Engineer", cv=CV, **extra):
     return u
 
 
-def job(title="Backend Engineer", url="https://x.test/1", location="Remote", company="Acme", description="Build REST APIs in C# on SQL Server with Docker."):
+BIG = ("Build REST APIs in C# on SQL Server with Docker and Kubernetes for payment systems, with microservices, "
+       "deployment pipelines, monitoring, testing and reliability work across the platform.")
+DULL = ("Our office has a kitchen and a view and a lovely rooftop garden where staff share lunches on Fridays, "
+        "plus yoga mornings, bicycle parking and quarterly picnics for every colleague.")
+
+
+def job(title="Backend Engineer", url="https://x.test/1", location="Remote", company="Acme", description=BIG):
     return {"title": title, "url": url, "location": location, "company": company, "description": description}
 
 
@@ -105,15 +111,16 @@ class EngineRuns(TestCase):
         self.assertEqual(run.added, 1)
 
     def test_cap_keeps_the_best_matches_first(self):
-        weak = job(title="Backend Engineer", url="https://x.test/weak", description="Our office has a kitchen and a view.")
-        strong = job(title="Backend Engineer", url="https://x.test/strong", company="Strongco", description="C# SQL Server REST APIs Docker Kubernetes payment systems.")
+        weak = job(title="Backend Engineer", url="https://x.test/weak", description=DULL)
+        strong = job(title="Backend Engineer", url="https://x.test/strong", company="Strongco", description=BIG)
         run = self.run_scan([weak, strong], STILLOPEN_SCAN_MAX_NEW=1)
         self.assertEqual(Application.objects.get(owner=self.u).url, "https://x.test/strong")
-        self.assertIn("best new matches", run.error)
+        self.assertIn("best new matches", run.note)
+        self.assertEqual(run.error, "")  # information, not a failure
 
     def test_role_matches_outrank_skill_only_matches(self):
-        titled = job(title="Backend Engineer", url="https://x.test/t", company="T", description="Kitchen.")
-        skills = job(title="Platform Developer", url="https://x.test/s", company="S", description="C# SQL Server REST APIs Docker Kubernetes payment systems.")
+        titled = job(title="Backend Engineer", url="https://x.test/t", company="T", description=DULL)
+        skills = job(title="Platform Developer", url="https://x.test/s", company="S", description=BIG)
         self.run_scan([skills, titled], STILLOPEN_SCAN_MAX_NEW=1, STILLOPEN_SKILL_MATCH_MIN_OVERLAP=3)
         self.assertEqual(Application.objects.get(owner=self.u).url, "https://x.test/t")
 
@@ -346,8 +353,8 @@ class DuplicateRules(TestCase):
 
     def test_the_cap_ranks_across_every_source_not_just_the_first(self):
         JobSource.objects.create(name="Zed", connector="lever", board_token="zed")
-        first = [job(url=f"https://a.test/{i}", company="Agoda", title="Backend Engineer", description="Kitchen and a view.") for i in range(3)]
-        best = [job(url="https://z.test/1", company="Zed", title="Backend Engineer", description="C# SQL Server REST APIs Docker Kubernetes payment systems.")]
+        first = [job(url=f"https://a.test/{i}", company="Agoda", title="Backend Engineer", location=f"City {i}", description=DULL) for i in range(3)]
+        best = [job(url="https://z.test/1", company="Zed", title="Backend Engineer", description=BIG)]
         with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=first), \
                 mock.patch("tracker.services.scan.fetch_lever", return_value=best), override_settings(STILLOPEN_SCAN_MAX_NEW=1):
             run = scan.start_run(self.u, background=False)
@@ -408,8 +415,8 @@ class BulkSightingsAndRanking(TestCase):
 
     def test_clear_fits_outrank_unknown_ones_under_the_cap(self):
         SearchArea.objects.create(owner=self.u, place="Malaysia", allow_onsite=True)
-        unknown = job(url="https://x.test/u", company="Unknownco", location="", description="Backend work. C# SQL Server REST APIs Docker Kubernetes payment systems.")
-        clear = job(url="https://x.test/c", company="Clearco", location="Kuala Lumpur, Malaysia", description="On-site in Kuala Lumpur. Kitchen and a view.")
+        unknown = job(url="https://x.test/u", company="Unknownco", location="", description=BIG)
+        clear = job(url="https://x.test/c", company="Clearco", location="Kuala Lumpur, Malaysia", description="On-site in Kuala Lumpur. " + DULL)
         with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=[unknown, clear]), override_settings(STILLOPEN_SCAN_MAX_NEW=1):
             scan.start_run(self.u, background=False)
         self.assertEqual(Application.objects.get(owner=self.u).company, "Clearco")

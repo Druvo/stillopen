@@ -21,7 +21,7 @@ def greeting(user, now) -> str:
     return f"{part}, {name}" if name else part
 
 
-def next_step(profile, cards) -> dict | None:
+def next_step(profile, cards, has_areas: bool = True, searching: bool = False) -> dict | None:
     """The single most useful next move, as {headline, body, label, url}; None when there is nothing to suggest."""
     if not profile.is_complete:
         missing = " and ".join(profile.missing_fields)
@@ -29,6 +29,18 @@ def next_step(profile, cards) -> dict | None:
             "headline": "Finish your profile so matches mean something",
             "body": f"We still need {missing}. It takes a minute, and every job you add is judged against it.",
             "label": "Tell us about you", "url": reverse("profile") + "?welcome=1",
+        }
+    if searching and not cards:
+        return {
+            "headline": "We are searching for jobs that fit you",
+            "body": "It reads about a hundred job sources, so it takes a minute or two. Jobs will appear below; you do not need to do anything.",
+            "label": "", "url": "",
+        }
+    if not has_areas:
+        return {
+            "headline": "Tell us where you would work",
+            "body": "Until we know, you will see jobs from everywhere, including places you would not move to. A minute in your profile fixes that.",
+            "label": "Add places", "url": reverse("profile") + "#areas",
         }
     live = [c for c in cards if not c["app"].status.is_terminal and c["app"].live_state != "expired"]
     if not cards:

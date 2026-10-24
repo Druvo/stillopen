@@ -32,7 +32,7 @@
     <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>{{ form.website }}
   </div>
   {{ redirect_field }}
-  <p class="text-secondary" style="font-size:12.5px">By creating an account you agree to the <a href="{% url 'terms' %}">terms</a> and <a href="{% url 'privacy' %}">privacy policy</a>. We will email you a link to confirm your address, one tap and you are in.</p>
+  <p class="text-secondary" style="font-size:12.5px">By creating an account you agree to the <a href="{% url 'terms' %}">terms</a> and <a href="{% url 'privacy' %}">privacy policy</a>.{% if require_email_confirmation %} We will email you a link to confirm your address, one tap and you are in.{% endif %}</p>
   <div class="form-footer"><button type="submit" class="btn btn-primary w-100">Create account</button></div>
 </form>
 <p class="text-secondary mt-3 mb-0">Already registered? <a href="{% url 'account_login' %}">Sign in</a></p>

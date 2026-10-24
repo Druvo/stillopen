@@ -209,15 +209,33 @@ class ProfileForm(forms.ModelForm):
 class WelcomeForm(ProfileForm):
     """The three things worth asking a new person: what they want, where they live, their CV."""
 
+    open_remote = forms.BooleanField(
+        required=False, initial=True, label="I am happy to work remotely, from anywhere",
+        help_text="Untick if you only want work in a place you name below.",
+    )
+    other_places = forms.CharField(
+        required=False, max_length=600, label="Anywhere else you would work in person?",
+        widget=forms.Textarea(attrs={"rows": 2, "placeholder": "Malaysia\nGulf"}),
+        help_text="A country like Malaysia, or a region like Gulf or Europe, one per line. Leave it empty to look only where you live, plus remote.",
+    )
+
     class Meta(ProfileForm.Meta):
         fields = ["target_roles", "home_country", "profile_cv"]
         labels = {"profile_cv": "Or paste your CV here"}
+
+    def clean_other_places(self):
+        lines = [line.strip() for line in (self.cleaned_data.get("other_places") or "").splitlines() if line.strip()]
+        if len(lines) > 8:
+            raise forms.ValidationError("That is a lot of places. Name up to 8 here; you can add more in your profile later.")
+        if any(len(line) > 80 for line in lines):
+            raise forms.ValidationError("Each place should be a short name, one per line.")
+        return "\n".join(lines)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for name in ("employment_types", "seniority_levels"):
             self.fields.pop(name, None)
-        self.order_fields(["target_roles", "home_country", "cv_file", "profile_cv"])
+        self.order_fields(["target_roles", "home_country", "open_remote", "other_places", "cv_file", "profile_cv"])
         self.fields["target_roles"].label = "What kind of work are you looking for?"
         self.fields["target_roles"].help_text = "One role per line. It is fine to be rough, you can change it any time."
         self.fields["home_country"].label = "Where do you live?"
@@ -227,6 +245,26 @@ class WelcomeForm(ProfileForm):
 
 
 MAX_AREAS = 20
+
+
+def create_default_areas(user, home_country: str, open_remote: bool, other_places: str) -> int:
+    """Turn the welcome answers into visible, editable search areas. Only for someone who has none yet, so a person's own
+    careful setup is never replaced. Where they live: any kind of work. Remote anywhere: remote only. Other places: in person
+    or hybrid. Returns how many rows were made."""
+    if user.search_areas.exists():
+        return 0
+    rows = []
+    if home_country:
+        rows.append({"place": geo.country_name(home_country), "allow_remote": True, "allow_hybrid": True, "allow_onsite": True})
+    if open_remote:
+        rows.append({"place": "Anywhere", "allow_remote": True})
+    for line in (other_places or "").splitlines():
+        line = line.strip()
+        if line and line.lower() not in {r["place"].lower() for r in rows}:
+            rows.append({"place": line[:80], "allow_remote": True, "allow_hybrid": True, "allow_onsite": True})
+    for position, row in enumerate(rows[:MAX_AREAS]):
+        SearchArea.objects.create(owner=user, order=position, **row)
+    return len(rows[:MAX_AREAS])
 
 
 class SearchAreaForm(forms.ModelForm):

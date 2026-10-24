@@ -1085,6 +1085,7 @@ class ScanRun(models.Model):
     found = models.PositiveIntegerField(default=0, help_text="Postings seen across all sources.")
     added = models.PositiveIntegerField(default=0, help_text="New applications created.")
     added_ids = models.JSONField(default=list, blank=True, help_text="Primary keys of the applications this run created.")
+    note = models.TextField(blank=True, help_text="Plain information about the run (for example that only the best matches were added). Not an error.")
     error = models.TextField(blank=True)
 
     class Meta:

@@ -27,7 +27,7 @@ Without Docker: `pip install -r requirements-hosting.txt`, set `DATABASE_URL=pos
 
 ## Open registration
 
-1. Configure SMTP (`EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`). Confirmation links are emailed; without SMTP they are only printed to the server log.
+1. Configure SMTP (`EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`). Confirmation links are emailed. **Without SMTP, email confirmation is switched off** (a link that is only printed to the server log would lock every new person out), so people are signed straight in and admins see a warning on their dashboard; set `STILLOPEN_REQUIRE_EMAIL_CONFIRMATION=1` to insist anyway. Open registration without confirmed addresses invites fake accounts, so configure email before a public launch.
 2. In the admin, Site configuration > Registration, choose **Open**.
 3. Optional: add Google sign-in (see the README). With sign-up Open, any Google account with a verified email can register.
 

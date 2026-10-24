@@ -170,7 +170,10 @@ def dashboard(request):
         "scan_run": scan.current_run(request.user),
         "can_scan": JobSource.for_user(request.user, enabled=True).exists(),
         "greeting": guide.greeting(request.user, timezone.localtime()),
-        "next_step": guide.next_step(profile, [c for t in tab_list for c in t["cards"]]),
+        "next_step": guide.next_step(
+            profile, [c for t in tab_list for c in t["cards"]], has_areas=bool(areas),
+            searching=bool(scan.current_run(request.user) and scan.current_run(request.user).running),
+        ),
     }
     return render(request, "tracker/dashboard.html", context)
 
@@ -445,6 +448,7 @@ def welcome(request):
     if request.method == "POST" and form.is_valid():
         form.save()
         _save_cv_history(request, obj, form)
+        forms.create_default_areas(request.user, obj.home_country, form.cleaned_data.get("open_remote", False), form.cleaned_data.get("other_places", ""))
         obj.onboarding_done = True
         obj.save(update_fields=["onboarding_done"])
         messages.success(request, "Lovely, that helps. We are searching for jobs that fit you now; they will appear here in a minute.")

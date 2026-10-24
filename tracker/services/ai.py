@@ -454,14 +454,22 @@ BACKENDS = {
 
 # --- free fallback ------------------------------------------------------------------------------
 
-def keyword_match(description: str, cv: str) -> dict:
-    """Share of the posting's most repeated terms that also appear in the CV. Rough, but free and deterministic."""
-    wanted = [w for w, _ in Counter(_terms(description)).most_common(40)]
+def keyword_match(description: str, cv: str, ignore=frozenset()) -> dict:
+    """Share of the posting's most repeated terms that also appear in the CV. Rough, but free and deterministic.
+
+    `ignore` is filler that every posting repeats ("software", "systems", "build"); leaving it out lets the 40 terms
+    be the ones that actually distinguish this job. A search measures it from the thousands of postings it has just
+    read; without one the plain count is used."""
+    ranked = [w for w, _ in Counter(_terms(description)).most_common(120)]
+    distinctive = [w for w in ranked if w not in ignore][:40]
+    wanted = distinctive or ranked[:40]  # nothing distinctive left: compare on everything
     if not wanted:
         raise AIError("This job has no description we can read yet. Paste the posting text into the job, then try again.")
     if not cv.strip():
         raise AIError("Add your CV on your Profile page first, so there is something to compare the job with.")
     have = set(_terms(cv))
+    if ignore and distinctive:
+        return _skill_coverage(description, cv, ignore, distinctive, have)
     hits = [w for w in wanted if w in have]
     missing = [w for w in wanted if w not in have]
     percent = round(100 * len(hits) / len(wanted))
@@ -470,6 +478,28 @@ def keyword_match(description: str, cv: str) -> dict:
         "verdict": "Looks promising" if percent >= 70 else "Worth a look" if percent >= 50 else "Take a closer look",
         "summary": (
             f"A quick keyword check: your CV mentions {len(hits)} of the {len(wanted)} things this posting talks about most. "
+            "It is a rough guide, not a verdict on you."
+        ),
+        "strengths": hits[:5],
+        "gaps": [f"Your CV doesn't mention: {w}" for w in missing[:5]],
+        "risk": "",
+        "next_action": "For a more careful read of how you fit, connect an AI in AI settings.",
+    }
+
+
+def _skill_coverage(description: str, cv: str, ignore, distinctive: list[str], have: set[str]) -> dict:
+    """With filler removed, a better question than "how much of the posting does the CV echo" (a posting repeats plenty no
+    CV would contain) is "how many of THIS person's main skills does the posting mention". Same free, deterministic idea."""
+    mine = [w for w, _ in Counter(_terms(cv)).most_common(80) if w not in ignore][:30]
+    posting = set(_terms(description))
+    hits = [w for w in mine if w in posting]
+    percent = min(100, round(100 * len(hits) / (min(len(mine), 12) or 1)))
+    missing = [w for w in distinctive if w not in have]
+    return {
+        "match_percent": percent,
+        "verdict": "Looks promising" if percent >= 70 else "Worth a look" if percent >= 50 else "Take a closer look",
+        "summary": (
+            f"A quick keyword check: this posting mentions {len(hits)} of your {len(mine)} main skills and topics. "
             "It is a rough guide, not a verdict on you."
         ),
         "strengths": hits[:5],
@@ -539,7 +569,10 @@ def evaluate_application(app: Application, config: SiteConfig | None = None) -> 
                 "Already scored (career-ops, AI or by hand). The free keyword match won't overwrite that: "
                 "turn on an AI provider to re-evaluate, or clear the score first."
             )
-        result, method, note = keyword_match(app.description, knowledge.all_candidate_text(config, app.owner)), "keywords", ""
+        from django.core.cache import cache
+
+        result = keyword_match(app.description, knowledge.all_candidate_text(config, app.owner), ignore=cache.get("scan-common-terms") or frozenset())
+        method, note = "keywords", ""
     else:
         backend = BACKENDS.get(config.ai_provider)
         if backend is None:

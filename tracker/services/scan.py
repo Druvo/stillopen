@@ -42,7 +42,8 @@ import threading
 from collections import Counter
 from datetime import timedelta
 
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeout
 
 from django.conf import settings
 from django.core.cache import cache
@@ -189,6 +190,11 @@ def _matches(title: str, roles: list[str]) -> bool:
     return False
 
 
+def _tidy_place(text: str) -> str:
+    """'Beijing, , China' (an empty region in the middle) becomes 'Beijing, China'."""
+    return ", ".join(part.strip() for part in (text or "").split(",") if part.strip())
+
+
 def _blurb(raw_html: str, limit: int = 2000) -> str:
     """Plain text from an HTML description field, trimmed -- only ever used for skill-term overlap, never
     stored or shown, so a few KB of context is plenty and keeps per-posting parsing cheap."""
@@ -260,7 +266,7 @@ def fetch_smartrecruiters(token: str) -> list[dict]:
             out.append({
                 "title": j.get("name", ""),
                 "url": f"https://jobs.smartrecruiters.com/{token}/{posting_id}" if posting_id else "",
-                "location": (j.get("location") or {}).get("fullLocation", ""),
+                "location": _tidy_place((j.get("location") or {}).get("fullLocation", "")),
             })
         offset += len(page)
         if not page or offset >= min(int(data.get("totalFound") or 0), SMARTRECRUITERS_MAX):
@@ -558,7 +564,32 @@ def searchable_sources(owner):
     return qs
 
 
-def _prefetch(sources: list[JobSource], roles: list[str] | None = None, jooble_key: str = "") -> dict[int, object]:
+GENERIC_MIN_CORPUS = 200
+
+
+def _common_terms(fetched: dict, share: float, only: set[str] | None = None) -> set[str]:
+    """Words so common across everything just read that they say nothing about any one job ("software", "systems",
+    "build", "engineering"). Measured on the postings themselves, so it adapts to whatever the sources hold. With `only`,
+    just those words are counted (much cheaper)."""
+    total, counts = 0, Counter()
+    for postings in fetched.values():
+        if isinstance(postings, Exception):
+            continue
+        for p in postings:
+            total += 1
+            words = set(_terms(f"{p.get('title', '')} {p.get('description', '')}"))
+            counts.update(words & only if only is not None else words)
+    if total < GENERIC_MIN_CORPUS:  # too few postings for "common" to mean anything
+        return set()
+    return {term for term, n in counts.items() if n / total > share}
+
+
+def _generic_terms(fetched: dict, skill_terms: set[str], share: float) -> set[str]:
+    """Of the person's own skill words, the ones that are generic filler across everything just read."""
+    return _common_terms(fetched, share, only=skill_terms) if skill_terms else set()
+
+
+def _prefetch(sources: list[JobSource], roles: list[str] | None = None, jooble_key: str = "", on_progress=None) -> dict[int, object]:
     """Read every source at once (they are different hosts, so this is polite and about 8x faster than one by one).
     Maps source id to its postings, or to the exception that stopped it."""
     def one(source):
@@ -568,9 +599,16 @@ def _prefetch(sources: list[JobSource], roles: list[str] | None = None, jooble_k
             return source.pk, exc
     pool = ThreadPoolExecutor(max_workers=max(1, settings.STILLOPEN_SCAN_FETCH_THREADS))
     futures = {pool.submit(one, source): source for source in sources}
-    done, pending = wait(futures, timeout=settings.STILLOPEN_SCAN_DEADLINE_SECONDS)
-    results = dict(f.result() for f in done)
-    for future in pending:
+    results = {}
+    try:
+        for future in as_completed(futures, timeout=settings.STILLOPEN_SCAN_DEADLINE_SECONDS):
+            pk, value = future.result()
+            results[pk] = value
+            if on_progress:
+                on_progress(len(results))  # the person watches a counter move instead of a dead "0/118"
+    except FuturesTimeout:
+        pass
+    for future in (f for f in futures if futures[f].pk not in results):
         # One slow host must not hold up everyone's search. Its request carries on in the background and, when it
         # finishes, lands in the shared cache, so the next search has it ready.
         results[futures[future].pk] = FetchError("Took too long this time; it is tried again on your next search.")
@@ -597,7 +635,15 @@ def _worker(run_id: int):
         new_cap = max(0, settings.STILLOPEN_SCAN_MAX_NEW)
         today = timezone.localdate()
         sources = list(searchable_sources(owner))
-        fetched = _prefetch(sources, roles, SiteConfig.load().effective_jooble_key)  # read here: worker threads must not touch the database
+        def reading(count):
+            ScanRun.objects.filter(pk=run.pk).update(done=count)
+            run.done = count
+
+        fetched = _prefetch(sources, roles, SiteConfig.load().effective_jooble_key, on_progress=reading)  # key read here: worker threads must not touch the database
+        common = _common_terms(fetched, settings.STILLOPEN_SCAN_GENERIC_SHARE)
+        if common:
+            cache.set("scan-common-terms", frozenset(common), 7 * 24 * 3600)  # so a later one-off "Check my fit" scores the same way
+        skill_terms = skill_terms - common
         pool = []  # every clear, in-area, not-yet-tracked match from every source, ranked together at the end
         for source in sources:
             entry = ScanLogEntry(run=run, source_name=source.name, connector=source.connector)
@@ -634,15 +680,23 @@ def _worker(run_id: int):
                     description = p.get("description") or ""
                     probe = Application(owner=owner, company=company, role=p["title"][:200], location_text=(p.get("location") or "")[:160], description=description)
                     found = geo.detect(probe.role, f"{probe.location_text}\n{description}")
+                    # The feed's own LOCATION field decides the country, not prose in the description (a company calling
+                    # itself "global" must not turn a United States only job into a worldwide one).
+                    place_codes = geo.location_codes(probe.location_text)
+                    if len(place_codes) == 1:
+                        found["country"] = next(iter(place_codes))
+                    elif probe.location_text:
+                        found.pop("country", None)
                     for name, value in found.items():
                         if name != "location_text" or not probe.location_text:
                             setattr(probe, name, value)
-                    if areas and fit.clearly_outside(probe, areas, profile):
+                    if areas and (fit.clearly_outside(probe, areas, profile) or fit.region_outside(place_codes, areas, profile)):
                         entry.outside += 1
                         continue
                     area_state = fit.area_status(probe, areas, profile)
                     try:
-                        result = ai.keyword_match(description or p["title"], cv_text) if cv_text.strip() else None
+                        thin = len(set(_terms(description))) < settings.STILLOPEN_SCAN_MIN_TERMS_TO_SCORE
+                        result = None if thin or not cv_text.strip() else ai.keyword_match(description, cv_text, ignore=common)
                     except ai.AIError:
                         result = None
                     percent = result["match_percent"] if result else -1
@@ -658,13 +712,14 @@ def _worker(run_id: int):
                 entry.error = str(exc)[:300]
             entry.save()
             run.found += entry.found
-            run.done += 1
-            run.save(update_fields=["done", "found"])
+            run.save(update_fields=["found"])
 
         # The best matches across every source: ones that clearly fit a search area first, then ones that fit a listed
         # role, then by how well the person's own CV covers what the posting talks about. The cap keeps the best, never
         # just whatever source came first.
         pool.sort(key=lambda item: item["rank"])
+        per_company_cap = max(0, settings.STILLOPEN_SCAN_MAX_PER_COMPANY)
+        from_company: Counter = Counter()
         touched = set()
         for item in pool:
             if room <= 0:
@@ -674,12 +729,15 @@ def _worker(run_id: int):
                 )
                 break
             if new_cap and run.added >= new_cap:
-                run.error = (
+                run.note = (
                     f"Showing the {new_cap} best new matches. Search again later for more; "
                     "the rest are still under All postings."
                 )
                 break
             p, probe, found, result, entry = item["p"], item["probe"], item["found"], item["result"], item["entry"]
+            company_key = item["company"].strip().lower()
+            if per_company_cap and from_company[company_key] >= per_company_cap:
+                continue  # a fair spread: one employer cannot fill the whole list
             triple = _triple(item["company"], p["title"], p.get("location") or "")
             if (p["url"] in existing or _is_cross_source_duplicate(existing_jobs, item["company"], p["title"], item["source"])
                     or triple in existing_triples):
@@ -702,6 +760,7 @@ def _worker(run_id: int):
                     text=f"Found by skill match, not a listed target role -- shared: {', '.join(sorted(item['overlap'])[:6])}",
                 )
             existing.add(p["url"])
+            from_company[company_key] += 1
             existing_triples.add(triple)
             existing_jobs.setdefault(_job_key(item["company"], p["title"]), set()).add(item["source"].pk)
             entry.added += 1
@@ -712,7 +771,8 @@ def _worker(run_id: int):
         for entry in {id(i["entry"]): i["entry"] for i in pool}.values():
             if id(entry) in touched:
                 entry.save(update_fields=["added"])
-        run.save(update_fields=["added", "added_ids", "error"])
+        run.done = len(sources)
+        run.save(update_fields=["added", "added_ids", "error", "note", "done"])
         PostingSighting.objects.filter(seen_date__lt=today - timedelta(days=180)).delete()
     except Exception as exc:  # noqa: BLE001 - recorded on the run
         ScanRun.objects.filter(pk=run_id).update(error=str(exc)[:500])

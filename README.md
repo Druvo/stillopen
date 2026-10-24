@@ -51,10 +51,10 @@ Candidates do nothing. When someone opens their dashboard and their last search 
 
 1. Reads every source at once (a slow one is skipped after `STILLOPEN_SCAN_DEADLINE_SECONDS`, 90, and finishes into a shared cache for next time; each source is read at most once per `STILLOPEN_SCAN_CACHE_SECONDS`, 6 hours, however many people search).
 2. Keeps postings whose title fits a target role (the role's words in any order, with developer/engineer treated alike: "Backend Engineer" matches "Senior Software Engineer, Back-end"), or that share real skills with the CV.
-3. Leaves out postings that clearly cannot work for the person's search areas (stated to be in another country, or on-site where they only accept remote). A posting that does not say enough is never excluded. Everything seen stays under **All postings**.
+3. Leaves out postings that clearly cannot work for the person's search areas. The country comes from the feed's own location field (so a company calling itself "global" cannot turn a United States only job into a worldwide one), including US state codes and names, "Remote (Spain)" and multi-country lists like "Hong Kong; Singapore", which need one of the person's places. A posting that does not say enough is never excluded. Everything seen stays under **All postings**. The welcome page asks where the person would work (their country, remote anywhere, and other places) and turns the answers into editable search areas.
 4. Skips what is already tracked, including the same job on two sites.
-5. Gives each new job a free keyword match against the CV and saves the posting text, so the dashboard already shows a percentage and a fit label.
-6. Adds at most `STILLOPEN_SCAN_MAX_NEW` (40) per search, the best first (clear fits, then listed roles, then CV match). Search again later for the next batch.
+5. Gives each new job a free skill-coverage score and saves the posting text, so the dashboard already shows a percentage and a fit label. The score is how many of the person's main skills the posting mentions, ignoring filler words that nearly every posting repeats (measured from the postings just read). A posting with too little text to judge (some boards publish only a title) gets no score instead of a fake one.
+6. Adds at most `STILLOPEN_SCAN_MAX_NEW` (40) per search, the best first (clear fits, then listed roles, then CV match), and at most `STILLOPEN_SCAN_MAX_PER_COMPANY` (5) from one employer so one big company cannot fill the list. Search again later for the next batch.
 
 ### Bangladesh, Malaysia and the Gulf
 

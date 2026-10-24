@@ -4,6 +4,7 @@ from allauth.account.models import EmailAddress
 from allauth.account.utils import has_verified_email
 from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -33,6 +34,10 @@ class AccountAdapter(DefaultAccountAdapter):
     def get_login_redirect_url(self, request):
         return self._home(request) or super().get_login_redirect_url(request)
 
+    def get_signup_redirect_url(self, request):
+        """Straight in after sign-up (no email step): a person who has not answered the welcome questions starts there."""
+        return self._home(request) or super().get_signup_redirect_url(request)
+
     def pre_login(self, request, user, **kwargs):
         """People who registered themselves must confirm their email before they get in.
 
@@ -41,7 +46,8 @@ class AccountAdapter(DefaultAccountAdapter):
         if blocked:
             return blocked
         profile = UserProfile.objects.filter(user=user).first()
-        if profile and profile.self_registered and not has_verified_email(user, kwargs.get("email")):
+        if (settings.STILLOPEN_REQUIRE_EMAIL_CONFIRMATION and profile and profile.self_registered
+                and not has_verified_email(user, kwargs.get("email"))):
             address = EmailAddress.objects.filter(user=user, verified=False).order_by("-primary", "-pk").first()
             if address:  # we stop the login here, so allauth's own "send at login" stage never runs
                 address.send_confirmation(request, signup=bool(kwargs.get("signup")))

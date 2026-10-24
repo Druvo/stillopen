@@ -14,6 +14,9 @@
 {% if paperless_on %}<a class="btn btn-outline-secondary" href="{{ paperless_url }}" target="_blank" rel="noopener">Paperless</a>{% endif %}
 {% endblock %}
 {% block content %}
+{% if user.is_staff and email_unverified_signups %}
+<div class="alert alert-warning">Sign-up is open, but this server has no email set up, so new people are let in without confirming their address. Set <code>EMAIL_HOST</code> (see docs/HOSTING.md) to turn confirmation back on.</div>
+{% endif %}
 {% if next_step %}
 <div class="card mb-3 border-primary">
   <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -22,7 +25,7 @@
       <div class="h3 mb-1">{{ next_step.headline }}</div>
       <div class="text-secondary">{{ next_step.body }}</div>
     </div>
-    <a class="btn btn-primary" href="{{ next_step.url }}">{{ next_step.label }}</a>
+    {% if next_step.url %}<a class="btn btn-primary" href="{{ next_step.url }}">{{ next_step.label }}</a>{% endif %}
   </div>
 </div>
 {% endif %}
@@ -42,10 +45,11 @@
 <div class="card mb-3" id="scan-log-card">
   <div class="card-body">
     <strong id="scan-log-title">
-      {% if scan_run.running %}Searching for jobs that fit you... {{ scan_run.done }}/{{ scan_run.total }} sources{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- looked through {{ scan_run.found }} openings, {{ scan_run.added }} new for you{% endif %}
+      {% if scan_run.running %}{% if scan_run.done >= scan_run.total %}Sorting out the best matches for you...{% else %}Reading job sources... {{ scan_run.done }}/{{ scan_run.total }}{% endif %}{% else %}Last search: {{ scan_run.started_at|timesince }} ago -- looked through {{ scan_run.found }} openings, {{ scan_run.added }} new for you{% endif %}
     </strong>
+    {% if scan_run.note %}<div class="text-secondary mt-1">{{ scan_run.note }}</div>{% endif %}
     {% if scan_run.error %}<div class="text-danger mt-1">{{ scan_run.error }}</div>{% endif %}
-    <details id="scan-log-details" class="mt-2" {% if scan_run.running %}open{% endif %}>
+    <details id="scan-log-details" class="mt-2">
       <summary style="cursor:pointer">Scan log -- where it searched and what it found</summary>
       <div id="scan-log-entries" class="mt-2">
         {% for e in scan_run.entries.all %}
@@ -290,8 +294,8 @@ async function scanPoll() {
   renderScanEntries(s.entries || []);
   const title = document.getElementById('scan-log-title');
   if (s.running) {
-    if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = `Searching ${s.done}/${s.total}...`; }
-    if (title) title.textContent = `Searching... ${s.done}/${s.total} sources`;
+    if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = s.done >= s.total ? 'Sorting...' : `Reading ${s.done}/${s.total}...`; }
+    if (title) title.textContent = s.done >= s.total ? 'Sorting out the best matches for you...' : `Reading job sources... ${s.done}/${s.total}`;
     setTimeout(scanPoll, 1500);
   } else if (scanBtn && scanBtn.disabled) {
     location.reload();

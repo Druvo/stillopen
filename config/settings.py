@@ -184,7 +184,6 @@ ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True  # and it signs the person in
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 # "optional" globally so accounts made in the admin or by createsuperuser (no confirmed email) are never locked out;
 # tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
-ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional")
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_FORMS = {"signup": "tracker.forms.SignupForm"}
 # Bot protection without any third-party service (the no-CDN rule): a hidden trap field, a minimum time to fill the
@@ -207,6 +206,15 @@ if os.environ.get("EMAIL_HOST"):
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "StillOpen <noreply@localhost>")
+EMAIL_CONFIGURED = bool(os.environ.get("EMAIL_HOST"))
+# People who register themselves must click an emailed link before they get in -- but only where that email can actually
+# arrive. With no SMTP the link would only be printed to the server console and nobody could ever sign up, so a fresh
+# self-hosted install lets people straight in and tells the admin (see the dashboard notice). Set to 1 to insist anyway.
+STILLOPEN_REQUIRE_EMAIL_CONFIRMATION = os.environ.get("STILLOPEN_REQUIRE_EMAIL_CONFIRMATION", "1" if (EMAIL_CONFIGURED or "test" in sys.argv) else "0") == "1"
+# "optional" globally so accounts made in the admin or by createsuperuser (no confirmed email) are never locked out;
+# tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
+# "none" when confirmation is not required, so no email is sent (or claimed to be sent) from a server that cannot send it.
+ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "optional" if STILLOPEN_REQUIRE_EMAIL_CONFIRMATION else "none")
 
 # Per-person limits on a shared server.
 STILLOPEN_MAX_APPLICATIONS = int(os.environ.get("STILLOPEN_MAX_APPLICATIONS", "500"))
@@ -228,6 +236,12 @@ STILLOPEN_SCAN_CACHE_SECONDS = int(os.environ.get("STILLOPEN_SCAN_CACHE_SECONDS"
 STILLOPEN_SCAN_FETCH_THREADS = int(os.environ.get("STILLOPEN_SCAN_FETCH_THREADS", "8"))
 # Longest a search waits for the job sources (a slow one is skipped, not waited for).
 STILLOPEN_SCAN_DEADLINE_SECONDS = int(os.environ.get("STILLOPEN_SCAN_DEADLINE_SECONDS", "90"))
+# At most this many new jobs from one employer per search (big employers post the same role for every team), and
+# a word counts as generic filler, not a skill, when it appears in more than this share of all postings read.
+STILLOPEN_SCAN_MAX_PER_COMPANY = int(os.environ.get("STILLOPEN_SCAN_MAX_PER_COMPANY", "5"))
+STILLOPEN_SCAN_GENERIC_SHARE = float(os.environ.get("STILLOPEN_SCAN_GENERIC_SHARE", "0.12"))
+# A posting needs at least this many distinct words before it is scored: three words cannot tell anyone how well they fit.
+STILLOPEN_SCAN_MIN_TERMS_TO_SCORE = int(os.environ.get("STILLOPEN_SCAN_MIN_TERMS_TO_SCORE", "12"))
 STILLOPEN_SCAN_MAX_NEW = int(os.environ.get("STILLOPEN_SCAN_MAX_NEW", "40"))
 STILLOPEN_AUTO_SCAN = os.environ.get("STILLOPEN_AUTO_SCAN", "0" if RUNNING_TESTS else "1") == "1"
 STILLOPEN_SEED_SOURCES = os.environ.get("STILLOPEN_SEED_SOURCES", "0" if RUNNING_TESTS else "1") == "1"
