@@ -29,7 +29,8 @@ test("the board shows only my jobs, and a keyboard move is saved", async ({ page
   // The announcements double as the wait: each key is pressed once the previous one has been announced.
   const announced = (text: RegExp) => expect(page.locator("[id^=DndLiveRegion]")).toContainText(text); // visually hidden, so read, not "visible"
   await page.keyboard.press("Space");
-  await announced(/Backend Engineer is over To apply/); // picked up, still over its own column
+  await expect(page.locator("article.rotate-1")).toBeVisible(); // the lifted copy: the drag has really started
+  await announced(/Backend Engineer is over To apply/); // still over its own column
   await page.keyboard.press("ArrowRight");
   await announced(/Backend Engineer is over (?!To apply)/);
   await page.keyboard.press("Space");
