@@ -286,6 +286,33 @@ class NewAppShell(TestCase):
         self.assertRedirects(self.client.get(reverse("dashboard")), "/app/", fetch_redirect_response=False)
         self.assertEqual(self.client.get(reverse("dashboard") + "?classic=1").status_code, 200)
 
+    def test_the_page_carries_a_strict_policy_with_the_hashes_of_its_inline_scripts(self):
+        import base64
+        import hashlib
+
+        (Path(self.out.name) / "index.html").write_text('<html><script>var a=1;</script><script src="/app/_next/static/x.js"></script><script>var b=2;</script></html>', encoding="utf-8")
+        self.client.force_login(self.a)
+        self.switch()
+        r = self.client.get("/app/")
+        policy = r["Content-Security-Policy"]
+        close_quietly(r)
+        for body in (b"var a=1;", b"var b=2;"):
+            self.assertIn("'sha256-" + base64.b64encode(hashlib.sha256(body).digest()).decode() + "'", policy)
+        script_src = next(p for p in policy.split("; ") if p.startswith("script-src"))
+        self.assertNotIn("unsafe-inline", script_src)
+        self.assertNotIn("unsafe-eval", policy)
+        self.assertIn("default-src 'self'", policy)
+        self.assertIn("frame-ancestors 'none'", policy)
+        self.assertEqual(script_src.count("'sha256-"), 2, script_src)  # the external script needs no hash
+
+    @override_settings(STILLOPEN_APP_CSP=False)
+    def test_the_policy_can_be_switched_off(self):
+        self.client.force_login(self.a)
+        self.switch()
+        r = self.client.get("/app/")
+        close_quietly(r)
+        self.assertNotIn("Content-Security-Policy", r)
+
     def test_not_built_is_a_404(self):
         self.client.force_login(self.a)
         self.switch()

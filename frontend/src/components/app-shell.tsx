@@ -10,19 +10,23 @@ function toggleTheme() {
   const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   document.documentElement.dataset.theme = next;
   try {
-    localStorage.setItem("stillopen-theme", next);
+    localStorage.setItem("so-theme", next);
   } catch {
     /* private window: the choice just is not remembered */
   }
 }
 
-function isCurrent(path: string, to: string) {
-  return to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
+/** The sidebar entry for the current path: the longest entry that is the path or a parent of it (so /profile/ai lights "AI settings", not "Profile"). */
+function currentEntry(path: string, entries: string[]): string | undefined {
+  return entries
+    .filter((to) => (to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`)))
+    .sort((a, b) => b.length - a.length)[0];
 }
 
 export function AppShell() {
   const path = useAppPath();
   const screen = path === null ? null : matchRoute(ROUTES, path);
+  const active = path === null ? undefined : currentEntry(path, NAV.filter(([, , inApp]) => inApp).map(([, to]) => to));
   const itemClass = (current: boolean) =>
     cn("block shrink-0 rounded-md px-3 py-2 text-sm", current ? "bg-surface-2 font-medium" : "text-muted hover:bg-surface-2 hover:text-fg");
 
@@ -46,7 +50,7 @@ export function AppShell() {
         </div>
         <nav aria-label="Main" className="flex gap-1 overflow-x-auto px-3 pb-3 lg:block lg:overflow-visible lg:pb-5">
           {NAV.map(([label, to, inApp]) => {
-            const current = path !== null && inApp && isCurrent(path, to);
+            const current = inApp && active === to;
             return inApp ? (
               <Link key={to} to={to} aria-current={current ? "page" : undefined} className={itemClass(current)}>
                 {label}

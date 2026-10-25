@@ -12,12 +12,15 @@ from .services import apply as apply_service
 from .services import fit as fit_service
 from .services.apply import ApplyError
 from .views import owned_app
+from .views_app import new_app_redirect
 
 
 @login_required
 @require_GET
 def apply_page(request, pk):
     app = owned_app(request, pk)
+    if go := new_app_redirect(request, f"/jobs/{app.pk}/apply"):
+        return go
     config = SiteConfig.for_user(request.user)
     versions = apply_service.sendable_versions(app)
     return render(request, "tracker/apply.html", {

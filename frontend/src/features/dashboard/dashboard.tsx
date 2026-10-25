@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { Link } from "@/lib/router";
 import type { Dashboard as DashboardData, Job, Progress } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Board } from "./board";
@@ -172,9 +173,9 @@ export function Dashboard() {
           <button type="button" onClick={liveness.begin} disabled={liveness.progress?.running} className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium disabled:opacity-60">
             Check which are still open
           </button>
-          <a href="/jobs/add/" className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium">
+          <Link to="/jobs/add" className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm font-medium">
             Add job
-          </a>
+          </Link>
         </div>
       </header>
 
@@ -249,7 +250,7 @@ export function Dashboard() {
       {data.jobs.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-8 text-center">
           <p className="font-medium">No jobs yet.</p>
-          <p className="mt-1 text-sm text-muted">Press Search for jobs, or paste a link on the Add job page.</p>
+          <p className="mt-1 text-sm text-muted">Press Search for jobs, or paste a link on the <Link to="/jobs/add" className="text-brand underline">Add job</Link> page.</p>
         </div>
       ) : view === "board" ? (
         <Board buckets={data.buckets} jobs={jobs} {...common} />

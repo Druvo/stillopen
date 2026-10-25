@@ -2,7 +2,11 @@
 
 `/app/` and every path under it answer with the same shell page, so deep links and refresh work; the page reads its own
 path in the browser. The hashed files under `/app/_next/` are plain assets and carry no personal data."""
+import base64
+import functools
+import hashlib
 import mimetypes
+import re
 from pathlib import Path
 
 from django.conf import settings
@@ -23,6 +27,31 @@ def new_app_redirect(request, path: str):
     if "classic" in request.GET or not SiteConfig.load().new_app_enabled or not UserProfile.for_user(request.user).use_new_app:
         return None
     return redirect(f"/app{path}")
+
+
+_INLINE_SCRIPT = re.compile(rb"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S)
+
+
+@functools.lru_cache(maxsize=4)
+def _policy(path: str, mtime_ns: int) -> str:
+    """A strict Content-Security-Policy for the shell page: scripts only from this site plus the exact inline bootstrap scripts the build produced.
+
+    The export's inline scripts change with every build, so their hashes are worked out here from the file itself (cached per file version)."""
+    html = Path(path).read_bytes()
+    hashes = " ".join(f"'sha256-{base64.b64encode(hashlib.sha256(body).digest()).decode()}'" for body in _INLINE_SCRIPT.findall(html))
+    return "; ".join([
+        "default-src 'self'",
+        f"script-src 'self' {hashes}".strip(),
+        "style-src 'self'",
+        "style-src-attr 'unsafe-inline'",  # React sets sizes on elements (progress bars, drag positions)
+        "img-src 'self' data:",
+        "font-src 'self'",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ])
 
 
 def build_dir() -> Path:
@@ -62,4 +91,6 @@ def app_shell(request, path=""):
         raise Http404("The new app has not been built on this server.")
     response = FileResponse(open(index, "rb"), content_type="text/html; charset=utf-8")
     response["Cache-Control"] = "no-store"
+    if settings.STILLOPEN_APP_CSP:
+        response["Content-Security-Policy"] = _policy(str(index), index.stat().st_mtime_ns)
     return response

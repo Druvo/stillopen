@@ -1,5 +1,6 @@
 """CV version history: record, edit, restore, approve. Versions are immutable; every change is a new row."""
 from django.conf import settings
+from django.db.models import RestrictedError
 from django.utils import timezone
 
 from tracker.models import CVVersion, KnowledgeSource, SiteConfig, UserProfile
@@ -100,3 +101,13 @@ def approve(version: CVVersion) -> CVVersion:
     version.approved_at = timezone.now()
     version.save(update_fields=["approved", "approved_at"])
     return version
+
+
+def delete_tailored(version: CVVersion) -> None:
+    """Delete a tailored version. Master versions are the person's history, and a CV recorded as sent with an application is kept."""
+    if version.kind != "tailored":
+        raise CVError("Master CV versions are your history and cannot be deleted. Delete your account to remove everything.")
+    try:
+        version.delete()
+    except RestrictedError as exc:
+        raise CVError("This CV is recorded as sent with an application, so it is kept as your record.") from exc

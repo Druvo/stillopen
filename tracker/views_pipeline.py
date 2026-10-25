@@ -2,10 +2,6 @@
 
 Every row belongs to one person. Lists, forms (their job and contact choices) and actions are all limited to the
 signed-in owner, and a row that is not theirs is a 404. Nothing here contacts anyone or sends anything."""
-from collections import defaultdict
-from decimal import Decimal
-
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,15 +9,21 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .forms import ContactForm, InterviewForm, OfferForm, ReferralForm
-from .models import Contact, Event, Interview, Offer, Referral, SiteConfig
+from .models import Contact, Interview, Offer, Referral, SiteConfig
 from .services import pipeline
+from .views_app import new_app_redirect
 
 
 def _full(request, model) -> bool:
-    if model.objects.filter(owner=request.user).count() >= settings.STILLOPEN_MAX_PIPELINE:
-        messages.error(request, f"You have reached the limit of {settings.STILLOPEN_MAX_PIPELINE} saved items here. Delete some first.")
+    if pipeline.at_limit(request.user, model):
+        messages.error(request, pipeline.limit_message())
         return True
     return False
+
+
+def _job_param(request) -> str:
+    job = request.GET.get("job", "")
+    return f"?job={job}" if job.isdigit() else ""
 
 
 def upcoming_interviews(user, limit: int = 5):
@@ -33,6 +35,8 @@ def upcoming_interviews(user, limit: int = 5):
 
 @login_required
 def insights(request):
+    if go := new_app_redirect(request, "/insights"):
+        return go
     return render(request, "tracker/insights.html", {"config": SiteConfig.load(), "f": pipeline.funnel(request.user)})
 
 
@@ -41,15 +45,11 @@ def insights(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def interviews(request):
+    if request.method == "GET" and (go := new_app_redirect(request, "/interviews" + _job_param(request))):
+        return go
     form = InterviewForm(request.POST or None, owner=request.user, initial={"application": request.GET.get("job")})
     if request.method == "POST" and form.is_valid() and not _full(request, Interview):
-        item = form.save(commit=False)
-        item.owner = request.user
-        item.save()
-        Event.objects.create(
-            application=item.application, kind="interview",
-            text=f"{item.get_kind_display()} scheduled for {timezone.localtime(item.scheduled_at):%d %b %Y %H:%M}",
-        )
+        pipeline.save_interview(form, request.user)
         messages.success(request, "Interview saved.")
         return redirect("interviews")
     mine = Interview.objects.filter(owner=request.user).select_related("application")
@@ -69,13 +69,8 @@ def interview_action(request, pk, action):
         item.delete()
         messages.success(request, "Deleted.")
     elif action == "outcome":
-        outcome = request.POST.get("outcome", "")
-        if outcome not in dict(Interview.OUTCOMES):
+        if not pipeline.set_interview_outcome(item, request.POST.get("outcome", "")):
             messages.error(request, "Unknown outcome.")
-        else:
-            item.outcome = outcome
-            item.save(update_fields=["outcome"])
-            Event.objects.create(application=item.application, kind="interview", text=f"{item.get_kind_display()}: {item.get_outcome_display()}")
     else:
         return get_object_or_404(Interview, pk=0)
     return redirect("interviews")
@@ -86,6 +81,8 @@ def interview_action(request, pk, action):
 @login_required
 @require_http_methods(["GET", "POST"])
 def contacts(request):
+    if request.method == "GET" and (go := new_app_redirect(request, "/contacts")):
+        return go
     cform = ContactForm(owner=request.user)
     rform = ReferralForm(owner=request.user)
     if request.method == "POST":
@@ -93,21 +90,13 @@ def contacts(request):
         if which == "contact":
             cform = ContactForm(request.POST, owner=request.user)
             if cform.is_valid() and not _full(request, Contact):
-                item = cform.save(commit=False)
-                item.owner = request.user
-                item.save()
+                pipeline.save_contact(cform, request.user)
                 messages.success(request, "Contact saved.")
                 return redirect("contacts")
         elif which == "referral":
             rform = ReferralForm(request.POST, owner=request.user)
             if rform.is_valid() and not _full(request, Referral):
-                item = rform.save(commit=False)
-                item.owner = request.user
-                item.save()
-                Event.objects.create(
-                    application=item.application, kind="note",
-                    text=f"Referral with {item.contact.name}: {item.get_status_display()}",
-                )
+                pipeline.save_referral(rform, request.user)
                 messages.success(request, "Referral saved.")
                 return redirect("contacts")
     people = Contact.objects.filter(owner=request.user).prefetch_related("referrals__application")
@@ -132,14 +121,7 @@ def referral_action(request, pk, action):
     if action == "delete":
         item.delete()
     elif action == "status":
-        status = request.POST.get("status", "")
-        if status in dict(Referral.STATUSES):
-            item.status = status
-            item.save(update_fields=["status"])
-            Event.objects.create(
-                application=item.application, kind="note",
-                text=f"Referral with {item.contact.name}: {item.get_status_display()}",
-            )
+        pipeline.set_referral_status(item, request.POST.get("status", ""))
     else:
         return get_object_or_404(Referral, pk=0)
     return redirect("contacts")
@@ -147,32 +129,17 @@ def referral_action(request, pk, action):
 
 # --- offers -------------------------------------------------------------------------------------
 
-def comparison(offers):
-    """Offers grouped by currency (no exchange rates are guessed), best yearly total first, with the gap to the best."""
-    groups = defaultdict(list)
-    for offer in offers:
-        if offer.status != "declined":
-            groups[offer.currency].append(offer)
-    out = []
-    for currency in sorted(groups):
-        rows = sorted(groups[currency], key=lambda o: o.yearly_total, reverse=True)
-        best = rows[0].yearly_total
-        out.append({
-            "currency": currency,
-            "rows": [{"offer": o, "behind": best - o.yearly_total if best > o.yearly_total else Decimal(0), "best": o is rows[0] and len(rows) > 1} for o in rows],
-        })
-    return out
+comparison = pipeline.comparison
 
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def offers(request):
+    if request.method == "GET" and (go := new_app_redirect(request, "/offers" + _job_param(request))):
+        return go
     form = OfferForm(request.POST or None, owner=request.user, initial={"application": request.GET.get("job")})
     if request.method == "POST" and form.is_valid() and not _full(request, Offer):
-        item = form.save(commit=False)
-        item.owner = request.user
-        item.save()
-        Event.objects.create(application=item.application, kind="note", text="Offer recorded")
+        pipeline.save_offer(form, request.user)
         messages.success(request, "Offer saved.")
         return redirect("offers")
     mine = list(Offer.objects.filter(owner=request.user).select_related("application"))
@@ -189,11 +156,7 @@ def offer_action(request, pk, action):
         item.delete()
         messages.success(request, "Deleted.")
     elif action == "status":
-        status = request.POST.get("status", "")
-        if status in dict(Offer.STATUSES):
-            item.status = status
-            item.save(update_fields=["status"])
-            Event.objects.create(application=item.application, kind="note", text=f"Offer: {item.get_status_display()}")
+        pipeline.set_offer_status(item, request.POST.get("status", ""))
     else:
         return get_object_or_404(Offer, pk=0)
     return redirect("offers")

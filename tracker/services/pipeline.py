@@ -96,3 +96,104 @@ def funnel(owner) -> dict:
         "referred_applied": sum(1 for a in applied if a.referrals.exists()),
         "referred_interviewed": sum(1 for a in interviewed if a.referrals.exists()),
     }
+
+
+# --- interviews, contacts, referrals, offers: the rules shared by the classic pages and the new app ------
+
+def at_limit(owner, model) -> bool:
+    """True when this person already keeps as many rows of `model` as the admin allows."""
+    return model.objects.filter(owner=owner).count() >= settings.STILLOPEN_MAX_PIPELINE
+
+
+def limit_message() -> str:
+    return f"You have reached the limit of {settings.STILLOPEN_MAX_PIPELINE} saved items here. Delete some first."
+
+
+def _note(application, kind: str, text: str) -> None:
+    from tracker.models import Event
+
+    Event.objects.create(application=application, kind=kind, text=text)
+
+
+def save_interview(form, owner):
+    """Save a valid InterviewForm as a new interview and note it on the job."""
+    item = form.save(commit=False)
+    item.owner = owner
+    item.save()
+    _note(item.application, "interview", f"{item.get_kind_display()} scheduled for {timezone.localtime(item.scheduled_at):%d %b %Y %H:%M}")
+    return item
+
+
+def set_interview_outcome(item, outcome: str) -> bool:
+    """False (nothing changed) when `outcome` is not one of the known outcomes."""
+    if outcome not in dict(Interview.OUTCOMES):
+        return False
+    item.outcome = outcome
+    item.save(update_fields=["outcome"])
+    _note(item.application, "interview", f"{item.get_kind_display()}: {item.get_outcome_display()}")
+    return True
+
+
+def save_contact(form, owner):
+    item = form.save(commit=False)
+    item.owner = owner
+    item.save()
+    return item
+
+
+def save_referral(form, owner):
+    item = form.save(commit=False)
+    item.owner = owner
+    item.save()
+    _note(item.application, "note", f"Referral with {item.contact.name}: {item.get_status_display()}")
+    return item
+
+
+def set_referral_status(item, status: str) -> bool:
+    from tracker.models import Referral
+
+    if status not in dict(Referral.STATUSES):
+        return False
+    item.status = status
+    item.save(update_fields=["status"])
+    _note(item.application, "note", f"Referral with {item.contact.name}: {item.get_status_display()}")
+    return True
+
+
+def save_offer(form, owner):
+    item = form.save(commit=False)
+    item.owner = owner
+    item.save()
+    _note(item.application, "note", "Offer recorded")
+    return item
+
+
+def set_offer_status(item, status: str) -> bool:
+    from tracker.models import Offer
+
+    if status not in dict(Offer.STATUSES):
+        return False
+    item.status = status
+    item.save(update_fields=["status"])
+    _note(item.application, "note", f"Offer: {item.get_status_display()}")
+    return True
+
+
+def comparison(offers):
+    """Offers grouped by currency (no exchange rates are guessed), best yearly total first, with the gap to the best. Declined offers are left out."""
+    from collections import defaultdict
+    from decimal import Decimal
+
+    groups = defaultdict(list)
+    for offer in offers:
+        if offer.status != "declined":
+            groups[offer.currency].append(offer)
+    out = []
+    for currency in sorted(groups):
+        rows = sorted(groups[currency], key=lambda o: o.yearly_total, reverse=True)
+        best = rows[0].yearly_total
+        out.append({
+            "currency": currency,
+            "rows": [{"offer": o, "behind": best - o.yearly_total if best > o.yearly_total else Decimal(0), "best": o is rows[0] and len(rows) > 1} for o in rows],
+        })
+    return out
