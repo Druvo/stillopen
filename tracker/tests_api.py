@@ -466,3 +466,30 @@ class ClassicRedirects(TestCase):
         for classic, new in pairs:
             self.assertRedirects(self.client.get(classic), new, fetch_redirect_response=False)
             self.assertEqual(self.client.get(classic + "?classic=1").status_code, 200)
+
+
+class E2ESeed(TestCase):
+    """The browser tests' seed command makes users with a known password, so it must refuse to run on a real install."""
+
+    def test_refuses_without_the_switch(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("e2e_seed")
+        self.assertFalse(User.objects.filter(username__in=["alice", "bob"]).exists())
+
+    def test_with_the_switch_it_makes_two_separate_people_and_turns_the_app_on(self):
+        import os
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        with mock.patch.dict(os.environ, {"STILLOPEN_E2E": "1"}):
+            call_command("e2e_seed", stdout=StringIO())
+        alice, bob = User.objects.get(username="alice"), User.objects.get(username="bob")
+        self.assertEqual(Application.objects.filter(owner=alice).count(), 3)
+        self.assertEqual(Application.objects.filter(owner=bob).count(), 1)
+        self.assertTrue(SiteConfig.load().new_app_enabled)
+        self.assertTrue(UserProfile.objects.get(user=alice).use_new_app)

@@ -382,7 +382,7 @@ export function CoverDetail({ id }: { id: number }) {
     <>
       <PageHeader
         title={`Cover letter for ${letter.job.company}`}
-        subtitle={<a href={letter.apply_url} className="text-brand underline">Back to applying for {letter.job.role}</a>}
+        subtitle={<Link to={`/jobs/${letter.job.id}/apply`} className="text-brand underline">Back to applying for {letter.job.role}</Link>}
       />
       <p className="mb-3 text-sm text-muted">
         {letter.source_label}
@@ -420,7 +420,7 @@ export function CoverDetail({ id }: { id: number }) {
             setMessage("");
             act.mutate(async () => {
               await coverApi.remove(id);
-              window.location.assign(letter.apply_url);
+              navigate(`/jobs/${letter.job.id}/apply`);
             });
           }}
         >

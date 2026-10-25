@@ -31,6 +31,8 @@ cd frontend
 pnpm install
 pnpm dev          # http://localhost:3000/app/ , proxies /api and sign-in to Django on port 8765
 pnpm lint && pnpm typecheck && pnpm test
+pnpm size         # fails if the app's JavaScript grows past its budget (frontend/scripts/check-bundle-size.mjs)
+pnpm e2e          # real-browser tests against Django serving the build; uses the Chrome you have installed (E2E_PYTHON=path/to/python if needed)
 pnpm build        # writes frontend/out, which Django serves at /app/ (the Docker build does this for you)
 ```
 

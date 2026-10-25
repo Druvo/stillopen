@@ -107,10 +107,10 @@ function RecordForm({ id, data }: { id: number; data: ApplyData }) {
         <MakeButton label="Write a cover letter" busyLabel="Writing…" make={() => coverApi.write(id).then((r) => `/cover/${r.id}`)} />
         <span className="text-sm text-muted">Short, from your own material, checked before you can use it.</span>
         {data.cover_letters.map((l) => (
-          <a key={l.id} href={l.open_url} className="text-sm text-brand underline">
+          <Link key={l.id} to={`/cover/${l.id}`} className="text-sm text-brand underline">
             Letter of {l.created}
             {l.needs_review ? " (needs review)" : ""}
-          </a>
+          </Link>
         ))}
       </div>
 
