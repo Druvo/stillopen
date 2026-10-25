@@ -24,7 +24,9 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from . import mcp_tools
 from .models import ApiToken, SiteConfig
+from .services import assistant as tokens
 from .views import throttled
+from .views_app import new_app_redirect
 
 log = logging.getLogger(__name__)
 
@@ -198,6 +200,8 @@ def _page(request, extra=None):
 @require_http_methods(["GET"])
 def assistant(request):
     _config_or_404()
+    if go := new_app_redirect(request, "/profile/assistant"):
+        return go
     return _page(request)
 
 
@@ -205,19 +209,15 @@ def assistant(request):
 @require_POST
 def assistant_create(request):
     _config_or_404()
-    active = [t for t in request.user.api_tokens.all() if t.is_usable]
-    if len(active) >= settings.STILLOPEN_MAX_API_TOKENS:
-        messages.error(request, f"You already have {len(active)} active tokens. Revoke one you no longer use first.")
+    try:
+        tokens.check_room(request.user)
+    except tokens.TokenRefused as refused:
+        messages.error(request, str(refused))
         return redirect("assistant")
     if throttled(request.user, "token", settings.STILLOPEN_TOKEN_ISSUES_PER_HOUR):
         messages.error(request, "You have made a lot of tokens in the last hour. Try again later.")
         return redirect("assistant")
-    try:
-        days = int(request.POST.get("expires", "90"))
-    except ValueError:
-        days = 90
-    if days not in dict(ApiToken.EXPIRY_CHOICES):
-        days = 90
+    days = tokens.parse_days(request.POST.get("expires", "90"))
     record, raw = ApiToken.issue(request.user, request.POST.get("name", ""), can_write=request.POST.get("access") == "write", days=days)
     # shown in this response only and kept nowhere readable: a refresh would make another token
     return _page(request, {"new_token": raw, "new_record": record})
@@ -228,8 +228,6 @@ def assistant_create(request):
 def assistant_revoke(request, pk):
     _config_or_404()
     token = get_object_or_404(ApiToken, pk=pk, owner=request.user)
-    if not token.revoked_at:
-        token.revoked_at = timezone.now()
-        token.save(update_fields=["revoked_at"])
+    tokens.revoke(token)
     messages.success(request, f"Revoked {token.name}. It stops working straight away.")
     return redirect("assistant")

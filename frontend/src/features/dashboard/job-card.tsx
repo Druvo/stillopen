@@ -1,29 +1,64 @@
 "use client";
 
 import { GripVertical } from "lucide-react";
-import type { HTMLAttributes, Ref } from "react";
-import { csrfToken } from "@/lib/api";
+import { useState, type HTMLAttributes, type Ref } from "react";
+import { coverApi, cvApi } from "@/features/cv/api";
+import { prepApi } from "@/features/prep/api";
+import { errorText } from "@/lib/api";
+import { Link, navigate } from "@/lib/router";
 import type { Job, StatusInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const LIVE_TEXT: Record<Job["live_state"], string> = { unknown: "", active: "Still open", expired: "Closed", uncertain: "Open? Unclear" };
 
-/** A button that POSTs to a classic page (those actions are POST-only there), then lands on that page. */
-function PostButton({ action, children }: { action: string; children: React.ReactNode }) {
+/** Makes a tailored CV or a cover letter through the API, then opens it. */
+function MakeButton({ label, busyLabel, make }: { label: string; busyLabel: string; make: () => Promise<string> }) {
+  const [state, setState] = useState<"idle" | "busy" | string>("idle");
   return (
-    <form
-      method="post"
-      action={action}
-      onSubmit={(event) => {
-        const field = event.currentTarget.elements.namedItem("csrfmiddlewaretoken") as HTMLInputElement | null;
-        if (field) field.value = csrfToken();
-      }}
-    >
-      <input type="hidden" name="csrfmiddlewaretoken" defaultValue="" />
-      <button type="submit" className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg">
-        {children}
+    <>
+      <button
+        type="button"
+        disabled={state === "busy"}
+        onClick={async () => {
+          setState("busy");
+          try {
+            navigate(await make());
+          } catch (e) {
+            setState(errorText(e));
+          }
+        }}
+        className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg"
+      >
+        {state === "busy" ? busyLabel : label}
       </button>
-    </form>
+      {state !== "idle" && state !== "busy" && <span role="alert" className="basis-full px-2 text-xs text-bad">{state}</span>}
+    </>
+  );
+}
+
+/** Asks for a prep plan (or opens the one that exists) and goes to it. */
+function PrepareButton({ jobId }: { jobId: number }) {
+  const [state, setState] = useState<"idle" | "busy" | string>("idle");
+  return (
+    <>
+      <button
+        type="button"
+        disabled={state === "busy"}
+        onClick={async () => {
+          setState("busy");
+          try {
+            const made = await prepApi.create(jobId);
+            navigate(`/prep/${made.id}`);
+          } catch (e) {
+            setState(errorText(e));
+          }
+        }}
+        className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg"
+      >
+        {state === "busy" ? "Preparing…" : "Prepare"}
+      </button>
+      {state !== "idle" && state !== "busy" && <span role="alert" className="basis-full px-2 text-xs text-bad">{state}</span>}
+    </>
   );
 }
 
@@ -120,15 +155,15 @@ export function JobCard({ job, statuses, onMove, onCheckFit, checking, dragHandl
             </button>
           </div>
           <div className="mt-2 -mx-1 flex flex-wrap items-center gap-x-1 border-t border-border pt-2">
-            <a href={job.apply_url} className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg">
+            <Link to={`/jobs/${job.id}/apply`} className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg">
               Apply
-            </a>
-            <PostButton action={job.tailor_url}>Tailor CV</PostButton>
-            <PostButton action={job.cover_url}>Cover letter</PostButton>
-            <PostButton action={job.prep_url}>Prepare</PostButton>
-            <a href={job.edit_url} className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg">
+            </Link>
+            <MakeButton label="Tailor CV" busyLabel="Tailoring…" make={() => cvApi.tailor(job.id).then((r) => `/cv/${r.id}`)} />
+            <MakeButton label="Cover letter" busyLabel="Writing…" make={() => coverApi.write(job.id).then((r) => `/cover/${r.id}`)} />
+            <PrepareButton jobId={job.id} />
+            <Link to={`/jobs/${job.id}/edit`} className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg">
               Edit
-            </a>
+            </Link>
             {job.url && (
               <a href={job.url} target="_blank" rel="noopener noreferrer" className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg">
                 Posting

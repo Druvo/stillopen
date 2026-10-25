@@ -12,6 +12,7 @@ from .models import CoverLetter, SiteConfig
 from .services import coverletter, cvexport
 from .services.cvversions import CVError
 from .views import owned_app, throttled
+from .views_app import new_app_redirect
 
 
 def _letter(request, pk) -> CoverLetter:
@@ -47,6 +48,8 @@ def write_cover_letter(request, pk):
 @require_http_methods(["GET", "POST"])
 def cover_detail(request, pk):
     letter = _letter(request, pk)
+    if request.method == "GET" and (go := new_app_redirect(request, f"/cover/{letter.pk}")):
+        return go
     if request.method == "POST":
         try:
             coverletter.update(letter, request.POST.get("content", ""), SiteConfig.for_user(request.user))

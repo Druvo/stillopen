@@ -7,15 +7,14 @@ person's board is searched only for them and is invisible to everyone else (`Job
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .forms import OwnSourceForm
 from .models import JobSource, SiteConfig
-from .services import scan
-from .services.netguard import FetchError
+from .services import ownsources
 from .views import throttled
+from .views_app import new_app_redirect
 
 
 def _shared_sources():
@@ -27,6 +26,8 @@ def _shared_sources():
 @login_required
 @require_http_methods(["GET", "POST"])
 def sources(request):
+    if request.method == "GET" and (go := new_app_redirect(request, "/sources")):
+        return go
     form = OwnSourceForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         added = _add(request, form.cleaned_data)
@@ -43,30 +44,14 @@ def sources(request):
 
 def _add(request, data) -> bool:
     connector, token, name = data["connector"], data["board_token"], data["name"]
-    if JobSource.objects.filter(owner=request.user).count() >= settings.STILLOPEN_MAX_OWN_SOURCES:
-        messages.error(request, f"You can add up to {settings.STILLOPEN_MAX_OWN_SOURCES} boards. Remove one first.")
-        return False
-    if JobSource.objects.filter(owner__isnull=True, connector=connector, board_token=token).exists():
-        messages.info(request, "That company is already part of every search, so there is nothing to add.")
-        return False
-    if JobSource.objects.filter(owner=request.user, connector=connector, board_token=token).exists():
-        messages.info(request, "You already added that board.")
-        return False
-    if throttled(request.user, "source_add", settings.STILLOPEN_SOURCE_ADDS_PER_HOUR):
-        messages.error(request, "You have added a lot of boards this hour. Try again later.")
-        return False
     try:
-        openings = scan._fetch(connector, token)  # the same guarded fetch a scan uses: fixed host, no redirects to private addresses
-    except (FetchError, KeyError, ValueError):
-        messages.error(request, "We could not read jobs from that board. Check the name against the company's careers page address and try again.")
+        _, count = ownsources.add_own_source(
+            request.user, connector, token, name, lambda: throttled(request.user, "source_add", settings.STILLOPEN_SOURCE_ADDS_PER_HOUR),
+        )
+    except ownsources.SourceRefused as refused:
+        (messages.info if refused.info else messages.error)(request, str(refused))
         return False
-    try:
-        with transaction.atomic():
-            JobSource.objects.create(owner=request.user, name=name[:120], connector=connector, board_token=token)
-    except IntegrityError:
-        messages.info(request, "You already added that board.")
-        return False
-    messages.success(request, f"Added {name}. It has {len(openings)} opening{'s' if len(openings) != 1 else ''} right now; your next search will include it.")
+    messages.success(request, f"Added {name}. It has {count} opening{'s' if count != 1 else ''} right now; your next search will include it.")
     return True
 
 

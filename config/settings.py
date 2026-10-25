@@ -266,6 +266,8 @@ ACCOUNT_EMAIL_VERIFICATION = os.environ.get("ACCOUNT_EMAIL_VERIFICATION", "none"
 STILLOPEN_MAX_APPLICATIONS = int(os.environ.get("STILLOPEN_MAX_APPLICATIONS", "500"))
 STILLOPEN_MAX_KNOWLEDGE = int(os.environ.get("STILLOPEN_MAX_KNOWLEDGE", "40"))
 # Where the built new app (Next.js static export) lives; /app/ answers 404 until it has been built.
+# A strict Content-Security-Policy on the new app's page (scripts only from this site and the build's own inline scripts, by hash). "0" turns it off.
+STILLOPEN_APP_CSP = os.environ.get("STILLOPEN_APP_CSP", "1") == "1"
 STILLOPEN_FRONTEND_DIR = os.environ.get("STILLOPEN_FRONTEND_DIR", str(BASE_DIR / "frontend" / "out"))
 STILLOPEN_EVALS_PER_HOUR = int(os.environ.get("STILLOPEN_EVALS_PER_HOUR", "30"))
 STILLOPEN_CHECKS_PER_HOUR = int(os.environ.get("STILLOPEN_CHECKS_PER_HOUR", "12"))

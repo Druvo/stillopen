@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
+from .views_app import new_app_redirect
 from .models import Application, PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, SiteConfig
 from .services import prep, quiz
 
@@ -36,6 +37,8 @@ def _int(value, default=None):
 @require_GET
 def prep_list(request):
     _config(request)
+    if go := new_app_redirect(request, "/prep"):
+        return go
     plans = PrepPlan.objects.filter(owner=request.user).select_related("application").annotate(
         lessons_total=Count("weeks__lessons", distinct=True),
         lessons_done=Count("weeks__lessons", filter=Q(weeks__lessons__done_at__isnull=False), distinct=True),
@@ -65,6 +68,8 @@ def prep_create(request, pk):
 def prep_plan(request, pk):
     _config(request)
     plan = _plan(request, pk)
+    if go := new_app_redirect(request, f"/prep/{plan.pk}"):
+        return go
     weeks = plan.weeks.prefetch_related("lessons__questions", "milestones")
     done, total = plan.progress_counts()
     return render(request, "tracker/prep_plan.html", {
@@ -112,15 +117,11 @@ def prep_remove(request, kind, pk):
     if kind == "lesson":
         lesson = get_object_or_404(PrepLesson, pk=pk, week__plan__owner=request.user)
         plan = lesson.week.plan
-        if plan.status == "draft":
-            lesson.questions.update(removed=True)
-            lesson.delete()
+        prep.remove_lesson(lesson)
     elif kind == "question":
         question = get_object_or_404(PrepQuestion, pk=pk, plan__owner=request.user)
         plan = question.plan
-        if plan.status == "draft":
-            question.removed = True
-            question.save(update_fields=["removed"])
+        prep.remove_question(question)
     else:
         raise Http404("Unknown item.")
     return redirect("prep_plan", pk=plan.pk)
@@ -139,14 +140,7 @@ def prep_tick(request, kind, pk):
         plan = item.week.plan
     else:
         raise Http404("Unknown item.")
-    if plan.status in ("active", "done"):
-        item.done_at = None if item.done_at else timezone.now()
-        item.save(update_fields=["done_at"])
-        done, total = plan.progress_counts()
-        new_status = "done" if total and done == total else "active"
-        if new_status != plan.status:
-            plan.status = new_status
-            plan.save(update_fields=["status"])
+    prep.toggle_done(plan, item)
     return redirect("prep_plan", pk=plan.pk)
 
 
@@ -163,6 +157,8 @@ def prep_today(request, pk):
     """Today's practice: the questions to answer, or, once answered, how it went with each explanation."""
     config = _config(request)
     plan = _practice_plan(request, pk)
+    if go := new_app_redirect(request, f"/prep/{plan.pk}/today"):
+        return go
     try:
         challenge = quiz.build_challenge(plan, config.prep_daily_questions)
     except quiz.QuizError as exc:

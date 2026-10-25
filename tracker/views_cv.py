@@ -4,7 +4,6 @@ import re
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import RestrictedError
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -13,6 +12,7 @@ from .models import CVVersion, SiteConfig
 from .services import cvexport, cvgen, cvversions
 from .services.cvversions import CVError
 from .views import owned_app, throttled
+from .views_app import new_app_redirect
 
 
 def _version(request, pk) -> CVVersion:
@@ -27,6 +27,8 @@ def _filename(version: CVVersion, ext: str) -> str:
 @login_required
 @require_GET
 def cv_list(request):
+    if go := new_app_redirect(request, "/cv"):
+        return go
     config = SiteConfig.for_user(request.user)
     try:
         cvversions.ensure_master(request.user, config)  # first visit: the profile CV becomes version 1
@@ -44,6 +46,8 @@ def cv_list(request):
 @require_http_methods(["GET", "POST"])
 def cv_detail(request, pk):
     version = _version(request, pk)
+    if request.method == "GET" and (go := new_app_redirect(request, f"/cv/{version.pk}")):
+        return go
     if request.method == "POST":
         try:
             created = cvversions.new_version_from_edit(
@@ -64,6 +68,8 @@ def cv_detail(request, pk):
 @require_GET
 def cv_diff(request, pk):
     version = _version(request, pk)
+    if go := new_app_redirect(request, f"/cv/{version.pk}/diff" + (f"?against={request.GET['against']}" if request.GET.get("against", "").isdigit() else "")):
+        return go
     other_id = request.GET.get("against")
     if other_id:
         other = get_object_or_404(CVVersion, pk=other_id, owner=request.user)
@@ -104,13 +110,10 @@ def cv_restore(request, pk):
 @require_POST
 def cv_delete(request, pk):
     version = _version(request, pk)
-    if version.kind != "tailored":
-        messages.error(request, "Master CV versions are your history and cannot be deleted. Delete your account to remove everything.")
-        return redirect("cv_detail", pk=version.pk)
     try:
-        version.delete()
-    except RestrictedError:
-        messages.error(request, "This CV is recorded as sent with an application, so it is kept as your record.")
+        cvversions.delete_tailored(version)
+    except CVError as exc:
+        messages.error(request, str(exc))
         return redirect("cv_detail", pk=version.pk)
     messages.success(request, "Deleted.")
     return redirect("cv_list")

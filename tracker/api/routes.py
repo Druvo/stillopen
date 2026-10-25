@@ -10,6 +10,7 @@ from ..models import Application, Bucket, JobSource, ScoreBand, SiteConfig, Stat
 from ..services import ai, board, geo, guide, liveness, quiz, scan
 from ..services import apply as apply_service
 from ..views import card_for, throttled
+from .common import ApiFormError, owned_job, too_many
 
 api = NinjaAPI(
     title="StillOpen",
@@ -25,13 +26,12 @@ def _plain_errors(request, exc):
     return api.create_response(request, {"error": str(exc)}, status=exc.status_code)
 
 
-def owned(request, pk) -> Application:
-    """The person's own job or a 404, the same as the classic pages."""
-    return get_object_or_404(Application, pk=pk, owner=request.user)
+@api.exception_handler(ApiFormError)
+def _form_errors(request, exc):
+    return api.create_response(request, {"error": str(exc), "fields": exc.fields}, status=400)
 
 
-def too_many():
-    return HttpError(429, "Too many requests. Try again later.")
+owned = owned_job
 
 
 class StatusIn(Schema):
@@ -205,3 +205,16 @@ def liveness_start(request):
 @api.get("/liveness/status", summary="Progress of the latest open/closed check")
 def liveness_status(request):
     return _progress(liveness.current_run(request.user))
+
+
+# --- the rest of the app: every other module in this package that defines `router` is mounted here ---------
+
+import importlib  # noqa: E402
+import pkgutil  # noqa: E402
+
+for _info in pkgutil.iter_modules(importlib.import_module(__package__).__path__):
+    if _info.name in ("routes", "common"):
+        continue
+    _module = importlib.import_module(f"{__package__}.{_info.name}")
+    if hasattr(_module, "router"):
+        api.add_router("", _module.router)

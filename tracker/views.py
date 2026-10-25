@@ -26,6 +26,9 @@ from .services import board, fit as fit_service, geo, guide
 from .services.cvversions import CVError
 from .services.files import resolve_document_path
 from .services.paperless import PaperlessClient, PaperlessError, push_document
+from .services import account as account_service
+from .services import tracking
+from .views_app import new_app_redirect
 
 
 # --- helpers ------------------------------------------------------------------------------------
@@ -344,39 +347,26 @@ def quickadd_fetch(request):
         return JsonResponse({"ok": False, "error": "Paste a job URL first."}, status=400)
     config = SiteConfig.for_user(request.user)
     try:
-        posting = jobtext.fetch_posting(url, config)
+        prefill = tracking.fetch_prefill(url, config)
     except jobtext.FetchError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
-    role, company = jobtext.guess_role_company(posting["title"]) if posting["title"] else ("", "")
     # Handed to add_job via the session, not a query string -- a full job description would routinely
     # blow past the ~8KB URL length most servers accept.
-    request.session["quickadd_prefill"] = {
-        "url": url,
-        "role": role,
-        "company": company,
-        "description": posting["description"][:30000],
-    }
+    request.session["quickadd_prefill"] = prefill
     return JsonResponse({"ok": True})
 
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def add_job(request):
+    if request.method == "GET" and (go := new_app_redirect(request, "/jobs/add")):
+        return go
     initial = request.session.pop("quickadd_prefill", None) if request.method == "GET" else None
     form = forms.JobForm(request.POST or None, initial=initial)
-    if request.method == "POST" and mine(request).count() >= settings.STILLOPEN_MAX_APPLICATIONS:
-        form.add_error(None, f"You have reached the limit of {settings.STILLOPEN_MAX_APPLICATIONS} tracked jobs. Delete some first.")
+    if request.method == "POST" and tracking.at_job_limit(request.user):
+        form.add_error(None, tracking.job_limit_message())
     elif request.method == "POST" and form.is_valid():
-        app = form.save(commit=False)
-        app.owner = request.user
-        app.status = (
-            Status.objects.filter(name="Saved").first()
-            or Status.objects.filter(bucket__is_closed=False).order_by("order").first()
-            or Status.objects.first()
-        )
-        app.save()
-        geo.fill_details(app)  # suggest location, arrangement, sponsorship and type from the posting
-        Event.objects.create(application=app, kind="note", text="Added")
+        app = tracking.add_job(request.user, form)
         messages.success(request, f"Saved {app.company} - {app.role}. Next, press Check my fit to see how well it suits you.")
         return redirect("dashboard")
     return render(request, "tracker/add_job.html", {"form": form, "config": SiteConfig.load()})
@@ -389,6 +379,8 @@ def all_postings(request):
     fact about the job market, not about any one person's search (same reasoning as the repost signal itself).
     This is the answer to "it found 586 but only tracked 11 -- where did the rest go?": nowhere, they were
     never hidden, just never auto-added because they didn't match your target roles."""
+    if go := new_app_redirect(request, "/postings"):
+        return go
     qs = Posting.objects.filter(source__in=JobSource.for_user(request.user)).select_related("source").order_by("-last_seen_at")
     q = request.GET.get("q", "").strip()
     if q:
@@ -420,29 +412,14 @@ def add_posting(request, pk):
     qs = request.POST.get("qs", "")
     if qs:
         target = f"{target}?{qs}"
-    if mine(request).filter(url=posting.url).exists():
+    try:
+        app, created = tracking.add_posting(request.user, posting)
+    except tracking.TrackingError as exc:
+        messages.error(request, str(exc))
+        return redirect(target)
+    if not created:
         messages.info(request, "Already in your tracker.")
         return redirect(target)
-    if mine(request).count() >= settings.STILLOPEN_MAX_APPLICATIONS:
-        messages.error(request, f"You have reached the limit of {settings.STILLOPEN_MAX_APPLICATIONS} tracked jobs. Delete some first.")
-        return redirect(target)
-    app = Application(
-        owner=request.user,
-        company=posting.company or posting.source.name,
-        role=posting.title,
-        url=posting.url,
-        location_text=posting.location,
-        posting=posting,
-        status=(
-            Status.objects.filter(name="Saved").first()
-            or Status.objects.filter(bucket__is_closed=False).order_by("order").first()
-            or Status.objects.first()
-        ),
-        found_date=timezone.localdate(),
-    )
-    app.save()
-    geo.fill_details(app)
-    Event.objects.create(application=app, kind="note", text="Added from All postings")
     messages.success(request, f"Added {app.company} - {app.role}.")
     return redirect(target)
 
@@ -460,6 +437,8 @@ def _save_cv_history(request, obj, form):
 @require_http_methods(["GET", "POST"])
 def welcome(request):
     """A short, skippable first stop after sign-up."""
+    if request.method == "GET" and (go := new_app_redirect(request, "/welcome")):
+        return go
     obj = UserProfile.for_user(request.user)
     form = forms.WelcomeForm(request.POST or None, request.FILES or None, instance=obj)
     if request.method == "POST" and form.is_valid():
@@ -485,6 +464,8 @@ def welcome_skip(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def profile(request):
+    if request.method == "GET" and (go := new_app_redirect(request, "/profile")):
+        return go
     obj = UserProfile.for_user(request.user)
     form = forms.ProfileForm(request.POST or None, request.FILES or None, instance=obj)
     with_areas = request.method == "POST" and "areas-TOTAL_FORMS" in request.POST  # a post without the rows leaves them as they are
@@ -518,6 +499,8 @@ def profile(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def profile_ai(request):
+    if request.method == "GET" and (go := new_app_redirect(request, "/profile/ai")):
+        return go
     obj = UserProfile.for_user(request.user)
     form = forms.AISettingsForm(request.POST or None, instance=obj, restricted=not request.user.is_staff)
     if request.method == "POST" and form.is_valid():
@@ -542,17 +525,15 @@ def profile_ai(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def knowledge_list(request):
+    if request.method == "GET" and (go := new_app_redirect(request, "/knowledge")):
+        return go
     owned = KnowledgeSource.objects.filter(owner=request.user)
     visible = owned.exclude(key__in=["profile-cv", "careerops:cv.md"]).prefetch_related("chunks")
     form = forms.KnowledgeForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and owned.count() >= settings.STILLOPEN_MAX_KNOWLEDGE:
-        form.add_error(None, f"You have reached the limit of {settings.STILLOPEN_MAX_KNOWLEDGE} documents.")
+        form.add_error(None, tracking.knowledge_limit_message())
     elif request.method == "POST" and form.is_valid():
-        source = form.save(commit=False)
-        source.owner = request.user
-        source.file = ""  # only the extracted text is kept, never the uploaded file
-        source.save()
-        knowledge.reindex_source(source, SiteConfig.for_user(request.user))
+        source = tracking.add_document(request.user, form, SiteConfig.for_user(request.user))
         messages.success(request, f"Added {source.title}.")
         return redirect("knowledge")
     return render(request, "tracker/knowledge.html", {"form": form, "sources": visible, "config": SiteConfig.load()})
@@ -566,9 +547,7 @@ def knowledge_action(request, pk, action):
         source.delete()
         messages.success(request, "Deleted.")
     elif action == "toggle":
-        source.enabled = not source.enabled
-        source.save()
-        knowledge.reindex_source(source, SiteConfig.for_user(request.user))
+        tracking.toggle_document(source, SiteConfig.for_user(request.user))
     else:
         raise Http404()
     return redirect("knowledge")
@@ -666,12 +645,7 @@ def delete_account(request):
     if request.POST.get("confirm", "").strip() != user.get_username():
         messages.error(request, "Type your username exactly to confirm.")
         return redirect("profile")
-    for doc in Document.objects.filter(application__owner=user):  # delete stored files too, not just rows
-        if doc.file:
-            doc.file.delete(save=False)
-    for source in KnowledgeSource.objects.filter(owner=user):
-        if source.file:
-            source.file.delete(save=False)
+    account_service.delete_stored_files(user)  # stored files too, not just rows
     logout(request)
     user.delete()  # cascades to profile, applications, knowledge, events, runs
     return redirect("landing")
@@ -681,6 +655,8 @@ def delete_account(request):
 @require_http_methods(["GET", "POST"])
 def job_edit(request, pk):
     app = owned_app(request, pk)
+    if request.method == "GET" and (go := new_app_redirect(request, f"/jobs/{app.pk}/edit")):
+        return go
     form = forms.JobEditForm(request.POST or None, instance=app)
     if request.method == "POST" and form.is_valid():
         form.save()
@@ -694,9 +670,9 @@ def job_edit(request, pk):
 @require_POST
 def job_redetect(request, pk):
     app = owned_app(request, pk)
-    if app.details_source == "manual":
+    changed = tracking.redetect(app)
+    if changed is None:
         messages.error(request, "You set these details yourself, so they are left alone. Clear a field and save to let detection fill it.")
     else:
-        changed = geo.fill_details(app, overwrite=True)
         messages.success(request, "Re-read the posting." + (f" Updated: {', '.join(changed)}." if changed else " Nothing to change."))
     return redirect("job_edit", pk=app.pk)

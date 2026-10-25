@@ -1,0 +1,38 @@
+import { request } from "@/lib/api";
+import type { DiffRow, Finding } from "./logic";
+
+export type JobRef = { id: number; role: string; company: string };
+export type CvSummary = {
+  id: number; label: string; kind: "master" | "tailored"; kind_label: string; source: string; source_label: string; provider: string; created_at: string;
+  job: JobRef | null; flagged: boolean; flagged_count: number; approved: boolean; exportable: boolean; current?: boolean;
+};
+export type CvList = { masters: CvSummary[]; tailored: CvSummary[] };
+export type CvDownloads = { docx: string; md: string; print: string };
+export type CvDetail = CvSummary & {
+  content: string; check_report: Finding[]; approved_at: string | null; job_snapshot: string; parent: { id: number; label: string } | null; children: number; downloads: CvDownloads | null;
+};
+export type CvDiff = { version: { id: number; label: string }; other: { id: number; label: string } | null; rows: DiffRow[]; choices: { id: number; label: string }[] };
+export type Made = { id: number; flagged: boolean; flagged_count: number };
+export type Cover = {
+  id: number; content: string; source: string; source_label: string; provider: string; updated_at: string; job: JobRef; flagged: boolean; flagged_count: number;
+  check_report: Finding[]; approved: boolean; approved_at: string | null; exportable: boolean; downloads: { docx: string; txt: string } | null; apply_url: string;
+};
+
+export const cvApi = {
+  list: () => request<CvList>("GET", "/cv"),
+  get: (id: number) => request<CvDetail>("GET", `/cv/${id}`),
+  edit: (id: number, content: string, label: string) => request<{ id: number; changed: boolean }>("POST", `/cv/${id}/edit`, { content, label }),
+  diff: (id: number, against?: number) => request<CvDiff>("GET", `/cv/${id}/diff${against ? `?against=${against}` : ""}`),
+  approve: (id: number) => request<{ ok: true; exportable: boolean }>("POST", `/cv/${id}/approve`),
+  restore: (id: number) => request<{ id: number }>("POST", `/cv/${id}/restore`),
+  remove: (id: number) => request<{ ok: true }>("DELETE", `/cv/${id}`),
+  tailor: (jobId: number) => request<Made>("POST", `/jobs/${jobId}/tailor`, { mode: "auto" }),
+};
+
+export const coverApi = {
+  get: (id: number) => request<Cover>("GET", `/cover/${id}`),
+  save: (id: number, content: string) => request<Cover>("POST", `/cover/${id}/save`, { content }),
+  approve: (id: number) => request<{ ok: true; exportable: boolean }>("POST", `/cover/${id}/approve`),
+  remove: (id: number) => request<{ ok: true }>("DELETE", `/cover/${id}`),
+  write: (jobId: number) => request<Made>("POST", `/jobs/${jobId}/cover-letter`, { mode: "auto" }),
+};

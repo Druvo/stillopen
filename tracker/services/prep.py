@@ -430,6 +430,33 @@ def activate(plan: PrepPlan, config: SiteConfig) -> None:
     plan.save(update_fields=["status", "approved_at"])
 
 
+def remove_lesson(lesson: PrepLesson) -> None:
+    """While reviewing a draft: take out a lesson and its questions. Does nothing once the plan has started."""
+    if lesson.week.plan.status == "draft":
+        lesson.questions.update(removed=True)
+        lesson.delete()
+
+
+def remove_question(question: PrepQuestion) -> None:
+    """While reviewing a draft: take out one question. Does nothing once the plan has started."""
+    if question.plan.status == "draft":
+        question.removed = True
+        question.save(update_fields=["removed"])
+
+
+def toggle_done(plan: PrepPlan, item) -> None:
+    """Mark a lesson or milestone done (or not done again) once the plan has started, and finish or reopen the plan to match."""
+    if plan.status not in ("active", "done"):
+        return
+    item.done_at = None if item.done_at else timezone.now()
+    item.save(update_fields=["done_at"])
+    done, total = plan.progress_counts()
+    new_status = "done" if total and done == total else "active"
+    if new_status != plan.status:
+        plan.status = new_status
+        plan.save(update_fields=["status"])
+
+
 def study_completed(app: Application) -> list:
     """Lessons the person has marked done, for plans made for this job: what they studied, as a short list."""
     done = PrepLesson.objects.filter(week__plan__application=app, week__plan__owner=app.owner, done_at__isnull=False)
