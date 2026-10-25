@@ -83,11 +83,12 @@ class ProfileApi(Base):
         self.put("/profile", {"target_roles": "Mine"})
         self.assertEqual(UserProfile.for_user(self.b).target_roles, "")
 
-    def test_the_new_app_switch_is_saved(self):
-        self.put("/profile", {"use_new_app": True})
-        self.assertTrue(UserProfile.objects.get(user=self.a).use_new_app)
-        self.put("/profile", {"use_new_app": False})
-        self.assertFalse(UserProfile.objects.get(user=self.a).use_new_app)
+    def test_the_old_new_app_switch_is_gone(self):
+        before = UserProfile.objects.get(user=self.a).use_new_app
+        self.put("/profile", {"use_new_app": not before})
+        self.assertEqual(UserProfile.objects.get(user=self.a).use_new_app, before)
+        self.assertNotIn("use_new_app", self.get("/profile").json()["profile"])
+        self.assertNotIn("new_app_enabled", self.get("/profile").json()["site"])
 
     def test_the_document_count_leaves_out_the_cv(self):
         self.put("/profile", {"profile_cv": CV})
@@ -277,8 +278,12 @@ class SourcesApi(Base):
         JobSource.objects.create(name="Shared", connector="lever", board_token="shared")
         with mock.patch(self.FETCH, return_value=[]), mock.patch("tracker.services.scan.fetch_lever", return_value=[]):
             self.assertEqual(self.add().status_code, 200)
-            self.assertIn("already added", self.add().json()["error"])
-            self.assertIn("already part of every search", self.add(token="shared", connector="lever").json()["error"])
+            first = self.add()
+            self.assertEqual(first.status_code, 200)
+            self.assertIn("already added", first.json()["info"])  # plain information, not an error
+            second = self.add(token="shared", connector="lever")
+            self.assertEqual(second.status_code, 200)
+            self.assertIn("already part of every search", second.json()["info"])
         self.assertEqual(JobSource.objects.filter(owner=self.a).count(), 1)
 
     def test_pause_resume_and_remove(self):

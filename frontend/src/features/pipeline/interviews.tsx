@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge, Button, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
+import { notify } from "@/lib/toast";
 import { pipelineApi, type Interview, type InterviewList, type InterviewValues } from "./api";
 import { jobFromSearch, whenLabel } from "./logic";
 
@@ -25,6 +26,7 @@ function InterviewForm({ data, item, defaultJob, onDone }: { data: InterviewList
     if (item) await pipelineApi.editInterview(item.id, v);
     else await pipelineApi.addInterview(v);
     await client.invalidateQueries({ queryKey: KEY });
+    notify("Interview saved.");
     if (!item) setV({ ...v, scheduled_at: "", where: "", notes: "" });
     onDone();
   });
@@ -60,7 +62,13 @@ function Row({ item, data, onEdit }: { item: Interview; data: InterviewList; onE
   const client = useQueryClient();
   const refresh = () => client.invalidateQueries({ queryKey: KEY });
   const outcome = useMutation({ mutationFn: (o: string) => pipelineApi.interviewOutcome(item.id, o), onSuccess: refresh });
-  const remove = useMutation({ mutationFn: () => pipelineApi.deleteInterview(item.id), onSuccess: refresh });
+  const remove = useMutation({
+    mutationFn: () => pipelineApi.deleteInterview(item.id),
+    onSuccess: () => {
+      notify("Deleted.");
+      return refresh();
+    },
+  });
   const error = outcome.error || remove.error;
   return (
     <Card className="mb-3">
@@ -121,7 +129,7 @@ export function Interviews() {
   const noJobs = data.jobs.length === 0;
   return (
     <>
-      <PageHeader title="Interviews" subtitle="Keep every interview in one place, and say how each one went." />
+      <PageHeader title="Interviews" subtitle="Keep every conversation in one place: when it is, where, who you meet and what to prepare. Nothing is sent to anyone." />
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div>
           <h2 className="mb-2 font-semibold">Coming up</h2>

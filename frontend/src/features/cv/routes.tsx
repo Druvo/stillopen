@@ -11,5 +11,3 @@ export const ROUTES: Route[] = [
   { pattern: /^\/cover\/(\d+)$/, render: ([id]) => <CoverDetail key={id} id={Number(id)} /> },
 ];
 
-/** Classic page path (as in the sidebar) -> path of its replacement in this app. A migrated screen switches its sidebar entry to the new app. */
-export const NAV_OVERRIDES: Record<string, string> = { "/cv/": "/cv" };

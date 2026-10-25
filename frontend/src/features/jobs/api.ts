@@ -45,14 +45,14 @@ export type Documents = {
   can_push_to_paperless: boolean;
 };
 
-export type CvChoice = { id: number; label: string; kind: string; kind_label: string; created: string; flagged: boolean; docx_url: string; print_url: string; open_url: string };
+export type CvChoice = { id: number; label: string; kind: string; kind_label: string; created: string; flagged: boolean; docx_url: string; print_url: string };
 export type ApplyData = {
   job: { id: number; company: string; role: string; url: string; closed: boolean; applied: boolean; applied_date: string; channel: string; note: string; follow_up_date: string };
   checks: Check[];
   versions: CvChoice[];
   selected: number | null;
   has_flagged: boolean;
-  cover_letters: { id: number; created: string; needs_review: boolean; open_url: string }[];
+  cover_letters: { id: number; created: string; needs_review: boolean }[];
   draft: { subject: string; body: string };
   channels: Option[];
   followup_days: number;

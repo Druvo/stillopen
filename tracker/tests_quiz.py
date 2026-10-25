@@ -269,7 +269,7 @@ class DuePlans(QuizBase):
         self.assertNotIn("practice", step["headline"].lower())  # something about the job comes first
         step = guide.next_step(Done(), [{"app": Application(status=self.status, live_state="expired"), "percent": 10, "cv": None}], has_areas=True, prep_due=[plan])
         self.assertIn("Today's practice", step["headline"])
-        self.assertEqual(step["url"], reverse("prep_today", args=[plan.pk]))
+        self.assertEqual(step["url"], f"/app/prep/{plan.pk}/today")
         self.assertIsNone(guide.next_step(Done(), [{"app": Application(status=self.status, live_state="expired"), "percent": 10, "cv": None}], has_areas=True))
 
 

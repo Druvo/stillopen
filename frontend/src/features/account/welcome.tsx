@@ -6,6 +6,7 @@ import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { CheckField, FormError, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
 import { navigate } from "@/lib/router";
+import { notify } from "@/lib/toast";
 import { accountApi, type WelcomeData } from "./api";
 import { toFormData } from "./logic";
 
@@ -25,6 +26,7 @@ function WelcomeForm({ data }: { data: WelcomeData }) {
   const skip = useSubmit();
   const save = form.handle(async () => {
     await accountApi.saveWelcome(file ? toFormData({ ...values }, file) : { ...values });
+    notify("Lovely, that helps. We are searching for jobs that fit you now; they will appear here in a minute.");
     navigate("/"); // the search starts on the dashboard
   });
   const leave = skip.handle(async () => {
@@ -86,6 +88,7 @@ function WelcomeForm({ data }: { data: WelcomeData }) {
           <TextAreaField label="Or paste your CV here" rows={8} value={values.profile_cv} onChange={(e) => set("profile_cv", e.target.value)} errors={form.fields.profile_cv} />
         </Card>
         <FormError message={form.error || skip.error} />
+        <p className="text-sm text-muted">Your answers stay private to you. Nothing is ever sent to an employer, and we never apply for you.</p>
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={form.busy || skip.busy}>
             {form.busy ? "Saving…" : "Save and see my jobs"}

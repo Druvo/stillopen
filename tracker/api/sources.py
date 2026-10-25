@@ -51,9 +51,11 @@ def add_source(request):
             lambda: throttled(request.user, "source_add", settings.STILLOPEN_SOURCE_ADDS_PER_HOUR),
         )
     except ownsources.SourceRefused as refused:
+        if refused.info:  # "already added" is not a problem: say so as plain information, like the classic page did
+            return {"source": None, "openings": 0, "message": "", "info": str(refused)}
         raise HttpError(refused.status, str(refused)) from None
     message = f"Added {source.name}. It has {count} opening{'s' if count != 1 else ''} right now; your next search will include it."
-    return {"source": _source(source), "openings": count, "message": message}
+    return {"source": _source(source), "openings": count, "message": message, "info": ""}
 
 
 @router.post("/sources/{source_id}/toggle", summary="Pause or resume one of the person's boards")

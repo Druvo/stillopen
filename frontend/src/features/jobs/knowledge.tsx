@@ -5,6 +5,8 @@ import { useRef, useState } from "react";
 import { Field, FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { Badge, Button, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { Link } from "@/lib/router";
+import { notify } from "@/lib/toast";
 import { jobsApi, type DocumentRow, type Documents } from "./api";
 import { fileSize } from "./logic";
 
@@ -63,8 +65,22 @@ function Row({ doc }: { doc: DocumentRow }) {
   const client = useQueryClient();
   const [error, setError] = useState("");
   const done = { onSuccess: () => client.invalidateQueries({ queryKey: KEY }), onError: (e: unknown) => setError(errorText(e)) };
-  const toggle = useMutation({ mutationFn: () => jobsApi.toggleDocument(doc.id), ...done });
-  const remove = useMutation({ mutationFn: () => jobsApi.deleteDocument(doc.id), ...done });
+  const toggle = useMutation({
+    mutationFn: () => jobsApi.toggleDocument(doc.id),
+    ...done,
+    onSuccess: (r: { enabled: boolean }) => {
+      notify(r.enabled ? `"${doc.title}" will be used again.` : `"${doc.title}" is hidden from the AI.`);
+      return client.invalidateQueries({ queryKey: KEY });
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => jobsApi.deleteDocument(doc.id),
+    ...done,
+    onSuccess: () => {
+      notify("Deleted.");
+      return client.invalidateQueries({ queryKey: KEY });
+    },
+  });
   const busy = toggle.isPending || remove.isPending;
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-3 last:border-0">
@@ -110,11 +126,11 @@ export function Knowledge() {
       <p className="mb-4 text-sm">
         {data.cv.present ? (
           <>
-            <Badge tone="good">Your CV is included</Badge> It comes from your <a href="/profile/" className="text-brand underline">profile</a> and is always used.
+            <Badge tone="good">Your CV is included</Badge> It comes from your <Link to="/profile" className="text-brand underline">profile</Link> and is always used.
           </>
         ) : (
           <>
-            <Badge tone="warn">No CV yet</Badge> Add your CV in your <a href="/profile/" className="text-brand underline">profile</a> so tailoring and fit checks have something to work from.
+            <Badge tone="warn">No CV yet</Badge> Add your CV in your <Link to="/profile" className="text-brand underline">profile</Link> so tailoring and fit checks have something to work from.
           </>
         )}
       </p>

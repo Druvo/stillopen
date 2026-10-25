@@ -9,7 +9,8 @@ from ninja.errors import HttpError
 from ..models import CoverLetter, SiteConfig
 from ..services import coverletter
 from ..services.cvversions import CVError
-from .common import owned_job, throttle
+from ..views import throttled
+from .common import owned_job
 
 router = Router()
 
@@ -28,7 +29,7 @@ def _detail(letter: CoverLetter) -> dict:
         "updated_at": letter.updated_at.isoformat(), "job": {"id": app.pk, "role": app.role, "company": app.company},
         "flagged": letter.flagged, "flagged_count": len(letter.check_report or []), "check_report": letter.check_report or [],
         "approved": letter.approved, "approved_at": letter.approved_at.isoformat() if letter.approved_at else None,
-        "exportable": letter.exportable, "downloads": downloads, "apply_url": reverse("apply_page", args=[app.pk]),
+        "exportable": letter.exportable, "downloads": downloads,
     }
 
 
@@ -72,7 +73,8 @@ class WriteIn(Schema):
 @router.post("/jobs/{job_id}/cover-letter", summary="Write a cover letter for a job")
 def write_letter(request, job_id: int, payload: WriteIn):
     app = owned_job(request, job_id)
-    throttle(request, "cvgen", settings.STILLOPEN_CVGEN_PER_HOUR)
+    if throttled(request.user, "cvgen", settings.STILLOPEN_CVGEN_PER_HOUR):
+        raise HttpError(429, "Too many requests this hour. Try again later.")  # the classic page's own words
     mode = payload.mode if payload.mode in ("auto", "ai", "keywords") else "auto"
     try:
         letter = coverletter.generate(app, SiteConfig.for_user(request.user), mode)

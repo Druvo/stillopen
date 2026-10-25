@@ -59,7 +59,6 @@ def _profile_json(user) -> dict:
             "seniority_levels": profile.seniority_levels, "industries": profile.industries, "languages": profile.languages,
             "notice_period": profile.notice_period, "salary_floor": profile.salary_floor, "deal_breakers": profile.deal_breakers,
             "about": profile.about, "profile_cv": profile.profile_cv, "scan_digest_enabled": profile.scan_digest_enabled,
-            "use_new_app": profile.use_new_app,
         },
         "choices": {
             "employment_types": [{"value": v, "label": label} for v, label in UserProfile.EMPLOYMENT],
@@ -69,7 +68,7 @@ def _profile_json(user) -> dict:
         "areas": [area_json(a) for a in areas],
         "max_areas": forms.MAX_AREAS,
         "site": {
-            "new_app_enabled": site.new_app_enabled, "scan_emails_enabled": site.scan_emails_enabled, "assistant_enabled": site.mcp_remote_enabled,
+            "scan_emails_enabled": site.scan_emails_enabled, "assistant_enabled": site.mcp_remote_enabled,
         },
         "account": {
             "username": user.get_username(), "email": user.email, "is_staff": user.is_staff, "can_delete": not user.is_staff,
@@ -81,7 +80,6 @@ def _profile_json(user) -> dict:
             "classic": {
                 "email": reverse("account_email"), "password": reverse("account_change_password"), "two_step": reverse("mfa_index"),
                 "connections": reverse("socialaccount_connections"), "export": reverse("export_data"), "privacy": reverse("privacy"),
-                "documents": reverse("knowledge"),
             },
         },
     }
@@ -96,6 +94,7 @@ def _save_profile(request):
     from ..views import _save_cv_history
 
     data, files = read_payload(request)
+    data.pop("use_new_app", None)  # the old opt-in switch is gone; a stale client cannot change it
     obj = UserProfile.for_user(request.user)
     form = forms.ProfileForm(merged(forms.ProfileForm(instance=obj), data), files, instance=obj)
     validate_form(form)

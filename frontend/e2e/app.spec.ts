@@ -31,7 +31,12 @@ test("the board shows only my jobs, and a keyboard move is saved", async ({ page
   await page.keyboard.press("Space");
   await expect(page.locator("article.rotate-1")).toBeVisible(); // the lifted copy: the drag has really started
   await announced(/Backend Engineer is over To apply/); // still over its own column
-  await page.keyboard.press("ArrowRight");
+  // The keyboard sensor listens a moment after pickup, and a busy page can make that moment long: press again until it has moved.
+  const live = page.locator("[id^=DndLiveRegion]");
+  for (let attempt = 0; attempt < 6 && /over To apply/.test((await live.textContent()) ?? ""); attempt++) {
+    await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(400);
+  }
   await announced(/Backend Engineer is over (?!To apply)/);
   await page.keyboard.press("Space");
   await expect(page.getByRole("status").filter({ hasText: /Moved Backend Engineer/ })).toBeVisible();

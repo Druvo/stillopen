@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge, Button, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
+import { notify } from "@/lib/toast";
 import { pipelineApi, type Contact, type ContactList, type ContactValues, type ReferralValues } from "./api";
 import { dayLabel } from "./logic";
 
@@ -22,6 +23,7 @@ function ContactForm({ item, onDone }: { item?: Contact; onDone: () => void }) {
     if (item) await pipelineApi.editContact(item.id, v);
     else await pipelineApi.addContact(v);
     await client.invalidateQueries({ queryKey: KEY });
+    notify("Contact saved.");
     if (!item) setV(empty);
     onDone();
   });
@@ -50,6 +52,7 @@ function ReferralForm({ data, contacts }: { data: ContactList; contacts: Contact
   const submit = form.handle(async () => {
     await pipelineApi.addReferral(v);
     await client.invalidateQueries({ queryKey: KEY });
+    notify("Referral saved.");
     setV({ contact: "", application: "", status: "thinking", note: "" });
   });
   return (
@@ -90,8 +93,12 @@ function Person({ item, data, onEdit }: { item: Contact; data: ContactList; onEd
   const client = useQueryClient();
   const refresh = () => client.invalidateQueries({ queryKey: KEY });
   const status = useMutation({ mutationFn: (a: { id: number; status: string }) => pipelineApi.referralStatus(a.id, a.status), onSuccess: refresh });
-  const dropReferral = useMutation({ mutationFn: (id: number) => pipelineApi.deleteReferral(id), onSuccess: refresh });
-  const remove = useMutation({ mutationFn: () => pipelineApi.deleteContact(item.id), onSuccess: refresh });
+  const deleted = () => {
+    notify("Deleted.");
+    return refresh();
+  };
+  const dropReferral = useMutation({ mutationFn: (id: number) => pipelineApi.deleteReferral(id), onSuccess: deleted });
+  const remove = useMutation({ mutationFn: () => pipelineApi.deleteContact(item.id), onSuccess: deleted });
   const error = status.error || dropReferral.error || remove.error;
   const details = [item.title, item.company].filter(Boolean).join(" at ");
   return (

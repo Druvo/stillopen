@@ -2,32 +2,41 @@
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/* Colour tokens: light by default, a remembered dark mode (same idea as the public site). */
+/*
+  The look follows TailAdmin "free Next.js admin dashboard" (MIT, Copyright (c) 2023 TailAdmin,
+  https://github.com/TailAdmin/free-nextjs-admin-dashboard): its colour scales, shadows, type sizes, fixed sidebar with
+  a mobile drawer and its card, menu and header styles. See frontend/THIRD_PARTY.md for the licence text.
+  The font stays Geist, served from this site; nothing is loaded from another host.
+*/
+
+/* Semantic colours the screens use (bg-surface, text-muted, border-border ...): light by default, dark when chosen. */
 :root {
-  --bg: #f6f7f9;
+  --bg: #f9fafb; /* gray-50 */
   --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --border: #dde1e7;
-  --text: #1a2230;
-  --muted: #5b6678;
-  --brand: #2563eb;
+  --surface-2: #f2f4f7; /* gray-100 */
+  --border: #e4e7ec; /* gray-200 */
+  --text: #1d2939; /* gray-800 */
+  --muted: #667085; /* gray-500 */
+  --brand: #465fff; /* brand-500 */
+  --brand-soft: #ecf3ff; /* brand-50 */
   --brand-contrast: #ffffff;
-  --good: #15803d;
-  --warn: #b45309;
-  --bad: #b91c1c;
+  --good: #039855; /* success-600 */
+  --warn: #dc6803; /* warning-600 */
+  --bad: #d92d20; /* error-600 */
 }
 :root[data-theme="dark"] {
-  --bg: #0e1218;
-  --surface: #161c25;
-  --surface-2: #1d2531;
-  --border: #2a3342;
-  --text: #e6ebf2;
-  --muted: #9aa6b8;
-  --brand: #6ea0ff;
+  --bg: #0c111d; /* gray-950 */
+  --surface: #101828; /* gray-900 */
+  --surface-2: #182230;
+  --border: #1d2939; /* gray-800 */
+  --text: #e4e7ec; /* gray-200 */
+  --muted: #98a2b3; /* gray-400 */
+  --brand: #7592ff; /* brand-400 */
+  --brand-soft: rgba(70, 95, 255, 0.12);
   --brand-contrast: #0b1020;
-  --good: #4ade80;
-  --warn: #fbbf24;
-  --bad: #f87171;
+  --good: #32d583; /* success-400 */
+  --warn: #fdb022; /* warning-400 */
+  --bad: #f97066; /* error-400 */
 }
 
 @theme inline {
@@ -38,11 +47,69 @@
   --color-fg: var(--text);
   --color-muted: var(--muted);
   --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
   --color-brand-contrast: var(--brand-contrast);
   --color-good: var(--good);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+@theme {
+  --breakpoint-2xsm: 375px;
+  --breakpoint-xsm: 425px;
+
+  --text-theme-xl: 20px;
+  --text-theme-xl--line-height: 30px;
+  --text-theme-sm: 14px;
+  --text-theme-sm--line-height: 20px;
+  --text-theme-xs: 12px;
+  --text-theme-xs--line-height: 18px;
+
+  --color-brand-25: #f2f7ff;
+  --color-brand-50: #ecf3ff;
+  --color-brand-100: #dde9ff;
+  --color-brand-200: #c2d6ff;
+  --color-brand-300: #9cb9ff;
+  --color-brand-400: #7592ff;
+  --color-brand-500: #465fff;
+  --color-brand-600: #3641f5;
+  --color-brand-700: #2a31d8;
+  --color-brand-800: #252dae;
+  --color-brand-900: #262e89;
+  --color-brand-950: #161950;
+
+  --color-gray-25: #fcfcfd;
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f2f4f7;
+  --color-gray-200: #e4e7ec;
+  --color-gray-300: #d0d5dd;
+  --color-gray-400: #98a2b3;
+  --color-gray-500: #667085;
+  --color-gray-600: #475467;
+  --color-gray-700: #344054;
+  --color-gray-800: #1d2939;
+  --color-gray-900: #101828;
+  --color-gray-950: #0c111d;
+
+  --color-success-50: #ecfdf3;
+  --color-success-100: #d1fadf;
+  --color-success-500: #12b76a;
+  --color-success-600: #039855;
+  --color-error-50: #fef3f2;
+  --color-error-100: #fee4e2;
+  --color-error-500: #f04438;
+  --color-error-600: #d92d20;
+  --color-warning-50: #fffaeb;
+  --color-warning-100: #fef0c7;
+  --color-warning-500: #f79009;
+  --color-warning-600: #dc6803;
+
+  --shadow-theme-xs: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
+  --shadow-theme-sm: 0px 1px 3px 0px rgba(16, 24, 40, 0.1), 0px 1px 2px 0px rgba(16, 24, 40, 0.06);
+  --shadow-theme-md: 0px 4px 8px -2px rgba(16, 24, 40, 0.1), 0px 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --shadow-theme-lg: 0px 12px 16px -4px rgba(16, 24, 40, 0.08), 0px 4px 6px -2px rgba(16, 24, 40, 0.03);
+  --shadow-focus-ring: 0px 0px 0px 4px rgba(70, 95, 255, 0.12);
 }
 
 html,
@@ -51,7 +118,43 @@ body {
   color: var(--text);
 }
 
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
 :focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+/* Sidebar menu entries (from TailAdmin's menu-item styles). */
+@utility menu-item {
+  @apply relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-theme-sm font-medium;
+}
+@utility menu-item-active {
+  @apply bg-brand-50 text-brand-500 dark:bg-brand-500/[0.12] dark:text-brand-400;
+}
+@utility menu-item-inactive {
+  @apply text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-gray-300;
+}
+
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@utility custom-scrollbar {
+  &::-webkit-scrollbar {
+    @apply size-1.5;
+  }
+  &::-webkit-scrollbar-track {
+    @apply rounded-full;
+  }
+  &::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-gray-200 dark:bg-gray-700;
+  }
 }

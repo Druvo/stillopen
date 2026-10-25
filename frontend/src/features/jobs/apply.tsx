@@ -5,13 +5,16 @@ import { useState } from "react";
 import { CheckField, FormError, SelectField, TextField, useSubmit } from "@/components/form";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { coverApi, cvApi } from "@/features/cv/api";
+import { letterSaid, tailoredSaid, type Said } from "@/features/cv/messages";
 import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
+import { notify } from "@/lib/toast";
 import { FitList } from "./edit-job";
 import { jobsApi, type ApplyData } from "./api";
+import { appliedMessage } from "./logic";
 
 /** Makes a new CV version or letter for this job, then opens it so the person can review it. */
-function MakeButton({ label, busyLabel, make }: { label: string; busyLabel: string; make: () => Promise<string> }) {
+function MakeButton({ label, busyLabel, make }: { label: string; busyLabel: string; make: () => Promise<{ path: string; said: Said }> }) {
   const [state, setState] = useState<"idle" | "busy" | string>("idle");
   return (
     <>
@@ -21,7 +24,9 @@ function MakeButton({ label, busyLabel, make }: { label: string; busyLabel: stri
         onClick={async () => {
           setState("busy");
           try {
-            navigate(await make());
+            const made = await make();
+            notify(made.said.text, made.said.tone);
+            navigate(made.path);
           } catch (e) {
             setState(errorText(e));
           }
@@ -47,7 +52,7 @@ function RecordForm({ id, data }: { id: number; data: ApplyData }) {
   return (
     <form
       onSubmit={form.handle(async () => {
-        await jobsApi.record(id, {
+        const done = await jobsApi.record(id, {
           cv: cv === "none" ? null : Number(cv),
           channel,
           note,
@@ -56,6 +61,7 @@ function RecordForm({ id, data }: { id: number; data: ApplyData }) {
           confirm_closed: confirmClosed,
         });
         await client.invalidateQueries({ queryKey: ["dashboard"] });
+        notify(appliedMessage(done.follow_up_date));
         navigate("/");
       })}
     >
@@ -68,7 +74,7 @@ function RecordForm({ id, data }: { id: number; data: ApplyData }) {
                 <label className="flex items-start gap-2 font-medium">
                   <input type="radio" name="cv" value={v.id} checked={cv === String(v.id)} onChange={() => setCv(String(v.id))} className="mt-1" />
                   <span>
-                    {v.label}
+                    {v.label} <Badge>v{v.id}</Badge>
                     <span className="block text-sm font-normal text-muted">
                       {v.kind_label} · {v.created}
                       {v.flagged ? " · you approved the flagged claims" : ""}
@@ -82,16 +88,16 @@ function RecordForm({ id, data }: { id: number; data: ApplyData }) {
                   <a className={buttonClass("outline", true)} href={v.print_url} target="_blank" rel="noopener noreferrer">
                     Print or save as PDF
                   </a>
-                  <a className={buttonClass("outline", true)} href={v.open_url}>
+                  <Link className={buttonClass("outline", true)} to={`/cv/${v.id}`}>
                     Open
-                  </a>
+                  </Link>
                 </div>
               </div>
             ))}
           </div>
         ) : (
           <p className="text-sm text-muted">
-            No CV is ready to send yet. Add your CV in <a href="/profile/" className="text-brand underline">Profile</a>.
+            No CV is ready to send yet. Add your CV in <Link to="/profile" className="text-brand underline">Profile</Link>.
           </p>
         )}
         <label className="mt-3 flex items-center gap-2 text-sm">
@@ -100,11 +106,11 @@ function RecordForm({ id, data }: { id: number; data: ApplyData }) {
         {data.has_flagged && <p className="mt-2 text-sm text-muted">Your tailored CV still has claims we could not match to your own material, so it is not offered. Review it first.</p>}
       </Card>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <MakeButton label="Tailor a CV for this job" busyLabel="Tailoring…" make={() => cvApi.tailor(id).then((r) => `/cv/${r.id}`)} />
+        <MakeButton label="Tailor a CV for this job" busyLabel="Tailoring…" make={() => cvApi.tailor(id).then((r) => ({ path: `/cv/${r.id}`, said: tailoredSaid(r) }))} />
         <span className="text-sm text-muted">Makes a new version from your own CV. You review it before it can be sent.</span>
       </div>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <MakeButton label="Write a cover letter" busyLabel="Writing…" make={() => coverApi.write(id).then((r) => `/cover/${r.id}`)} />
+        <MakeButton label="Write a cover letter" busyLabel="Writing…" make={() => coverApi.write(id).then((r) => ({ path: `/cover/${r.id}`, said: letterSaid(r) }))} />
         <span className="text-sm text-muted">Short, from your own material, checked before you can use it.</span>
         {data.cover_letters.map((l) => (
           <Link key={l.id} to={`/cover/${l.id}`} className="text-sm text-brand underline">

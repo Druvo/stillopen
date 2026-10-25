@@ -204,7 +204,7 @@ def _offer(item: Offer) -> dict:
         "currency": item.currency, "bonus": str(item.bonus), "equity": str(item.equity), "signing": str(item.signing),
         "other_benefits": str(item.other_benefits), "deadline": item.deadline.isoformat() if item.deadline else "",
         "status": item.status, "status_label": item.get_status_display(), "notes": item.notes,
-        "yearly_total": str(item.yearly_total), "first_year_total": str(item.first_year_total),
+        "yearly_base": str(item.yearly_base), "yearly_total": str(item.yearly_total), "first_year_total": str(item.first_year_total),
     }
 
 

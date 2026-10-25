@@ -10,17 +10,17 @@ export type AreaValues = Omit<Area, "id" | "description" | "min_salary"> & { min
 
 export type ProfileValues = {
   target_roles: string; home_country: string; employment_types: string[]; seniority_levels: string[]; industries: string; languages: string; notice_period: string;
-  salary_floor: string; deal_breakers: string; about: string; profile_cv: string; scan_digest_enabled: boolean; use_new_app: boolean;
+  salary_floor: string; deal_breakers: string; about: string; profile_cv: string; scan_digest_enabled: boolean;
 };
 export type ProfileData = {
   profile: ProfileValues;
   choices: { employment_types: Choice[]; seniority_levels: Choice[]; salary_periods: Choice[] };
   areas: Area[]; max_areas: number;
-  site: { new_app_enabled: boolean; scan_emails_enabled: boolean; assistant_enabled: boolean };
+  site: { scan_emails_enabled: boolean; assistant_enabled: boolean };
   account: {
     username: string; email: string; is_staff: boolean; can_delete: boolean; google: boolean;
     counts: { jobs: number; cv_versions: number; documents: number; search_areas: number };
-    classic: { email: string; password: string; two_step: string; connections: string; export: string; privacy: string; documents: string };
+    classic: { email: string; password: string; two_step: string; connections: string; export: string; privacy: string };
   };
 };
 
@@ -63,7 +63,7 @@ export const accountApi = {
   saveAi: (values: AiSave) => request<AiSettings>("PUT", "/ai-settings", values),
 
   sources: () => request<SourcesData>("GET", "/sources"),
-  addSource: (values: { connector: string; board_token: string; name: string }) => request<{ source: OwnSource; openings: number; message: string }>("POST", "/sources", values),
+  addSource: (values: { connector: string; board_token: string; name: string }) => request<{ source: OwnSource | null; openings: number; message: string; info: string }>("POST", "/sources", values),
   toggleSource: (id: number) => request<{ source: OwnSource }>("POST", `/sources/${id}/toggle`),
   removeSource: (id: number) => request<{ ok: true }>("DELETE", `/sources/${id}`),
 

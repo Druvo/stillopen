@@ -21,7 +21,7 @@ export type ReferralValues = { contact: string; application: string; status: str
 
 export type Offer = {
   id: number; job: JobRef; base: string; period: string; period_label: string; currency: string; bonus: string; equity: string; signing: string;
-  other_benefits: string; deadline: string; status: string; status_label: string; notes: string; yearly_total: string; first_year_total: string;
+  other_benefits: string; deadline: string; status: string; status_label: string; notes: string; yearly_base: string; yearly_total: string; first_year_total: string;
 };
 export type OfferGroup = { currency: string; rows: { offer: Offer; behind: string; best: boolean }[] };
 export type OfferList = { offers: Offer[]; groups: OfferGroup[]; jobs: JobChoice[]; periods: Choice[]; statuses: Choice[] };

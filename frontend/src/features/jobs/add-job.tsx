@@ -1,11 +1,13 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { takePrefill } from "@/features/dashboard/prefill";
 import { FormError, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { Button, buttonClass, Card, Notice, PageHeader } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
+import { notify } from "@/lib/toast";
 import { jobsApi } from "./api";
 import { mergePrefill } from "./logic";
 
@@ -18,6 +20,15 @@ export function AddJob() {
   const [link, setLink] = useState("");
   const [reading, setReading] = useState(false);
   const [readNote, setReadNote] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+  useEffect(() => {
+    // The dashboard's quick-add bar read a posting and handed it over: fill the form with it (nothing is saved until Save).
+    const found = takePrefill();
+    if (found) {
+      setValues((v) => mergePrefill(v, found));
+      setLink(found.url);
+      setReadNote({ tone: "info", text: "We read this from the link. Please check the company and role before you save." });
+    }
+  }, []);
   const set = (name: string) => (event: { target: { value: string } }) => setValues((v) => ({ ...v, [name]: event.target.value }));
 
   async function readLink() {
@@ -61,6 +72,7 @@ export function AddJob() {
           onSubmit={form.handle(async () => {
             const made = await jobsApi.addJob(values);
             await client.invalidateQueries({ queryKey: ["dashboard"] });
+            notify(`Saved ${made.company} - ${made.role}. Next, press Check my fit to see how well it suits you.`);
             navigate("/");
             return made;
           })}

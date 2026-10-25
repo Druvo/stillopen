@@ -6,7 +6,7 @@ import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
 import { jobsApi, type PostingRow } from "./api";
-import { postingsQuery, readPostingsQuery } from "./logic";
+import { postingsQuery, readPostingsQuery, repostHint } from "./logic";
 
 const CONTROL = "rounded-md border border-border bg-surface px-3 py-1.5 text-sm";
 
@@ -105,9 +105,14 @@ export function Postings() {
                     {p.company || "Company not named"} · {p.source.name} ({p.source.connector}){p.location ? ` · ${p.location}` : ""} · first seen {p.first_seen}, last seen {p.last_seen}
                   </p>
                   {p.repost && (
-                    <Badge tone="warn" className="mt-1">
-                      Possibly posted again: seen as {p.repost.distinct_urls} postings on {p.repost.distinct_dates} days
-                    </Badge>
+                    <>
+                      <span title={repostHint(p.repost)}>
+                        <Badge tone="warn" className="mt-1">
+                          Possible repost: seen as {p.repost.distinct_urls} postings on {p.repost.distinct_dates} days
+                        </Badge>
+                      </span>
+                      <p className="mt-1 text-xs text-muted">{repostHint(p.repost)}</p>
+                    </>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -117,7 +122,13 @@ export function Postings() {
                     </a>
                   )}
                   {p.tracked ? (
-                    <Badge tone="good">Tracked</Badge>
+                    p.job_id ? (
+                      <Link to={`/jobs/${p.job_id}/edit`} className="inline-flex" aria-label={`Tracked: open ${p.title}`}>
+                        <Badge tone="good">Tracked</Badge>
+                      </Link>
+                    ) : (
+                      <Badge tone="good">Tracked</Badge>
+                    )
                   ) : (
                     <Button small variant="outline" disabled={add.isPending} onClick={() => add.mutate(p)}>
                       Add to tracker

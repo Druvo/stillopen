@@ -15,7 +15,7 @@ export type CvDiff = { version: { id: number; label: string }; other: { id: numb
 export type Made = { id: number; flagged: boolean; flagged_count: number };
 export type Cover = {
   id: number; content: string; source: string; source_label: string; provider: string; updated_at: string; job: JobRef; flagged: boolean; flagged_count: number;
-  check_report: Finding[]; approved: boolean; approved_at: string | null; exportable: boolean; downloads: { docx: string; txt: string } | null; apply_url: string;
+  check_report: Finding[]; approved: boolean; approved_at: string | null; exportable: boolean; downloads: { docx: string; txt: string } | null;
 };
 
 export const cvApi = {
