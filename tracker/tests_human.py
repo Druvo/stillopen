@@ -11,6 +11,8 @@ from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
+from tracker.tests import close_quietly
+
 from tracker.models import Application, SiteConfig, Status, UserProfile
 from tracker.services import ai, guide
 
@@ -58,7 +60,7 @@ class SignUpAndWelcome(TestCase):
         self.assertRedirects(response, "/app/welcome", fetch_redirect_response=False)
         shell = self.client.get("/app/welcome")
         self.assertEqual(shell.status_code, 200 if self._built() else 503)
-        shell.close()
+        close_quietly(shell)  # a plain close() would close the test's own connection on PostgreSQL
 
     def test_a_second_click_on_the_link_does_not_sign_anyone_in(self):
         self.signup()

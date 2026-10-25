@@ -11,6 +11,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from tracker.models import Application, SiteConfig, Status
+from tracker.tests import close_quietly
 
 User = get_user_model()
 VENDOR = Path(__file__).resolve().parent.parent / "static" / "vendor" / "tabler"
@@ -107,7 +108,7 @@ class NoThirdPartyAssets(TestCase):
                 response = self.client.get("/app/")
                 self.assertEqual(response.status_code, 200)
                 html = b"".join(response.streaming_content).decode("utf-8", errors="replace")
-                response.close()
+                close_quietly(response)  # a plain close() would close the test's own connection on PostgreSQL
         self.assertIsNone(EXTERNAL_ASSET.search(html), "the app shell loads something from a third-party host")
         policy = response["Content-Security-Policy"]
         for directive in ("default-src 'self'", "connect-src 'self'", "frame-ancestors 'none'"):
