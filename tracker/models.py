@@ -1,11 +1,15 @@
 import os
+import re
 from datetime import date
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+
+from .services.tz import validate_timezone
 
 from . import copy, crypto, legal
 
@@ -17,6 +21,14 @@ PER_USER_FIELDS = [
     "rag_enabled", "rag_mode", "rag_top_k", "rag_chunk_chars", "rag_always_chars",
     "rag_embedding_base_url", "rag_embedding_model", "rag_embedding_key_encrypted",
 ]
+
+
+def validate_https_url(value):
+    """A public address of this site: https only (a blank value is allowed by the field itself)."""
+    from django.core.exceptions import ValidationError
+
+    if not str(value).lower().startswith("https://"):
+        raise ValidationError("Use an address that starts with https://, for example https://jobs.example.com.")
 
 
 class PersonalSettings(models.Model):
@@ -151,6 +163,35 @@ class SiteConfig(PersonalSettings):
 
     site_title = models.CharField(max_length=80, default="StillOpen")
     signup_mode = models.CharField(max_length=10, choices=SIGNUP_MODES, default="closed")
+    # Sign-up and sign-in abuse protection (no CAPTCHA: nothing third-party is ever loaded). See services/abuse.py.
+    signup_protection = models.BooleanField(
+        default=True,
+        help_text="Quietly turn away bots at sign-up: a hidden trap box people never see and a minimum time to fill the form. "
+        "A bot gets the same \"check your email\" page as anyone, without an account being made.",
+    )
+    signup_min_seconds = models.PositiveSmallIntegerField(
+        default=2, validators=[MaxValueValidator(60)],
+        help_text="A sign-up form sent faster than this many seconds after it was opened is treated as a bot. 0 turns the timing check off.",
+    )
+    signup_form_max_hours = models.PositiveSmallIntegerField(
+        default=24, validators=[MinValueValidator(1), MaxValueValidator(168)],
+        help_text="A sign-up page left open longer than this many hours has to be reloaded (stops a saved page being replayed another day).",
+    )
+    signup_per_hour_per_ip = models.PositiveSmallIntegerField(
+        default=5, validators=[MinValueValidator(1)], help_text="New accounts one internet address may create per hour.",
+    )
+    login_failures_per_ip = models.PositiveSmallIntegerField(
+        default=10, validators=[MinValueValidator(1)], help_text="Wrong passwords one internet address may try in 10 minutes before being asked to wait.",
+    )
+    login_failures_per_account = models.PositiveSmallIntegerField(
+        default=5, validators=[MinValueValidator(1)], help_text="Wrong passwords tried against one account (from anywhere) in 5 minutes before being asked to wait.",
+    )
+    password_reset_per_hour = models.PositiveSmallIntegerField(
+        default=5, validators=[MinValueValidator(1)], help_text="Password-reset emails one internet address, or one email address, may ask for per hour.",
+    )
+    email_resend_seconds = models.PositiveSmallIntegerField(
+        default=180, validators=[MaxValueValidator(3600)], help_text="Minimum wait before another confirmation email goes to the same address. 0 means no wait.",
+    )
     score_scale = models.FloatField(
         default=5.0,
         validators=[MinValueValidator(1.0)],
@@ -170,6 +211,17 @@ class SiteConfig(PersonalSettings):
         default=False,
         help_text="Send a daily digest email when someone has a follow-up due. Needs email set up (Site configuration > Email) -- "
         "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
+    )
+
+    weekly_emails_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow the weekly 'what to do this week' email to people who opted in (Profile > Emails). Needs email set up (Site configuration > Email). "
+        "Run `manage.py send_weekly_summary` on a schedule (e.g. one cron line each morning); nobody gets it twice in six days.",
+    )
+    public_base_url = models.URLField(
+        blank=True, max_length=200, validators=[validate_https_url],
+        help_text="The address people open this site at, for example https://jobs.example.com. Emails link back to it. "
+        "Blank: the Sites domain is used when it has been set, otherwise emails carry no link.",
     )
 
     prep_enabled = models.BooleanField(
@@ -226,6 +278,12 @@ class SiteConfig(PersonalSettings):
         help_text="Free key from jooble.org/api/about (Jooble approves it by email). Switches on the Jooble sources, which add "
         "Bangladesh, Malaysia and the Gulf. The JOOBLE_API_KEY environment variable takes precedence. Never shown again.",
     )
+    adzuna_app_id = models.CharField(
+        max_length=80, blank=True,
+        help_text="Free app id from developer.adzuna.com (register, then copy the id and key from your dashboard). Switches on the Adzuna "
+        "sources: 19 countries including the UK, US, India, Singapore, South Africa and Brazil. The ADZUNA_APP_ID environment variable takes precedence.",
+    )
+    adzuna_app_key_encrypted = models.CharField(max_length=500, blank=True)
     paperless_verify_tls = models.BooleanField(default=True)
     paperless_auto_upload = models.BooleanField(
         default=False, help_text="Upload documents to Paperless automatically when they are imported."
@@ -365,6 +423,17 @@ class SiteConfig(PersonalSettings):
     def effective_jooble_key(self):
         return os.environ.get("JOOBLE_API_KEY", "").strip() or self.jooble_api_key.strip()
 
+    def set_adzuna_app_key(self, plain: str) -> None:
+        self.adzuna_app_key_encrypted = crypto.encrypt(plain.strip())
+
+    @property
+    def effective_adzuna_id(self):
+        return os.environ.get("ADZUNA_APP_ID", "").strip() or self.adzuna_app_id.strip()
+
+    @property
+    def effective_adzuna_key(self):
+        return os.environ.get("ADZUNA_APP_KEY", "").strip() or crypto.decrypt(self.adzuna_app_key_encrypted)
+
     @property
     def effective_paperless_token(self):
         return os.environ.get("PAPERLESS_TOKEN", "").strip() or self.paperless_token.strip()
@@ -399,6 +468,10 @@ class UserProfile(PersonalSettings):
     locations = models.TextField(blank=True, editable=False)
     remote_preference = models.CharField(max_length=10, choices=REMOTE, default="any", editable=False)
     home_country = models.CharField(max_length=2, blank=True, help_text="The country you live in. Remote jobs limited to one country only fit you if it is this one.")
+    timezone = models.CharField(
+        max_length=64, blank=True, validators=[validate_timezone],
+        help_text="Your time zone (for example Asia/Dhaka), so \"today\", streaks, follow-ups and deadlines turn over at your midnight. Blank uses the site's time zone.",
+    )
     employment_types = models.JSONField(default=list, blank=True)
     seniority_levels = models.JSONField(default=list, blank=True)
     industries = models.TextField(blank=True, help_text="Industries you want, one per line (or leave blank for any).")
@@ -411,6 +484,19 @@ class UserProfile(PersonalSettings):
         default=False, verbose_name="Search for new jobs for me and email me what is found",
         help_text="Runs your saved search on a schedule and emails one short list of new matches. Off until you turn it on.",
     )
+    email_followups = models.BooleanField(
+        default=True, verbose_name="Email me when a follow-up is due",
+        help_text="Only sent when the site owner has turned follow-up emails on, and only to a verified address.",
+    )
+    email_interviews = models.BooleanField(
+        default=True, verbose_name="Email me before an interview",
+        help_text="Only sent when the site owner has turned reminder emails on, and only to a verified address.",
+    )
+    email_weekly = models.BooleanField(
+        default=False, verbose_name="Email me a weekly plan",
+        help_text="One short email a week: what is due, what is coming up and the best new matches. Off until you turn it on.",
+    )
+    weekly_emailed_at = models.DateTimeField(null=True, blank=True, editable=False, help_text="When the last weekly email went out, so it is never sent twice in six days.")
     ui_preferences = models.JSONField(
         default=dict, blank=True, editable=False,
         help_text="How this person likes the app laid out (dashboard view, filters, sidebar, theme, text size). Saved so it follows them to every device; see services/preferences.py.",
@@ -706,6 +792,10 @@ class Application(models.Model):
     jd_at_apply = models.TextField(blank=True, help_text="The job description as it was when the application was sent (postings disappear).")
     ai_evaluated_at = models.DateTimeField(null=True, blank=True)
     ai_method = models.CharField(max_length=40, blank=True)
+    ai_summary = models.JSONField(
+        default=dict, blank=True, editable=False,
+        help_text="The latest \"what this role really needs\" reading of the posting, with red flags (services/assist.py). Separate from the person's own summary.",
+    )
 
     live_state = models.CharField(max_length=10, choices=LIVE, default="unknown")
     live_detail = models.CharField(max_length=300, blank=True)
@@ -1064,6 +1154,10 @@ class Event(models.Model):
     happened_at = models.DateTimeField(default=timezone.now)
     kind = models.CharField(max_length=12, choices=KINDS, default="note")
     text = models.CharField(max_length=500)
+    undo = models.JSONField(
+        null=True, blank=True, default=None, editable=False,
+        help_text="For a status change: what the job looked like before it (status, applied date, follow-up date), so the person can undo it for a few minutes. See services/board.py.",
+    )
 
     class Meta:
         ordering = ["-happened_at"]
@@ -1131,6 +1225,14 @@ class LivenessRun(models.Model):
         ordering = ["-started_at"]
 
 
+def validate_board_token(value: str) -> None:
+    """A board token (letters, digits, dot, dash, underscore), or for a careers page its https address."""
+    if value.startswith("https://") and len(value) <= 300:
+        return
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", value or ""):
+        raise ValidationError("Only letters, digits, dot, dash and underscore (or, for a careers page, its https address).")
+
+
 class JobSource(models.Model):
     """A job board to search, via a zero-token public API or feed (no AI call to discover a posting).
 
@@ -1150,6 +1252,7 @@ class JobSource(models.Model):
         ("ashby", "Ashby"),
         ("smartrecruiters", "SmartRecruiters"),
         ("recruitee", "Recruitee"),
+        ("careerpage", "Company careers page"),
         ("remoteok", "RemoteOK"),
         ("weworkremotely", "We Work Remotely"),
         ("himalayas", "Himalayas"),
@@ -1159,12 +1262,15 @@ class JobSource(models.Model):
         ("workingnomads", "Working Nomads"),
         ("themuse", "The Muse"),
         ("jooble", "Jooble (needs a free key)"),
+        ("adzuna", "Adzuna (needs a free key)"),
+        ("jobtech", "JobTech Sweden"),
+        ("getonbrd", "Get on Board (Latin America)"),
     ]
 
     name = models.CharField(max_length=120, help_text="Shown in the scan log. The company name for a single-company connector; a label like 'RemoteOK' for an aggregator.")
     connector = models.CharField(max_length=20, choices=CONNECTORS)
     board_token = models.CharField(
-        max_length=80,
+        max_length=300,
         help_text="Single-company connector: the board token from the ATS's own URL, e.g. 'resend' for "
         "jobs.ashbyhq.com/resend, 'acme' for boards.greenhouse.io/acme, 'Equinox' for "
         "jobs.smartrecruiters.com/Equinox, or 'channable' for channable.recruitee.com. Aggregator connector: an "
@@ -1172,7 +1278,7 @@ class JobSource(models.Model):
         "'remote-full-stack-programming-jobs'), or 'all' for no filter (Himalayas ignores this and always "
         "fetches its newest postings, since its public API has no working keyword filter to request narrower "
         "than that). Letters, digits, dot, dash and underscore only.",
-        validators=[RegexValidator(r"^[A-Za-z0-9._-]+$", "Only letters, digits, dot, dash and underscore.")],
+        validators=[validate_board_token],
     )
     enabled = models.BooleanField(default=True)
     show_publicly = models.BooleanField(
@@ -1187,7 +1293,7 @@ class JobSource(models.Model):
     )
 
     # What a person may add for themselves: single-company boards only. Aggregators stay admin-managed.
-    OWN_CONNECTORS = ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"]
+    OWN_CONNECTORS = ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "careerpage"]
 
     class Meta:
         ordering = ["name"]
@@ -1300,13 +1406,18 @@ class AIUsageEvent(models.Model):
     measure at all (Custom HTTP, whose response shape is unknowable in general) simply logs no tokens/cost,
     not a guess."""
 
-    PURPOSES = [("evaluate", "Evaluate match"), ("tailor", "Tailor CV"), ("prep", "Prep plan")]
+    PURPOSES = [
+        ("evaluate", "Evaluate match"), ("tailor", "Tailor CV"), ("prep", "Prep plan"),
+        ("interview_prep", "Interview questions"), ("answer_feedback", "Answer feedback"), ("app_answer", "Application answer"),
+        ("summarise", "Posting summary"), ("suggest_roles", "Role suggestions"), ("message_draft", "Message draft"),
+        ("parse_posting", "Posting reader"), ("counter_note", "Counter-offer note"), ("referral_draft", "Referral message"),
+    ]
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ai_usage_events")
     application = models.ForeignKey(Application, null=True, blank=True, on_delete=models.SET_NULL, related_name="ai_usage_events")
     created_at = models.DateTimeField(auto_now_add=True)
     provider = models.CharField(max_length=20)
-    purpose = models.CharField(max_length=12, choices=PURPOSES)
+    purpose = models.CharField(max_length=24, choices=PURPOSES)
     input_tokens = models.PositiveIntegerField(null=True, blank=True)
     output_tokens = models.PositiveIntegerField(null=True, blank=True)
     cost_usd = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True)
@@ -1318,6 +1429,18 @@ class AIUsageEvent(models.Model):
     def __str__(self):
         return f"{self.provider} {self.purpose} {self.created_at:%Y-%m-%d}"
         constraints = [models.UniqueConstraint(fields=["posting", "seen_date"], name="uniq_posting_seen_date")]
+
+
+class InterviewPrep(models.Model):
+    """The latest interview questions made for one job (replaced when the person asks again). Suggestions only: the person reads and rewrites them."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="interview_preps")
+    application = models.OneToOneField(Application, on_delete=models.CASCADE, related_name="interview_prep")
+    content = models.JSONField(default=dict)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"Interview questions for {self.application}"
 
 
 from .prep_models import PrepAnswer, PrepChallenge, PrepChallengeItem, PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, PrepTopic, PrepWeek  # noqa: E402,F401  (registers them with the app)

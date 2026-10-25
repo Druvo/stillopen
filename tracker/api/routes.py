@@ -1,13 +1,12 @@
 from django.conf import settings
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from ninja import NinjaAPI, Schema
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from ..context import staff_flags
-from ..models import Application, Bucket, JobSource, ScoreBand, SiteConfig, Status, UserProfile
-from ..services import ai, board, careerops, geo, guide, liveness, preferences, quiz, scan
+from ..models import Application, Bucket, Event, JobSource, ScoreBand, SiteConfig, Status, UserProfile
+from ..services import adzuna, ai, assist, board, careerops, geo, guide, liveness, preferences, quiz, scan, sourcehealth, tz, weekly
 from ..services import apply as apply_service
 from ..services.cards import card_for
 from ..services.pipeline import upcoming_interviews
@@ -38,6 +37,7 @@ owned = owned_job
 
 class StatusIn(Schema):
     status: int
+    note: str = ""  # a line for the timeline the person confirmed (for example a sentence of a reply they pasted); optional
 
 
 # --- who am I ------------------------------------------------------------------------------------
@@ -47,20 +47,25 @@ def me(request):
     user = request.user
     site = SiteConfig.load()
     config = SiteConfig.for_user(user)
+    profile = UserProfile.for_user(user)
     flags = staff_flags(site) if user.is_staff else {}
     return {
         "id": user.pk,
         "name": guide.first_name(user),
         "email": user.email,
         "is_staff": user.is_staff,
-        "greeting": guide.greeting(user, timezone.localtime()),
+        "greeting": guide.greeting(user, tz.now_for(user)),
         "site_title": site.site_title,
         "prep_enabled": config.prep_enabled,
         "assistant_enabled": site.mcp_remote_enabled,
-        "preferences": preferences.read(UserProfile.for_user(user)),
+        "preferences": preferences.read(profile),
+        "timezone": profile.timezone,
+        "contact_email": site.contact_email,
+        "site_timezone": settings.TIME_ZONE,
         # the two banners only a site admin sees (the same rule the classic pages used)
         "email_unverified_signups": bool(flags.get("email_unverified_signups")),
         "legal_has_blanks": bool(flags.get("legal_needs_attention")),
+        "no_search_keys": bool(flags.get("no_search_keys")),
     }
 
 
@@ -88,7 +93,7 @@ def _fit_badge(card, has_areas: bool) -> str | None:
     return "unknown" if has_areas else None
 
 
-def _job(card, has_areas: bool) -> dict:
+def _job(card, has_areas: bool, prep: dict | None = None) -> dict:
     app = card["app"]
     cv = card["cv"]
     return {
@@ -132,10 +137,13 @@ def _job(card, has_areas: bool) -> dict:
         "cv": {"id": cv.pk, "label": f"CV v{cv.pk}", "flagged": cv.flagged, "approved": cv.approved} if cv else None,
         "repost": _repost(card["repost"]),
         "skill_matched": card["skill_matched"],
+        "credit": adzuna.credit_for(app.posting) if app.posting_id else None,  # "Jobs by Adzuna", required where Adzuna's results appear
         "evaluated": app.ai_evaluated_at is not None or app.score is not None,
         "ai_evaluated": app.ai_evaluated_at is not None,
         "ai_method": app.ai_method,
         "has_description": bool(app.description),
+        "ai_summary": app.ai_summary or None,  # the saved reading of the posting (services/assist.py), shown in Details
+        "prep": (prep or {}).get(app.pk),  # {"id", "percent"} of the job's started prep plan, or None
         "documents": [
             {"id": d.pk, "kind": d.kind.name, "title": d.title, "paperless_id": d.paperless_id, "paperless_error": d.paperless_error}
             for d in card["documents"]
@@ -148,6 +156,8 @@ def dashboard(request):
     user = request.user
     config = SiteConfig.for_user(user)
     profile = UserProfile.for_user(user)
+    now = tz.now_for(user)  # the person's own clock, so "today", deadlines and the greeting turn over at their midnight
+    today = now.date()
     bands = list(ScoreBand.objects.all())
     buckets = list(Bucket.objects.all())
     statuses = list(Status.objects.select_related("bucket"))
@@ -158,11 +168,12 @@ def dashboard(request):
         .select_related("status", "status__bucket", "source", "posting", "posting__source", "applied_cv")
         .prefetch_related("insights", "documents__kind", "cv_versions", "events")
     )
+    prep_progress = assist.prep_progress(user)  # one query for every job's prep plan
     reposts = scan.repost_signals(a.posting for a in apps if a.posting_id)  # one lookup for the page, not two per job
     closed = next((b for b in buckets if b.is_closed), None)
     cards = []
     for app in apps:
-        card = card_for(app, config, bands, areas, profile, reposts)
+        card = card_for(app, config, bands, areas, profile, reposts, today)
         # Same rule as Application.effective_bucket, without asking the database for the closed stage once per job.
         expired = config.auto_close_expired and app.live_state == "expired" and not app.status.counts_as_applied
         card["bucket_key"] = (closed if expired and closed else app.status.bucket).key
@@ -175,19 +186,19 @@ def dashboard(request):
     next_step = guide.next_step(
         profile, cards, has_areas=has_areas,
         searching=bool(scan_run and scan_run.running),
-        prep_due=quiz.due_plans(user) if config.prep_enabled else None,
+        prep_due=quiz.due_plans(user, today) if config.prep_enabled else None,
     )
     checked = [c["app"].live_checked_at for c in cards if c["app"].live_checked_at]
     paperless_on = user.is_staff and config.paperless_enabled and bool(config.effective_paperless_url)
     return {
-        "greeting": guide.greeting(user, timezone.localtime()),
+        "greeting": guide.greeting(user, now),
         "buckets": [{"key": b.key, "label": b.label, "description": b.description, "is_closed": b.is_closed} for b in buckets],
         "statuses": [
-            {"id": s.pk, "name": s.name, "bucket_key": s.bucket.key, "color": s.color, "counts_as_applied": s.counts_as_applied}
+            {"id": s.pk, "name": s.name, "label": board.label_for(s.name), "bucket_key": s.bucket.key, "color": s.color, "counts_as_applied": s.counts_as_applied}
             for s in statuses
         ],
         "band_labels": [b.label for b in bands],
-        "jobs": [_job(c, has_areas) for c in cards],
+        "jobs": [_job(c, has_areas, prep_progress) for c in cards],
         "stats": {
             "total": len(cards),
             "submitted": len(submitted),
@@ -199,8 +210,9 @@ def dashboard(request):
                 "id": a.pk, "company": a.company, "role": a.role, "follow_up_date": a.follow_up_date.isoformat(),
                 "applied_date": _iso(a.applied_date),
             }
-            for a in apply_service.due_followups(user)
+            for a in apply_service.due_followups(user, today)
         ],
+        "coming_up": weekly.coming_up(user, today=today, now=now),
         "upcoming_interviews": [
             {
                 "id": i.pk, "when": i.scheduled_at.isoformat(), "kind": i.get_kind_display(),
@@ -219,6 +231,7 @@ def dashboard(request):
         "paperless_url": config.effective_paperless_url if paperless_on else "",
         "can_import": user.is_staff and bool(config.careerops_path),
         "scan": _scan_payload(scan_run) if scan_run else None,
+        "source_trouble": sourcehealth.last_search_trouble(user),  # {"total", "trouble"} of the last finished search, or None
         "search_summary": _search_summary(profile, config, areas),
         "ai_prompt": {"show": _wants_ai_key(profile, config)},
     }
@@ -256,8 +269,11 @@ def _search_summary(profile, config, areas) -> dict:
 def set_job_status(request, job_id: int, payload: StatusIn):
     app = owned(request, job_id)
     status = get_object_or_404(Status.objects.select_related("bucket"), pk=payload.status)
-    board.change_status(app, status)
-    return {"ok": True, "status_id": status.pk, "status": status.name, "bucket_key": status.bucket.key}
+    changed = board.change_status(app, status)
+    note = payload.note.strip()
+    if note:
+        Event.objects.create(application=app, kind="note", text=f"Reply pasted: {note}"[:500])
+    return {"ok": True, "changed": changed, "status_id": status.pk, "status": status.name, "label": board.label_for(status.name), "bucket_key": status.bucket.key}
 
 
 @api.post("/jobs/{job_id}/evaluate", summary="Check how well a job fits")

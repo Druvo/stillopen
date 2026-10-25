@@ -8,7 +8,7 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 
 from ..models import JobSource, SiteConfig
-from . import scan
+from . import careerpage, scan
 from .netguard import FetchError
 
 
@@ -33,8 +33,14 @@ def add_own_source(user, connector: str, token: str, name: str, rate_limited: Ca
         raise SourceRefused("You have added a lot of boards this hour. Try again later.", status=429)
     try:
         openings = scan._fetch(connector, token)  # the same guarded fetch a scan uses: fixed host, no redirects to private addresses
+    except careerpage.CareerPageError as exc:
+        raise SourceRefused(str(exc)) from None
     except (FetchError, KeyError, ValueError):
+        if connector == "careerpage":
+            raise SourceRefused("We could not read that page. Check the address, or paste single job links into Add job.") from None
         raise SourceRefused("We could not read jobs from that board. Check the name against the company's careers page address and try again.") from None
+    if connector == "careerpage" and not openings:
+        raise SourceRefused("We could not find a list of openings on that page. Try a page that lists jobs, or paste single job links into Add job.")
     try:
         with transaction.atomic():
             source = JobSource.objects.create(owner=user, name=name[:120], connector=connector, board_token=token)
@@ -44,6 +50,8 @@ def add_own_source(user, connector: str, token: str, name: str, rate_limited: Ca
 
 
 def shared_sources():
-    """The site-wide sources that really are searched: Jooble ones only count once the site has a Jooble key."""
+    """The site-wide sources that really are searched: a keyed one (Jooble, Adzuna) only counts once the site has its key."""
     qs = JobSource.objects.filter(owner__isnull=True, enabled=True)
-    return qs if SiteConfig.load().effective_jooble_key else qs.exclude(connector="jooble")
+    keys = scan.site_keys()
+    skipped = [c for c in scan.KEYED_CONNECTORS if not scan.key_ready(c, keys)]
+    return qs.exclude(connector__in=skipped) if skipped else qs

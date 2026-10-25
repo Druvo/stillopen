@@ -71,7 +71,7 @@ class AddJob(Base):
 
 class QuickAdd(Base):
     @PUBLIC_DNS
-    @mock.patch("tracker.services.netguard.requests.get")
+    @mock.patch("tracker.services.netguard._get_pinned")
     def test_returns_the_prefill_directly_and_saves_nothing(self, get, _dns):
         get.return_value = mock.Mock(
             status_code=200, is_redirect=False, headers={},
@@ -89,13 +89,13 @@ class QuickAdd(Base):
 
     def test_private_and_local_addresses_are_refused(self):
         for url in ("http://127.0.0.1/admin", "http://localhost:8000/", "ftp://example.com/x", "http://169.254.169.254/latest/meta-data/"):
-            with mock.patch("tracker.services.netguard.requests.get") as get:
+            with mock.patch("tracker.services.netguard._get_pinned") as get:
                 r = self.post("/quickadd", {"url": url})
                 self.assertEqual(r.status_code, 400, url)
                 get.assert_not_called()
 
     @PUBLIC_DNS
-    @mock.patch("tracker.services.netguard.requests.get")
+    @mock.patch("tracker.services.netguard._get_pinned")
     def test_a_redirect_to_a_private_address_is_refused(self, get, _dns):
         get.return_value = mock.Mock(status_code=302, is_redirect=True, headers={"location": "http://127.0.0.1/secret"}, text="")
         public = [(2, 1, 6, "", ("93.184.216.34", 443))]

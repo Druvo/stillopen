@@ -10,6 +10,12 @@ import { usePreferences } from "@/lib/use-preferences";
 import type { Density, TextSize, Theme } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { accountApi, type Area, type AreaValues, type ProfileData, type ProfileValues } from "./api";
+import { addRole } from "@/features/assist/logic";
+import { SuggestRoles } from "./suggest-roles";
+import { TimeZoneField } from "./timezone";
+import { EmailsCard } from "./emails";
+import { withoutEmails } from "./email-choices";
+import { withoutTimezone } from "@/lib/timezone";
 import { areaPayload, areaToValues, BLANK_AREA, canConfirmDelete, toFormData, toggleValue } from "./logic";
 
 export const PROFILE_KEY = ["account", "profile"] as const;
@@ -64,7 +70,8 @@ function ProfileScreen({ data }: { data: ProfileData }) {
             Manage documents
           </Link>
         </Card>
-        <DisplayCard />
+        <DisplayCard data={current} onZoneSaved={(next) => { setCurrent(next); client.setQueryData(PROFILE_KEY, next); }} />
+        <EmailsCard key={`emails-${current.profile.email_followups}-${current.profile.email_interviews}-${current.profile.email_weekly}`} data={current} onSaved={(next) => { setCurrent(next); client.setQueryData(PROFILE_KEY, next); }} />
         <AccountCard data={current} />
         <DataCard data={current} />
       </div>
@@ -82,7 +89,7 @@ function ProfileForm({ data, onSaved, saved, onEdit }: { data: ProfileData; onSa
   };
   const text = (key: keyof ProfileValues) => ({ value: values[key] as string, onChange: (e: { target: { value: string } }) => set(key, e.target.value as never), errors: form.fields[key] });
   const save = form.handle(async () => {
-    const next = await accountApi.saveProfile(file ? toFormData({ ...values }, file) : { ...values });
+    const next = await accountApi.saveProfile(file ? toFormData({ ...withoutEmails(withoutTimezone(values)) }, file) : { ...withoutEmails(withoutTimezone(values)) });
     onSaved(next);
   });
 
@@ -91,7 +98,8 @@ function ProfileForm({ data, onSaved, saved, onEdit }: { data: ProfileData; onSa
       <Card>
         <h2 className="mb-3 font-semibold">What you are looking for</h2>
         <TextAreaField label="The roles you want" hint="One role per line, for example Senior Backend Engineer." rows={3} placeholder={"Senior Backend Engineer\nSolutions Architect"} {...text("target_roles")} />
-        <TextField label="The country you live in" hint="A name like Bangladesh or a code like BD. Remote jobs limited to one country only fit you if it is this one." {...text("home_country")} />
+        <SuggestRoles cv={values.profile_cv} roles={values.target_roles} onAddRole={(role) => set("target_roles", addRole(values.target_roles, role))} />
+        <TextField label="The country you live in" hint="A name like Bangladesh or a code like BD. Remote jobs limited to one country only fit you if it is this one." autoComplete="country-name" {...text("home_country")} />
         <fieldset className="mb-3">
           <legend className="mb-1 text-sm font-medium">Kinds of employment you want</legend>
           <div className="flex flex-wrap gap-x-4">
@@ -130,6 +138,12 @@ function ProfileForm({ data, onSaved, saved, onEdit }: { data: ProfileData; onSa
 
       <Card>
         <h2 className="mb-3 font-semibold">Your CV</h2>
+        <p className="mb-3 text-sm">
+          No CV yet?{" "}
+          <Link to="/cv/new" className="text-brand underline">
+            Build one step by step
+          </Link>
+        </p>
         <div className="mb-3">
           <label htmlFor="cv-file" className="mb-1 block text-sm font-medium">
             Upload your CV
@@ -297,7 +311,7 @@ function AreaRow({ area, salaryPeriods, onSaved, onRemoved }: { area: Area | nul
 // --- display ------------------------------------------------------------------------------------
 
 /** Colour mode, text size and density. Saved on the account, so they apply on every device you sign in on. They take effect as you pick them. */
-function DisplayCard() {
+function DisplayCard({ data, onZoneSaved }: { data: ProfileData; onZoneSaved: (next: ProfileData) => void }) {
   const { prefs, update } = usePreferences();
   return (
     <Card id="display" className="scroll-mt-20">
@@ -336,6 +350,7 @@ function DisplayCard() {
         ]}
         hint="Compact fits more jobs on the screen."
       />
+      <TimeZoneField data={data} onSaved={onZoneSaved} />
     </Card>
   );
 }

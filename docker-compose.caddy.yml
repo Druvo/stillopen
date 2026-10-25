@@ -11,6 +11,11 @@
 #   ALLAUTH_TRUSTED_PROXY_COUNT=1
 services:
   caddy:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:

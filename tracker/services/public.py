@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from tracker.models import JobSource, Posting
+from tracker.seed_sources import SEARCH_CONNECTORS
 from tracker.services import geo
 
 BOARD_CONNECTORS = ("greenhouse", "lever", "ashby", "smartrecruiters", "recruitee")
@@ -35,14 +36,14 @@ def active_cutoff():
 
 
 def public_sources():
-    return JobSource.objects.filter(owner__isnull=True, enabled=True, show_publicly=True).exclude(connector="jooble")
+    return JobSource.objects.filter(owner__isnull=True, enabled=True, show_publicly=True).exclude(connector__in=SEARCH_CONNECTORS)
 
 
 def public_postings():
     """Every opening the public may see right now."""
     return Posting.objects.filter(
         source__owner__isnull=True, source__enabled=True, source__show_publicly=True, last_seen_at__gte=active_cutoff(),
-    ).select_related("source")
+    ).exclude(source__connector__in=SEARCH_CONNECTORS).select_related("source")
 
 
 def credit_for(posting) -> dict:

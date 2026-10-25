@@ -106,11 +106,11 @@ describe("Your search", () => {
     );
     expect(screen.getByText("Backend Engineer")).toBeTruthy();
     expect(screen.getByText("Malaysia (hybrid)")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Change roles" }).getAttribute("href")).toBe("/app/profile");
-    expect(screen.getByRole("link", { name: "Change places" }).getAttribute("href")).toBe("/app/profile#areas");
-    expect(screen.getByRole("link", { name: "Change how fit is judged" }).getAttribute("href")).toBe("/app/profile/ai");
-    expect(screen.getByRole("link", { name: "Add CV" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Add minimum pay" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Your search: change roles" }).getAttribute("href")).toBe("/app/profile");
+    expect(screen.getByRole("link", { name: "Your search: change places" }).getAttribute("href")).toBe("/app/profile#areas");
+    expect(screen.getByRole("link", { name: "Your search: change how fit is judged" }).getAttribute("href")).toBe("/app/profile/ai");
+    expect(screen.getByRole("link", { name: "Your search: add CV" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Your search: add minimum pay" })).toBeTruthy();
     expect(screen.getByText("Quick keyword check")).toBeTruthy();
     expect(screen.getByText("Off")).toBeTruthy();
   });
@@ -265,7 +265,7 @@ describe("a job card", () => {
   it("offers Check my fit as the one main action until the fit is checked, with the rest under More", () => {
     const onCheckFit = vi.fn();
     card(job({}), onCheckFit);
-    fireEvent.click(screen.getByRole("button", { name: "Check my fit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Check my fit for / }));
     expect(onCheckFit).toHaveBeenCalled();
     expect(screen.getByText("Not checked yet")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Get ready to apply" })).toBeNull();
@@ -275,7 +275,7 @@ describe("a job card", () => {
 
   it("offers Get ready to apply once it is checked, and Check again moves under More", () => {
     card(job({ ai_evaluated: true, percent: 82, band: { label: "Strong", color: "#0a0" } }));
-    expect(screen.queryByRole("button", { name: "Check my fit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Check my fit/ })).toBeNull();
     expect(screen.getByRole("link", { name: "Get ready to apply" }).getAttribute("href")).toBe("/app/jobs/1/apply");
     expect(screen.getByRole("img", { name: "82% match, Strong" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /More actions/ }));
@@ -284,7 +284,7 @@ describe("a job card", () => {
 
   it("has no Check my fit or Tailor my CV when there is nothing to read", () => {
     card(job({ has_description: false, url: "" }));
-    expect(screen.queryByRole("button", { name: "Check my fit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Check my fit/ })).toBeNull();
     expect(screen.getByRole("link", { name: "Get ready to apply" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /More actions/ }));
     expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Edit details"]);

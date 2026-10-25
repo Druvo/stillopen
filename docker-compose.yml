@@ -10,12 +10,22 @@
 #   docker compose --profile web up -d --build
 services:
   broker:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     image: redis:7
     restart: unless-stopped
     volumes:
       - paperless_redis:/data
 
   paperless:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     image: ghcr.io/paperless-ngx/paperless-ngx:latest
     restart: unless-stopped
     depends_on:
@@ -37,6 +47,11 @@ services:
       PAPERLESS_OCR_LANGUAGE: eng
 
   db:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     profiles: ["web"]
     image: postgres:16-alpine
     restart: unless-stopped
@@ -48,6 +63,11 @@ services:
       - stillopen_pg:/var/lib/postgresql/data
 
   web:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     profiles: ["web"]
     build: .
     restart: unless-stopped
@@ -67,6 +87,11 @@ services:
       - stillopen_data:/data
 
   nginx:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     profiles: ["web"]
     image: nginx:1.27-alpine
     restart: unless-stopped

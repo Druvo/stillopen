@@ -4,6 +4,7 @@ import re
 import subprocess
 from html.parser import HTMLParser
 
+from tracker.services import blockedhosts
 from tracker.services.liveness import normalize_url
 from tracker.services.netguard import FetchError, check_public_url, safe_get  # noqa: F401  (re-exported)
 
@@ -60,9 +61,17 @@ def _via_careerops(url: str, config) -> str:
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
+def _refuse_blocked(url: str) -> None:
+    """LinkedIn, Indeed, Glassdoor and the like forbid automated reading: no request (not even through career-ops) is made for their links."""
+    reply = blockedhosts.blocked_reply(url)
+    if reply:
+        raise FetchError(reply["message"])
+
+
 def fetch_description(url: str, config) -> str:
     """Best-effort job text. Raises FetchError with a reason the user can read."""
     url = normalize_url(url)
+    _refuse_blocked(url)
     check_public_url(url)
     text = _via_careerops(url, config)
     if len(text) >= MIN_USEFUL_CHARS:
@@ -107,6 +116,7 @@ def fetch_posting(url: str, config) -> dict:
     career-ops' fetch-jd.mjs only returns plain text, no title, so a posting fetched that way comes back with
     an empty title -- the person fills in company/role by hand on the review page, same as today."""
     url = normalize_url(url)
+    _refuse_blocked(url)
     check_public_url(url)
     co_text = _via_careerops(url, config)
     if len(co_text) >= MIN_USEFUL_CHARS:

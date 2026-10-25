@@ -96,6 +96,9 @@ def export_data(request):
              "for_job": f"{p.application.company} - {p.application.role}" if p.application else None, "gaps": p.gap_skills,
              "lessons": [{"week": w.order, "title": le.title, "gap": le.gap, "sources": le.sources, "done": bool(le.done_at)}
                          for w in p.weeks.all() for le in w.lessons.all()],
+             "tasks": [{"week": w.order, "kind": m.kind, "text": m.text, "done": bool(m.done_at)} for w in p.weeks.all() for m in w.milestones.all()],
+             "topics": [t.title for t in p.topics.all()],
+             "practice_days": [{"number": c.number, "day": c.day.isoformat(), "finished": bool(c.completed_at)} for c in p.challenges.all()],
              "questions": [{"prompt": q.prompt, "choices": q.choices, "correct": q.correct, "explanation": q.explanation, "sources": q.sources}
                            for q in p.questions.filter(removed=False)],
              "answers": [{"question": a.question.prompt, "chosen": a.chosen, "correct": a.correct, "day": a.answered_on.isoformat(), "mode": a.mode}
@@ -124,6 +127,14 @@ def export_data(request):
              "other_benefits": str(o.other_benefits), "signing": str(o.signing),
              "deadline": o.deadline.isoformat() if o.deadline else None, "notes": o.notes}
             for o in user.offers.select_related("application")
+        ],
+        "interview_prep": [
+            {"for_job": f"{ip.application.company} - {ip.application.role}", "created": ip.created_at.isoformat(), "content": ip.content}
+            for ip in user.interview_preps.select_related("application")
+        ],
+        "own_job_sources": [
+            {"name": s.name, "connector": s.connector, "board_token": s.board_token, "enabled": s.enabled}
+            for s in user.job_sources.all()
         ],
         "cover_letters": [
             {"for_job": f"{l.application.company} - {l.application.role}", "source": l.source,

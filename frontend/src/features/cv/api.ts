@@ -1,10 +1,13 @@
 import { request } from "@/lib/api";
 import type { DiffRow, Finding } from "./logic";
+import type { BuilderAnswers } from "./quality";
 
 export type JobRef = { id: number; role: string; company: string };
 export type CvSummary = {
   id: number; label: string; kind: "master" | "tailored"; kind_label: string; source: string; source_label: string; provider: string; created_at: string;
   job: JobRef | null; flagged: boolean; flagged_count: number; approved: boolean; exportable: boolean; current?: boolean;
+  /** 0 to 100, from the free ATS check of this version's text. */
+  ats_readiness?: number;
 };
 export type CvList = { masters: CvSummary[]; tailored: CvSummary[] };
 export type CvDownloads = { docx: string; md: string; print: string };
@@ -18,7 +21,28 @@ export type Cover = {
   check_report: Finding[]; approved: boolean; approved_at: string | null; exportable: boolean; downloads: { docx: string; txt: string } | null;
 };
 
+export type AtsStatus = "pass" | "warn" | "fail";
+export type AtsCheck = { id: string; group: string; status: AtsStatus; title: string; why: string; fix: string; weight: number; lines: number[] };
+export type CoverageTerm = { term: string; required: boolean };
+export type Coverage = { percent: number; wanted: number; found: CoverageTerm[]; in_material: CoverageTerm[]; not_in_material: CoverageTerm[]; note: string };
+export type AiInfo = { available: boolean; settings_link: string; missing_message: string };
+export type AtsReport = {
+  readiness: number; label: string; caveat: string; checks: AtsCheck[]; counts: Record<AtsStatus, number>;
+  stats: { words: number; pages: number; bullets?: number; numbers_share?: number };
+  export: { summary: string; single_column: boolean; text_based: boolean; standard_font: string };
+  notes: string[]; empty: boolean; version: { id: number; label: string }; ai: AiInfo; job: JobRef | null; coverage: Coverage | null;
+};
+export type JobChoices = { ai: AiInfo; jobs: (JobRef & { has_description: boolean })[] };
+export type SuggestionKind = "bullet" | "summary" | "heading" | "keyword";
+export type Suggestion = { id: number; kind: SuggestionKind; original: string; replacement: string; reason: string };
+export type Improved = { suggestions: Suggestion[]; dropped: number; message: string };
+export type Built = { id: number; content: string; polished: number; kept_as_written: number; readiness: number; label: string };
+
 export const cvApi = {
+  ats: (id: number, jobId?: number | null) => request<AtsReport>("GET", `/cv/${id}/ats${jobId ? `?job=${jobId}` : ""}`),
+  improve: (id: number, jobId?: number | null) => request<Improved>("POST", `/cv/${id}/improve`, { job_id: jobId ?? null }),
+  jobChoices: () => request<JobChoices>("GET", "/cv/job-choices"),
+  build: (answers: BuilderAnswers, polish: boolean) => request<Built>("POST", "/cv/builder", { answers, polish }),
   list: () => request<CvList>("GET", "/cv"),
   get: (id: number) => request<CvDetail>("GET", `/cv/${id}`),
   edit: (id: number, content: string, label: string) => request<{ id: number; changed: boolean }>("POST", `/cv/${id}/edit`, { content, label }),

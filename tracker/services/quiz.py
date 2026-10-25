@@ -10,6 +10,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from tracker.models import PrepAnswer, PrepChallenge, PrepChallengeItem, PrepPlan, PrepQuestion, PrepTopic
+from tracker.services import tz
 
 WEAK_WINDOW_DAYS = 30        # two different questions on a topic missed within this many days: the topic needs another look
 RECOVER_DAYS = 3             # ...and it clears after correct answers on this many separate days
@@ -27,7 +28,7 @@ def _answers(plan: PrepPlan) -> list:
 
 def weak_topics(plan: PrepPlan, today=None, answers=None) -> list:
     """Topics with a pattern of misses that has not been recovered from yet."""
-    today = today or timezone.localdate()
+    today = today or tz.today_for(plan.owner_id)
     answers = _answers(plan) if answers is None else answers
     by_topic = {}
     for answer in answers:
@@ -49,7 +50,7 @@ def weak_topics(plan: PrepPlan, today=None, answers=None) -> list:
 
 def streak(plan: PrepPlan, today=None) -> int:
     """Consecutive days with a finished practice. Still counts today's streak as alive until the day ends."""
-    today = today or timezone.localdate()
+    today = today or tz.today_for(plan.owner_id)
     days = set(plan.challenges.filter(completed_at__isnull=False).values_list("day", flat=True))
     day = today if today in days else today - timedelta(days=1)
     count = 0
@@ -72,7 +73,7 @@ def _eligible(plan: PrepPlan) -> list:
 
 def build_challenge(plan: PrepPlan, count: int, today=None) -> PrepChallenge:
     """Today's practice for this plan: made once per day, then the same however often it is opened."""
-    today = today or timezone.localdate()
+    today = today or tz.today_for(plan.owner_id)
     existing = plan.challenges.filter(day=today).first()
     if existing:
         return existing
@@ -124,7 +125,7 @@ def build_challenge(plan: PrepPlan, count: int, today=None) -> PrepChallenge:
 
 def submit(challenge: PrepChallenge, choices: dict, today=None) -> dict:
     """Score the answers {question id: [chosen indexes]} for every unanswered question. All or nothing: a missing answer saves none."""
-    today = today or timezone.localdate()
+    today = today or tz.today_for(challenge.plan.owner_id)
     items = list(challenge.items.select_related("question"))
     done = set(challenge.answers.values_list("question_id", flat=True))
     todo = [item for item in items if item.question_id not in done]
@@ -162,7 +163,7 @@ def results(challenge: PrepChallenge) -> list:
 
 def due_plans(user, today=None) -> list:
     """Plans in progress that have questions and no finished practice today (what the dashboard nudges about)."""
-    today = today or timezone.localdate()
+    today = today or tz.today_for(user)
     finished_today = PrepChallenge.objects.filter(plan__owner=user, day=today, completed_at__isnull=False).values("plan_id")
     plans = PrepPlan.objects.filter(owner=user, status__in=["active", "done"]).exclude(pk__in=finished_today)
     return [p for p in plans if p.questions.filter(removed=False).exists()]

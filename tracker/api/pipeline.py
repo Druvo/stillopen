@@ -11,7 +11,7 @@ from ninja.errors import HttpError
 
 from ..forms import ContactForm, InterviewForm, OfferForm, ReferralForm
 from ..models import Application, Contact, Interview, Offer, Referral
-from ..services import pipeline
+from ..services import board, pipeline
 from .common import owned, validate_form
 
 router = Router()
@@ -86,7 +86,7 @@ def create_interview(request, payload: Raw):
     validate_form(form)
     _check_room(request, Interview)
     item = pipeline.save_interview(form, request.user)
-    return {"id": item.pk}
+    return {"id": item.pk, "suggest_status": board.suggest_for(item.application, "Interview")}
 
 
 @router.patch("/interviews/{interview_id}", summary="Change an interview")
@@ -95,7 +95,7 @@ def update_interview(request, interview_id: int, payload: Raw):
     form = InterviewForm(_merged(_interview_current(item), payload), owner=request.user, instance=item)
     validate_form(form)
     form.save()
-    return {"id": item.pk}
+    return {"id": item.pk, "suggest_status": board.suggest_for(item.application, "Interview")}
 
 
 class OutcomeIn(Schema):
@@ -242,7 +242,7 @@ def create_offer(request, payload: Raw):
     validate_form(form)
     _check_room(request, Offer)
     item = pipeline.save_offer(form, request.user)
-    return {"id": item.pk}
+    return {"id": item.pk, "suggest_status": board.suggest_for(item.application, "Offer")}
 
 
 @router.patch("/offers/{offer_id}", summary="Change an offer")
@@ -256,7 +256,7 @@ def update_offer(request, offer_id: int, payload: Raw):
     form = OfferForm(_offer_data(_merged(current, payload)), owner=request.user, instance=item)
     validate_form(form)
     form.save()
-    return {"id": item.pk}
+    return {"id": item.pk, "suggest_status": board.suggest_for(item.application, "Offer")}
 
 
 @router.post("/offers/{offer_id}/status", summary="Say whether an offer is open, accepted or declined")

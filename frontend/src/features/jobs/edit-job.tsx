@@ -3,11 +3,20 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
+import { CreditLink } from "@/components/credit";
 import { Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { PostingSummaryPanel } from "@/features/assist/summary";
+import { api } from "@/lib/api";
+import { navigate } from "@/lib/router";
+import { notify } from "@/lib/toast";
+import { notForMeStatus } from "@/features/dashboard/jobmgmt";
 import { jobsApi, type Check, type JobDetails } from "./api";
+import { HistoryPanel } from "./history";
+import { removedMessage } from "./jobmgmt";
+import { RemoveDialog } from "./remove";
 
 export function FitList({ checks, empty }: { checks: Check[]; empty: string }) {
   if (checks.length === 0) return <p className="text-sm text-muted">{empty}</p>;
@@ -43,6 +52,9 @@ export function EditJob({ id }: { id: number }) {
   const [notice, setNotice] = useState("");
   const [redetecting, setRedetecting] = useState(false);
   const [redetectError, setRedetectError] = useState("");
+  const [removing, setRemoving] = useState(false);
+  // The statuses are only needed for "Mark as not for me instead" in the remove box, so they are read when the box opens.
+  const statuses = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, enabled: removing, select: (d) => d.statuses });
 
   useEffect(() => {
     if (query.data && values === null) setValues(query.data.values);
@@ -95,7 +107,14 @@ export function EditJob({ id }: { id: number }) {
         <p className="mt-2 text-xs text-muted">
           Checked against your search areas in <Link to="/profile#areas" className="text-brand underline">Profile</Link>. This only flags a job; it never hides one.
         </p>
+        {data.credit && (
+          <p className="mt-1 text-xs text-muted">
+            This job was found through <CreditLink credit={data.credit} />.
+          </p>
+        )}
       </Card>
+
+      <PostingSummaryPanel jobId={id} hasDescription={!!values.description?.trim()} />
 
       <Card className="mb-4">
         <form
@@ -145,7 +164,9 @@ export function EditJob({ id }: { id: number }) {
         </form>
       </Card>
 
-      <Card>
+      <HistoryPanel jobId={id} />
+
+      <Card className="mb-4">
         <h2 className="font-semibold">Read the posting again</h2>
         <p className="my-2 text-sm text-muted">Fills in the location, work arrangement, sponsorship, relocation, type and level from the description. Anything you set by hand is left alone.</p>
         <Button variant="outline" onClick={redetect} disabled={redetecting}>
@@ -153,6 +174,59 @@ export function EditJob({ id }: { id: number }) {
         </Button>
         {redetectError && <div className="mt-2"><Notice tone="error">{redetectError}</Notice></div>}
       </Card>
+
+      <Card>
+        <h2 className="font-semibold">Not for you any more?</h2>
+        <p className="my-2 text-sm text-muted">
+          Mark it “Not for me” to keep it out of the way, or remove it for good. Removing also removes what you made for it, and you will be told exactly what before anything goes.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const status = notForMeStatus((await client.fetchQuery({ queryKey: ["dashboard"], queryFn: api.dashboard })).statuses);
+              if (!status) return;
+              await api.setStatus(id, status.id);
+              void client.invalidateQueries({ queryKey: ["dashboard"] });
+              void client.invalidateQueries({ queryKey: ["job-history", id] });
+              notify("Marked as not for me. You can find it under Closed and skipped.");
+              navigate("/");
+            }}
+          >
+            Mark as not for me
+          </Button>
+          <Button variant="danger" onClick={() => setRemoving(true)}>
+            Remove for good…
+          </Button>
+        </div>
+      </Card>
+      {removing && (
+        <RemoveDialog
+          ids={[id]}
+          name={`${data.role} at ${data.company}`}
+          onClose={() => setRemoving(false)}
+          onSoft={
+            statuses.data && notForMeStatus(statuses.data)
+              ? async () => {
+                  const status = notForMeStatus(statuses.data ?? []);
+                  if (!status) return;
+                  setRemoving(false);
+                  await api.setStatus(id, status.id);
+                  void client.invalidateQueries({ queryKey: ["dashboard"] });
+                  notify("Marked as not for me.");
+                  navigate("/");
+                }
+              : undefined
+          }
+          onRemoved={(count) => {
+            setRemoving(false);
+            void client.invalidateQueries({ queryKey: ["dashboard"] });
+            void client.invalidateQueries({ queryKey: ["stats"] });
+            notify(removedMessage(count, `${data.role} at ${data.company}`));
+            navigate("/");
+          }}
+        />
+      )}
     </>
   );
 }

@@ -3,12 +3,11 @@ milestone and question that is not the person's own is a 404. A practice never s
 from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
 from ..models import Application, PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, SiteConfig
-from ..services import prep, quiz
+from ..services import prep, quiz, tz
 
 router = Router()
 
@@ -95,7 +94,7 @@ def get_plan(request, plan_id: int):
         "question_count": len(questions),
         "streak": quiz.streak(plan) if started else 0,
         "weak_topics": [{"slug": t.slug, "title": t.title} for t in quiz.weak_topics(plan)] if started else [],
-        "done_today": plan.challenges.filter(day=timezone.localdate(), completed_at__isnull=False).exists(),
+        "done_today": plan.challenges.filter(day=tz.today_for(plan.owner_id), completed_at__isnull=False).exists(),
         "unchecked_links": sum(1 for q in questions if q.checks.get("sources_reachable") is False),
         "weeks": weeks,
     }

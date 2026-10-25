@@ -33,9 +33,18 @@ export type Filters = {
   live: string;
   found: "" | "today" | "week";
   sort: Sort;
+  /** Leave out jobs whose match is under WEAK_BELOW percent (a job with no match yet is always kept). */
+  hideWeak: boolean;
 };
 
-export const DEFAULT_FILTERS: Filters = { stage: "", q: "", fit: "", band: "", work: "", country: "", live: "", found: "", sort: "best" };
+export const DEFAULT_FILTERS: Filters = { stage: "", q: "", fit: "", band: "", work: "", country: "", live: "", found: "", sort: "best", hideWeak: false };
+
+/** A match under this percent is a "weak match" for the Hide weak matches switch. */
+export const WEAK_BELOW = 40;
+
+export function isWeak(job: Pick<Job, "percent">): boolean {
+  return job.percent !== null && job.percent < WEAK_BELOW;
+}
 
 export const NOT_STATED = "__none";
 export const COUNTRY_NOT_STATED = "?";
@@ -53,12 +62,12 @@ const PANEL_FILTERS = ["fit", "band", "work", "country", "live", "found"] as con
 
 /** How many of the six panel filters are set: the badge on the Filters button. The stage tab, the search box and the sort order are not counted. */
 export function activeFilterCount(filters: Filters): number {
-  return PANEL_FILTERS.filter((k) => filters[k] !== "").length;
+  return PANEL_FILTERS.filter((k) => filters[k] !== "").length + (filters.hideWeak ? 1 : 0);
 }
 
 /** Whether the search box or any panel filter narrows the list (the "Clear filters" button and the "Showing N of M" wording). */
 export function isFiltered(filters: Filters): boolean {
-  return filters.q.trim() !== "" || activeFilterCount(filters) > 0;
+  return filters.q.trim() !== "" || activeFilterCount(filters) > 0 || filters.hideWeak;
 }
 
 /** "Fits your places" for filtering: every job has one, even when the person has named no places (the badge itself is hidden then). */
@@ -75,6 +84,7 @@ export function localDay(now: Date, offset = 0): string {
 
 function matches(job: Job, f: Filters, words: string[], today: string, weekAgo: string): boolean {
   if (f.stage && job.bucket_key !== f.stage) return false;
+  if (f.hideWeak && isWeak(job)) return false;
   if (words.length) {
     const text = `${job.company} ${job.role} ${job.location} ${job.country_name}`.toLowerCase();
     if (!words.every((w) => text.includes(w))) return false;
@@ -106,6 +116,12 @@ export function visibleJobs(jobs: Job[], filters: Filters, now: Date = new Date(
   return jobs.filter((j) => matches(j, filters, words, today, weekAgo)).sort(sorters[filters.sort] ?? sorters.best);
 }
 
+/** How many jobs the Hide weak matches switch is leaving out right now (what else the filters keep, with the switch off, minus what they keep with it on). */
+export function hiddenWeakCount(jobs: Job[], filters: Filters, now: Date = new Date()): number {
+  if (!filters.hideWeak) return 0;
+  return visibleJobs(jobs, { ...filters, hideWeak: false }, now).length - visibleJobs(jobs, filters, now).length;
+}
+
 /** Stage chips: "All (n)" first, then one per column with how many jobs it holds (before any other filter). */
 export function stageChips(jobs: Job[], buckets: Bucket[]): { key: string; label: string; description: string; count: number }[] {
   const counts = jobsByBucket(jobs, buckets);
@@ -135,6 +151,7 @@ export function filtersFromPrefs(prefs: Preferences, q = "", countries: string[]
     live: f.posting,
     found: f.found === "today" || f.found === "week" ? f.found : "",
     sort: SORT_OPTIONS.some((o) => o.value === prefs.sort) ? prefs.sort : "best",
+    hideWeak: prefs.hide_weak === true,
   };
   if (state.stage && stages.length && !stages.includes(state.stage)) state = { ...state, stage: "" };
   if (state.country && state.country !== COUNTRY_NOT_STATED && countries.length && !countries.includes(state.country)) state = { ...state, country: "" };
@@ -148,6 +165,7 @@ export function patchFromFilters(patch: Partial<Filters>, current: Filters): Pre
   const out: PreferencePatch = {};
   if ("stage" in patch) out.tab = next.stage === "" ? "all" : next.stage;
   if ("sort" in patch) out.sort = next.sort;
+  if ("hideWeak" in patch) out.hide_weak = next.hideWeak;
   if (PANEL_FILTERS.some((k) => k in patch)) {
     const filters: PrefFilters = { fit: next.fit, match: next.band, work: next.work, country: next.country, posting: next.live, found: next.found };
     out.filters = filters;

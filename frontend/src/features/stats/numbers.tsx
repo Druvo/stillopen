@@ -7,7 +7,7 @@ import { Link } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { type Stats, useStats } from "./api";
 import { BarList, WeeklyChart } from "./charts";
-import { anyChecked, averageText, count, marketText, prepText, strongShareText, waitingText, weekTiles, weeklyHasData, workLabel } from "./logic";
+import { anyChecked, averageText, calibrationLine, calibrationWaiting, count, marketText, prepText, strongShareText, waitingText, weekTiles, weeklyHasData, workLabel } from "./logic";
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
@@ -32,7 +32,7 @@ function ThisWeek({ week }: { week: Stats["week"] }) {
           <p className="text-2xl font-semibold tabular-nums">{t.value}</p>
           <p className="text-theme-xs text-muted">{t.label}</p>
           {t.to && (
-            <Link to={t.to} className="mt-1 inline-block text-theme-xs text-brand underline">
+            <Link to={t.to} className="link-target mt-1 text-theme-xs text-brand underline">
               {t.note ?? "See them"}
             </Link>
           )}
@@ -56,6 +56,21 @@ function MatchQuality({ match }: { match: Stats["match"] }) {
         <li>{avg.applied}</li>
         <li>{strongShareText(match)}</li>
       </ul>
+    </div>
+  );
+}
+
+function Calibration({ calibration }: { calibration: NonNullable<Stats["calibration"]> }) {
+  if (!calibration.enough) return <Empty>{calibrationWaiting(calibration)}</Empty>;
+  return (
+    <div>
+      <p className="text-theme-sm">Of the {calibration.scored} jobs you applied to that had a match percent, here is how many in each band got a reply (an interview or an offer).</p>
+      <ul className="mt-2 space-y-1 text-theme-sm" data-testid="calibration">
+        {calibration.bands.map((b) => (
+          <li key={b.label}>{calibrationLine(b)}</li>
+        ))}
+      </ul>
+      <p className="mt-2 text-theme-xs text-muted">{calibration.caveat}</p>
     </div>
   );
 }
@@ -178,6 +193,11 @@ export function YourNumbers() {
     <div id="your-numbers" className="mt-8 scroll-mt-20">
       <h2 className="text-lg font-semibold">Your numbers</h2>
       <p className="text-theme-sm text-muted">Plain counts from your own search. They say what happened, not what will.</p>
+      {s.summary_text && (
+        <p data-testid="week-summary" className="mt-3 rounded-xl border border-border bg-surface-2 px-4 py-3 text-theme-sm">
+          {s.summary_text}
+        </p>
+      )}
       {!s.has_jobs ? (
         <Card className="mt-3 py-8 text-center">
           <p className="mx-auto max-w-md text-theme-sm text-muted">
@@ -199,6 +219,11 @@ export function YourNumbers() {
           <Section id="stats-match" title="Match quality">
             <MatchQuality match={s.match} />
           </Section>
+          {s.calibration && (
+            <Section id="stats-calibration" title="Match and replies">
+              <Calibration calibration={s.calibration} />
+            </Section>
+          )}
           <Section id="stats-waiting" title="Waiting for a reply">
             <Waiting waiting={s.waiting} />
           </Section>

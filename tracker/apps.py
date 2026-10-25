@@ -7,4 +7,4 @@ class TrackerConfig(AppConfig):
     verbose_name = "StillOpen"
 
     def ready(self):
-        from . import signals  # noqa: F401  (registers the user-created handler)
+        from . import checks, signals  # noqa: F401  (registers the user-created handler and the deployment checks)

@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model, login
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from .models import UserProfile
+from .models import SiteConfig, UserProfile
 
 
 @receiver(post_save, sender=get_user_model())
@@ -30,3 +30,19 @@ def sign_in_after_first_confirmation(sender, request, email_address, **kwargs):
     if profile is None or not profile.self_registered or not email_address.user.is_active:
         return
     login(request, email_address.user, backend="allauth.account.auth_backends.AuthenticationBackend")
+
+
+@receiver(post_save, sender=UserProfile)
+def forget_timezone_memo(sender, instance, raw=False, **kwargs):
+    """A saved profile may carry a new time zone: drop the remembered one so the next request reads it."""
+    from .middleware import forget_person_timezone
+
+    forget_person_timezone(instance.user_id)
+
+
+@receiver(post_save, sender=SiteConfig)
+def forget_rate_limit_memo(sender, instance, raw=False, **kwargs):
+    """The admin changed a sign-up or sign-in limit: apply it at once in this process."""
+    from .services.abuse import forget_cached_limits
+
+    forget_cached_limits()

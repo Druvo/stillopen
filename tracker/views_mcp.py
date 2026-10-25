@@ -20,6 +20,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from . import mcp_tools
 from .models import ApiToken, SiteConfig
+from .services.throttle import bump
 
 log = logging.getLogger(__name__)
 
@@ -48,12 +49,7 @@ def _client_ip(request) -> str:
 
 
 def _bump(key: str, window: int) -> int:
-    cache.add(key, 0, timeout=window)
-    try:
-        return cache.incr(key)
-    except ValueError:
-        cache.set(key, 1, timeout=window)
-        return 1
+    return bump(key, window)
 
 
 def _rpc_error(request_id, code: int, message: str, status: int = 200):

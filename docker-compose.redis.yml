@@ -1,0 +1,31 @@
+# Optional Redis for the self-host setup: a cache that every gunicorn worker shares. Use it together with the main file:
+#
+#   docker compose -f docker-compose.selfhost.yml -f docker-compose.redis.yml up -d --build
+#
+# With Redis, per-person rate limits (AI checks, searches, CV tailoring, MCP calls) and the sign-in/sign-up limits are counted once for
+# the whole site, so you can run several workers: put STILLOPEN_WORKERS=4 (for example) in .env. Without it StillOpen runs one worker
+# on purpose. Nothing is stored in Redis that matters: counters and locks only, so it keeps no volume and no disk snapshots.
+# Details: docs/SELF-HOSTING.md ("More than one worker").
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # no append-only file and no snapshots: losing the counters on a restart only resets everyone's rate limit window
+    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  stillopen:
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379/0

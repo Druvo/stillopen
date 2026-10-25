@@ -50,6 +50,12 @@ class SiteConfigForm(forms.ModelForm):
         help_text="Free key from jooble.org/api/about. Leave blank to keep the saved key. The JOOBLE_API_KEY environment variable takes precedence.",
     )
 
+    adzuna_app_key = forms.CharField(
+        required=False, widget=forms.PasswordInput(render_value=False),
+        help_text="The key that goes with the app id (developer.adzuna.com > your dashboard). Stored encrypted and never shown again. "
+        "Leave blank to keep the saved one. The ADZUNA_APP_KEY environment variable takes precedence.",
+    )
+
     # write-only secrets: blank keeps what is saved
     email_password = forms.CharField(
         required=False, widget=forms.PasswordInput(render_value=False),
@@ -65,6 +71,8 @@ class SiteConfigForm(forms.ModelForm):
 
     def save(self, commit=True):
         obj = super().save(commit=False)
+        if self.cleaned_data.get("adzuna_app_key"):
+            obj.set_adzuna_app_key(self.cleaned_data["adzuna_app_key"])
         if self.cleaned_data.get("email_password"):
             obj.set_email_password(self.cleaned_data["email_password"])
         for provider in ("google", "github", "facebook"):
@@ -99,7 +107,7 @@ class SiteConfigAdmin(ModelAdmin):
             "Dashboard",
             {
                 "classes": ("tab",),
-                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "auto_scan_hours", "mcp_remote_enabled"),
+                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "weekly_emails_enabled", "auto_scan_hours", "mcp_remote_enabled"),
                 "description": "Follow-up emails need email set up (the Email tab) and `manage.py send_followup_emails` on a schedule (e.g. daily cron) -- enabling this alone does not send anything by itself.",
             },
         ),
@@ -107,10 +115,15 @@ class SiteConfigAdmin(ModelAdmin):
             "Registration",
             {
                 "classes": ("tab",),
-                "fields": ("signup_mode",),
+                "fields": (
+                    "signup_mode", "signup_protection", "signup_min_seconds", "signup_form_max_hours", "signup_per_hour_per_ip",
+                    "login_failures_per_ip", "login_failures_per_account", "password_reset_per_hour", "email_resend_seconds",
+                ),
                 "description": (
                     "<strong>Open</strong> lets anyone register. New users must confirm their email, so set up the Email tab "
-                    "first. Everyone only ever sees their own data."
+                    "first. Everyone only ever sees their own data. The numbers below slow down bots and password guessing without "
+                    "any third-party service (no CAPTCHA); they apply within seconds. Behind a reverse proxy, "
+                    "ALLAUTH_TRUSTED_PROXY_COUNT must be set or these limits see the proxy instead of each visitor (run `manage.py check`)."
                 ),
             },
         ),
@@ -131,7 +144,7 @@ class SiteConfigAdmin(ModelAdmin):
             "Email",
             {
                 "classes": ("tab",),
-                "fields": ("email_host", "email_port", "email_username", "email_password", "email_use_tls", "email_from"),
+                "fields": ("email_host", "email_port", "email_username", "email_password", "email_use_tls", "email_from", "public_base_url"),
                 "description": (
                     "Needed for sign-up confirmation links, interview reminders, follow-up digests and job alerts. "
                     "<strong>Brevo (free, 300 a day):</strong> host <code>smtp-relay.brevo.com</code>, port <code>587</code>, TLS on, "
@@ -174,9 +187,14 @@ class SiteConfigAdmin(ModelAdmin):
             "Job search keys",
             {
                 "classes": ("tab",),
-                "fields": ("jooble_api_key",),
-                "description": "Optional. Jooble covers Bangladesh, Malaysia and the Gulf, where few job sites publish an open feed. "
-                "Without a key those sources are simply skipped.",
+                "fields": ("jooble_api_key", "adzuna_app_id", "adzuna_app_key"),
+                "description": "Optional, and free. These switch on job searches by country, asked with each person's own target roles; "
+                "without a key those sources are simply skipped. <b>Adzuna</b> (developer.adzuna.com: register, then copy the app id and key "
+                "from your dashboard) covers 19 countries: UK, US, Canada, Australia, New Zealand, India, Singapore, South Africa, Brazil, "
+                "Mexico, Poland and most of western Europe. <b>Jooble</b> (jooble.org/api/about; approved by email) covers Bangladesh, Pakistan, "
+                "India, Malaysia, Singapore, Indonesia, the Philippines, Thailand, the Gulf, Egypt, Nigeria, South Africa, Brazil, Mexico, "
+                "Poland and Turkey. Run <code>python manage.py check_adzuna</code> or <code>check_jooble</code> to test a key. Adzuna's results "
+                "are shown with a \"Jobs by Adzuna\" credit and are never put on the public job board.",
             },
         ),
         (
@@ -222,6 +240,7 @@ class UserProfileAdmin(ModelAdmin):
     fieldsets = (
         (None, {"fields": ("user",)}),
         ("What they want", {"fields": ("target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages", "notice_period", "salary_floor", "deal_breakers", "about", "scan_digest_enabled")}),
+        ("Emails", {"fields": ("email_followups", "email_interviews", "email_weekly")}),
         ("CV", {"fields": ("profile_cv",)}),
         (
             "AI evaluation",
@@ -423,7 +442,9 @@ class ApplicationAdmin(ModelAdmin):
         return "N/A" if pct is None else f"{pct}%"
 
     def _set_status(self, request, queryset, name):
-        status = Status.objects.filter(name__iexact=name).first()
+        from .services.board import find_status
+
+        status = find_status(name)
         if not status:
             self.message_user(request, f'No status named "{name}". Create it under Statuses.', messages.ERROR)
             return
@@ -439,9 +460,9 @@ class ApplicationAdmin(ModelAdmin):
     def mark_applied(self, request, queryset):
         self._set_status(request, queryset, "Applied")
 
-    @admin.action(description="Mark as Discarded")
+    @admin.action(description="Mark as Not for me")
     def mark_discarded(self, request, queryset):
-        self._set_status(request, queryset, "Discarded")
+        self._set_status(request, queryset, "Not for me")
 
     @admin.action(description="Check whether the postings are still open")
     def check_open_status(self, request, queryset):

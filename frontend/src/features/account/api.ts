@@ -1,4 +1,5 @@
 import { request } from "@/lib/api";
+import type { Coverage } from "./coverage-logic";
 
 export type Choice = { value: string; label: string };
 
@@ -10,15 +11,16 @@ export type AreaValues = Omit<Area, "id" | "description" | "min_salary"> & { min
 
 export type ProfileValues = {
   target_roles: string; home_country: string; employment_types: string[]; seniority_levels: string[]; industries: string; languages: string; notice_period: string;
-  salary_floor: string; deal_breakers: string; about: string; profile_cv: string; scan_digest_enabled: boolean;
+  salary_floor: string; deal_breakers: string; about: string; profile_cv: string; scan_digest_enabled: boolean; timezone: string;
+  email_followups?: boolean; email_interviews?: boolean; email_weekly?: boolean;
 };
 export type ProfileData = {
   profile: ProfileValues;
-  choices: { employment_types: Choice[]; seniority_levels: Choice[]; salary_periods: Choice[] };
+  choices: { employment_types: Choice[]; seniority_levels: Choice[]; salary_periods: Choice[]; timezones: string[] };
   areas: Area[]; max_areas: number;
-  site: { scan_emails_enabled: boolean; assistant_enabled: boolean };
+  site: { scan_emails_enabled: boolean; followup_emails_enabled?: boolean; weekly_emails_enabled?: boolean; assistant_enabled: boolean; timezone: string };
   account: {
-    username: string; email: string; is_staff: boolean; can_delete: boolean; google: boolean;
+    username: string; email: string; email_verified?: boolean; is_staff: boolean; can_delete: boolean; google: boolean;
     counts: { jobs: number; cv_versions: number; documents: number; search_areas: number };
     classic: { email: string; password: string; two_step: string; connections: string; export: string; privacy: string };
   };
@@ -38,8 +40,20 @@ export type AiSettings = {
 /** What goes to the server: the settings, plus keys that are only ever sent, never received. */
 export type AiSave = Partial<AiSettingsValues> & { ai_api_key?: string; rag_embedding_key?: string; clear_ai_key?: boolean; clear_rag_key?: boolean };
 
-export type OwnSource = { id: number; name: string; connector: string; connector_label: string; board_token: string; enabled: boolean };
-export type SourcesData = { mine: OwnSource[]; shared: string[]; limit: number; connectors: Choice[]; help: Record<string, string> };
+/** How a board answered the person's own searches: when it last worked and what went wrong when it did not. */
+export type SourceHealth = { state: "ok" | "error" | "unknown"; checked_at: string | null; last_ok_at: string | null; error: string; since: string | null };
+export type OwnSource = { id: number; name: string; connector: string; connector_label: string; board_token: string; enabled: boolean; host?: string; health?: SourceHealth };
+export type SourcesData = {
+  mine: OwnSource[];
+  shared: string[];
+  /** The shared boards, read-only, each with how it answered this person's searches. */
+  shared_health?: { name: string; health: SourceHealth }[];
+  /** How many boards had trouble in the last finished search, or null. */
+  trouble?: { total: number; trouble: number } | null;
+  limit: number;
+  connectors: Choice[];
+  help: Record<string, string>;
+};
 
 export type Token = {
   id: number; name: string; hint: string; can_write: boolean; state: string; created_at: string; last_used_at: string | null; expires_at: string | null; revoked: boolean;
@@ -63,7 +77,9 @@ export const accountApi = {
   saveAi: (values: AiSave) => request<AiSettings>("PUT", "/ai-settings", values),
 
   sources: () => request<SourcesData>("GET", "/sources"),
+  coverage: () => request<Coverage>("GET", "/sources/coverage"),
   addSource: (values: { connector: string; board_token: string; name: string }) => request<{ source: OwnSource | null; openings: number; message: string; info: string }>("POST", "/sources", values),
+  addCareerPage: (values: { url: string; name: string }) => request<{ source: OwnSource | null; openings: number; message: string; info: string }>("POST", "/sources/careers-page", values),
   toggleSource: (id: number) => request<{ source: OwnSource }>("POST", `/sources/${id}/toggle`),
   removeSource: (id: number) => request<{ ok: true }>("DELETE", `/sources/${id}`),
 

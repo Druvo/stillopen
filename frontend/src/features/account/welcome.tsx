@@ -5,10 +5,12 @@ import { useState } from "react";
 import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { CheckField, FormError, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
-import { navigate } from "@/lib/router";
+import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import { accountApi, type WelcomeData } from "./api";
 import { toFormData } from "./logic";
+import { SuggestRoles } from "./suggest-roles";
+import { addRole } from "@/features/assist/logic";
 
 export function WelcomePage() {
   const query = useQuery({ queryKey: ["account", "welcome"], queryFn: accountApi.welcome });
@@ -49,9 +51,16 @@ function WelcomeForm({ data }: { data: WelcomeData }) {
             onChange={(e) => set("target_roles", e.target.value)}
             errors={form.fields.target_roles}
           />
+          <SuggestRoles
+            cv={values.profile_cv}
+            roles={values.target_roles}
+            onAddRole={(role) => set("target_roles", addRole(values.target_roles, role))}
+            onAddPlace={(place) => set("other_places", addRole(values.other_places, place))}
+          />
           <TextField
             label="Where do you live?"
             hint="So we can tell you whether a job is open to someone there. A country name is enough."
+            autoComplete="country-name"
             value={values.home_country}
             onChange={(e) => set("home_country", e.target.value)}
             errors={form.fields.home_country}
@@ -85,6 +94,12 @@ function WelcomeForm({ data }: { data: WelcomeData }) {
               </p>
             ))}
           </div>
+          <p className="mb-3 text-sm">
+            No CV yet?{" "}
+            <Link to="/cv/new" className="text-brand underline">
+              Build one step by step
+            </Link>
+          </p>
           <TextAreaField label="Or paste your CV here" rows={8} value={values.profile_cv} onChange={(e) => set("profile_cv", e.target.value)} errors={form.fields.profile_cv} />
         </Card>
         <FormError message={form.error || skip.error} />

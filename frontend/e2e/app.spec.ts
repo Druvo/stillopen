@@ -114,10 +114,10 @@ test("a company board with a bad name is refused at once, with nothing fetched",
   await page.getByLabel(/The company's name in that address/).fill("not a valid name!");
   const [response] = await Promise.all([
     page.waitForResponse((r) => r.url().endsWith("/api/v1/sources") && r.request().method() === "POST"),
-    page.getByRole("button", { name: /^Check and add|^Add/ }).click(),
+    page.locator("form").filter({ hasText: "Which hiring system" }).getByRole("button", { name: "Check and add" }).click(),
   ]);
   expect(response.status()).toBe(400); // refused by the form's own rules, before the server goes anywhere
-  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ }).first()).toBeVisible();
 });
 
 test("deleting an account needs the username typed, then it is gone for good", async ({ page, browser }) => {

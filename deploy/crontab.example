@@ -15,6 +15,7 @@ PYTHON=/srv/stillopen/.venv/bin/python
 0 8 * * *   cd $APP && $PYTHON manage.py send_followup_emails >> $APP/logs/cron.log 2>&1
 
 # Every morning at 07:00: search for people who turned on Job alerts, and email what was found.
+30 8 * * 1   cd $APP && $PYTHON manage.py send_weekly_summary >> $APP/logs/cron.log 2>&1
 0 7 * * *   cd $APP && $PYTHON manage.py scheduled_scan >> $APP/logs/cron.log 2>&1
 
 # Every 6 hours: refresh the public job board (also happens by itself when a visitor arrives and it is stale).

@@ -12,6 +12,8 @@ def staff_flags(config) -> dict:
         "legal_needs_attention": config.signup_open and (legal.has_placeholders(config.privacy_text) or legal.has_placeholders(config.terms_text)),
         # an admin should know when sign-ups are not email-verified because this install cannot send email
         "email_unverified_signups": config.signup_open and not integrations.require_email_confirmation(),
+        # neither Jooble nor Adzuna has a key, so whole countries have no job search behind them
+        "no_search_keys": not config.effective_jooble_key and not (config.effective_adzuna_id and config.effective_adzuna_key),
     }
 
 

@@ -16,13 +16,13 @@
   --surface-2: #f2f4f7; /* gray-100 */
   --border: #e4e7ec; /* gray-200 */
   --text: #1d2939; /* gray-800 */
-  --muted: #667085; /* gray-500 */
-  --brand: #465fff; /* brand-500 */
+  --muted: #5b6578; /* a shade darker than gray-500, so it reads on every surface (4.5:1) */
+  --brand: #3641f5; /* brand-600: link text on white and on brand-soft reaches 4.5:1 */
   --brand-soft: #ecf3ff; /* brand-50 */
   --brand-contrast: #ffffff;
-  --good: #039855; /* success-600 */
-  --warn: #dc6803; /* warning-600 */
-  --bad: #d92d20; /* error-600 */
+  --good: #027a48; /* darker than success-600 so it reads on grey (4.5:1) */
+  --warn: #b54708;
+  --bad: #c0261b;
 }
 :root[data-theme="dark"] {
   --bg: #0c111d; /* gray-950 */
@@ -86,7 +86,7 @@
   --color-gray-200: #e4e7ec;
   --color-gray-300: #d0d5dd;
   --color-gray-400: #98a2b3;
-  --color-gray-500: #667085;
+  --color-gray-500: #5b6578; /* TailAdmin's #667085 is 4.4:1 on gray-100; this is 5.3:1 */
   --color-gray-600: #475467;
   --color-gray-700: #344054;
   --color-gray-800: #1d2939;
@@ -166,13 +166,60 @@ button:not(:disabled),
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+/* A heading or the main area that was focused by the program after a screen change: no ring unless the person is using the keyboard. */
+[tabindex="-1"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* People who ask for more contrast get darker borders. */
+@media (prefers-contrast: more) {
+  :root {
+    --border: #667085;
+    --muted: #475467;
+  }
+  :root[data-theme="dark"] {
+    --border: #98a2b3;
+    --muted: #d0d5dd;
+  }
+}
+
+/* Touch targets: 44 px on phones (WCAG 2.5.5 level of comfort), at least 24 px everywhere (2.5.8). Links inside a sentence are exempt. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="range"]),
+select {
+  min-height: 1.5rem;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  accent-color: var(--brand);
+}
+@media (max-width: 639.98px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="range"]),
+  select,
+  textarea,
+  button:not(p button, [data-inline]),
+  summary {
+    min-height: 2.75rem;
+  }
+}
+/* A link that is its own line or sits in a row: a real target, not just the words. */
+@utility link-target {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  @media (max-width: 639.98px) {
+    min-height: 2.75rem;
+  }
+}
 
 /* Sidebar menu entries (from TailAdmin's menu-item styles). */
 @utility menu-item {
   @apply relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-theme-sm font-medium;
 }
 @utility menu-item-active {
-  @apply bg-brand-50 text-brand-500 dark:bg-brand-500/[0.12] dark:text-brand-400;
+  @apply bg-brand-50 text-brand-600 dark:bg-brand-500/[0.12] dark:text-brand-400;
 }
 @utility menu-item-inactive {
   @apply text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-gray-300;

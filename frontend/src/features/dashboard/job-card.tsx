@@ -3,8 +3,10 @@
 import { CalendarClock, GripVertical } from "lucide-react";
 import { useMemo, useState, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { ActionMenu, type MenuItem } from "@/components/menu";
+import { CreditLink } from "@/components/credit";
 import { buttonClass } from "@/components/ui";
 import { cvApi } from "@/features/cv/api";
+import { SummaryView } from "@/features/assist/summary";
 import { prepApi } from "@/features/prep/api";
 import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
@@ -12,6 +14,7 @@ import { notify } from "@/lib/toast";
 import type { Job, StatusInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { dashboardApi } from "./api";
+import { statusLabel } from "./jobmgmt";
 import { appliedParts, cvBadgeText, deadlineText, FIT_BADGE_TEXT, livingBadge, paperlessDocumentUrl, repostTitle, SKILL_MATCH_TITLE, shortDate, truncate } from "./logic";
 
 /** What every card needs from the page around it. */
@@ -23,6 +26,10 @@ export type CardExtras = {
   paperlessUrl: string;
   /** Reload the dashboard after something on a card changed. */
   refresh: () => Promise<unknown> | void;
+  /** Move one job to "Not for me" (with an Undo). Absent where the card is shown without the list's actions. */
+  notForMe?: (job: Job) => void;
+  /** Ask to remove one job for good (the page shows the confirmation). */
+  remove?: (job: Job) => void;
 };
 
 const PILL = "inline-flex items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-theme-xs";
@@ -131,12 +138,14 @@ type Props = {
   checking: boolean;
   /** "row" is the list's full-width row; "compact" is the same card narrowed for a board column. */
   variant?: "row" | "compact";
+  /** Present while the person is choosing several jobs (list view only): the box in front of the row. */
+  select?: { checked: boolean; onToggle: () => void };
   /** Drag wiring from dnd-kit; absent in the list view and the drag overlay. */
   dragHandle?: { attributes: HTMLAttributes<HTMLButtonElement>; listeners: HTMLAttributes<HTMLButtonElement> | undefined; setActivatorNodeRef: Ref<HTMLButtonElement> };
   overlay?: boolean;
 };
 
-export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, variant = "row", dragHandle, overlay }: Props) {
+export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, variant = "row", dragHandle, overlay, select }: Props) {
   const compact = variant === "compact";
   const status = statuses.find((s) => s.id === job.status_id);
   const live = livingBadge(job.live_state);
@@ -144,7 +153,7 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
   const applied = appliedParts(job);
   const canJudge = job.has_description || !!job.url;
   const needsFit = canJudge && !job.ai_evaluated;
-  const hasDetails = job.strengths.length > 0 || job.gaps.length > 0 || !!job.notes || job.documents.length > 0 || applied.length > 0 || !!job.next_action || !!job.ai_method;
+  const hasDetails = job.strengths.length > 0 || job.gaps.length > 0 || !!job.notes || job.documents.length > 0 || applied.length > 0 || !!job.next_action || !!job.ai_method || !!job.ai_summary || !!job.prep;
   const [working, setWorking] = useState<string | null>(null);
   const [problem, setProblem] = useState("");
   const name = `${job.role} at ${job.company}`;
@@ -175,6 +184,8 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
     }
     list.push({ key: "edit", label: "Edit details", to: `/jobs/${job.id}/edit` });
     if (job.url) list.push({ key: "view", label: "View the posting", href: job.url });
+    if (extras.notForMe) list.push({ key: "notforme", label: "Not for me", onSelect: () => extras.notForMe?.(job) });
+    if (extras.remove) list.push({ key: "remove", label: "Remove for good…", onSelect: () => extras.remove?.(job) });
     if (extras.paperlessUrl && unsent.length > 0) {
       list.push({
         key: "paperless",
@@ -206,6 +217,11 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
     >
       <div className={cn("flex gap-3", compact ? "flex-col" : "flex-col md:flex-row md:items-start md:justify-between")}>
         <div className="flex min-w-0 flex-1 items-start gap-3">
+          {select && (
+            <label className="-ml-1 flex size-11 shrink-0 cursor-pointer items-center justify-center sm:size-8">
+              <input type="checkbox" checked={select.checked} onChange={select.onToggle} aria-label={`Select ${name}`} className="size-4" />
+            </label>
+          )}
           {dragHandle && (
             <button
               type="button"
@@ -228,6 +244,7 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
             <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-theme-xs text-muted">
               {job.source && <span>{job.source}</span>}
               {job.advertised_pay && <span>{job.advertised_pay}</span>}
+              {job.credit && <CreditLink credit={job.credit} className="underline" />}
               {job.applied_date && <span>Applied {shortDate(job.applied_date)}</span>}
             </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -283,12 +300,12 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
             >
               {statuses.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {statusLabel(s)}
                 </option>
               ))}
             </select>
             {needsFit ? (
-              <button type="button" onClick={() => onCheckFit(job)} disabled={checking} title={`How we judge: ${extras.judgeLabel}`} className={cn(buttonClass("primary"), TOUCH)}>
+              <button type="button" onClick={() => onCheckFit(job)} disabled={checking} aria-label={checking ? undefined : `Check my fit for ${name}`} title={`How we judge: ${extras.judgeLabel}`} className={cn(buttonClass("primary"), TOUCH)}>
                 {checking ? "Reading the posting…" : "Check my fit"}
               </button>
             ) : (
@@ -318,6 +335,19 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
               <summary className="cursor-pointer">Details</summary>
               <div className="mt-2">
                 {job.next_action && <p className="mb-2 text-muted">Suggested next: {job.next_action}</p>}
+                {job.prep && (
+                  <p className="mb-2">
+                    <Link to={`/prep/${job.prep.id}`} className="text-brand underline">
+                      Prep plan {job.prep.percent}% done
+                    </Link>
+                  </p>
+                )}
+                {job.ai_summary && (
+                  <div className="mb-2">
+                    <strong>What this role really needs</strong>
+                    <SummaryView summary={job.ai_summary} />
+                  </div>
+                )}
                 {compact && job.summary && <p className="mb-2">{job.summary}</p>}
                 {job.ai_method && <p className="mb-2 text-theme-xs text-muted">{job.ai_method === "keywords" ? "Fit worked out by a quick keyword check." : "Fit read by AI."}</p>}
                 {applied.length > 0 && (

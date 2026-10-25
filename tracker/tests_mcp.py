@@ -5,6 +5,7 @@ import sys
 import tempfile
 from datetime import date, timedelta
 from pathlib import Path
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
@@ -183,8 +184,10 @@ class ServerProtocolTests(SimpleTestCase):
             {"summary", "list_applications", "get_application", "get_profile", "list_statuses", "add_application",
              "set_description", "save_evaluation", "update_status", "add_note", "check_open", "search_profile", "list_knowledge", "list_cv_versions", "get_cv_version", "save_tailored_cv", "list_follow_ups", "record_application", "set_job_details",
              "list_interviews", "add_interview", "set_interview_outcome", "list_contacts", "add_contact", "add_referral", "set_referral_status",
-             "list_offers", "add_offer", "set_offer_status", "compare_offers"},
+             "list_offers", "add_offer", "set_offer_status", "compare_offers",
+             "list_prep_plans", "get_prep_plan", "request_prep_plan"},
         )
+        self.assertLessEqual(len(tools), 36)  # the surface stays deliberately small
         self.assertTrue(tools["summary"].annotations.read_only_hint)
         self.assertFalse(added.is_error)
         self.assertIn("Initech", str(listing.content))
@@ -306,3 +309,89 @@ class PipelineToolTests(TestCase):
         names = {n for n in dir(t) if not n.startswith("_") and callable(getattr(t, n)) and getattr(getattr(t, n), "__module__", "") == t.__name__}
         self.assertTrue({"add_interview", "compare_offers", "add_referral"} <= names)
         self.assertFalse({n for n in names if "delete" in n or "remove" in n})
+
+
+class PrepToolTests(TestCase):
+    """Prep plans through MCP: read them, ask for a draft, never approve; owner-only; no practice questions or answers."""
+
+    def setUp(self):
+        from tracker.tests_prep import PrepBase
+
+        base = PrepBase()
+        base.setUp()
+        self.base = base
+        self.user, self.other = base.user, base.other
+        self.app = base.app
+        t.set_user(self.user)
+        self.addCleanup(t.set_user, None)
+
+    def test_listing_and_reading_a_plan_show_progress_but_never_questions(self):
+        plan = self.base.make_plan(status="draft", lessons=2, questions=2)
+        listed = t.list_prep_plans()
+        self.assertEqual([p["id"] for p in listed], [plan.pk])
+        self.assertEqual((listed[0]["status"], listed[0]["lessons_total"], listed[0]["lessons_done"], listed[0]["company"]), ("draft", 2, 0, "Acme"))
+        data = t.get_prep_plan(plan.pk)
+        self.assertEqual(data["question_count"], 4)
+        self.assertEqual([len(w["lessons"]) for w in data["weeks"]], [2])
+        self.assertEqual(data["weeks"][0]["tasks"], [{"kind": "build", "text": "Build it", "done": False}])
+        self.assertIn("Only the person can read it through and start it", data["next_step"])
+        blob = str(data) + str(listed)
+        for leaked in ("Q00", "Q01", "because", "correct", "choices", "explanation"):
+            self.assertNotIn(leaked, blob)
+
+    def test_an_active_plan_does_not_show_questions_either(self):
+        plan = self.base.make_plan(status="active")
+        self.assertNotIn("Q00", str(t.get_prep_plan(plan.pk)))
+
+    def test_only_the_owner_can_see_a_plan(self):
+        plan = self.base.make_plan()
+        theirs = self.base.make_plan(owner=self.other)
+        self.assertEqual([p["id"] for p in t.list_prep_plans()], [plan.pk])
+        with self.assertRaisesMessage(ValueError, "No prep plan"):
+            t.get_prep_plan(theirs.pk)
+        t.set_user(self.other)
+        self.assertEqual([p["id"] for p in t.list_prep_plans()], [theirs.pk])
+        with self.assertRaisesMessage(ValueError, "No prep plan"):
+            t.get_prep_plan(plan.pk)
+
+    def test_requesting_starts_a_plan_the_same_way_the_app_does_and_never_approves_it(self):
+        from tracker.models import PrepPlan
+
+        with mock.patch("tracker.services.prep.generate"):
+            result = t.request_prep_plan(self.app.pk)
+        self.assertFalse(result["existing"])
+        plan = PrepPlan.objects.get(pk=result["id"])
+        self.assertEqual((plan.owner, plan.application, plan.status, plan.approved_at), (self.user, self.app, "generating", None))
+        again = t.request_prep_plan(self.app.pk)  # the app's own rule: one plan per job
+        self.assertEqual((again["existing"], again["id"]), (True, plan.pk))
+
+    def test_the_apps_limits_apply(self):
+        from tracker.models import SiteConfig
+
+        SiteConfig.objects.filter(pk=1).update(prep_enabled=False)
+        with self.assertRaisesMessage(ValueError, "switched off"):
+            t.request_prep_plan(self.app.pk)
+        SiteConfig.objects.filter(pk=1).update(prep_enabled=True)
+        other_job = make(self.user, company="NoText", description="")
+        with self.assertRaisesMessage(ValueError, "no description"):
+            t.request_prep_plan(other_job.pk)
+        from tracker.models import UserProfile
+
+        UserProfile.objects.filter(user=self.user).update(ai_provider="none")
+        with self.assertRaisesMessage(ValueError, "AI account"):
+            t.request_prep_plan(self.app.pk)
+
+    def test_someone_elses_job_cannot_be_planned(self):
+        theirs = make(self.other, company="Theirs", description="Kubernetes")
+        with self.assertRaises(ValueError):
+            t.request_prep_plan(theirs.pk)
+
+    def test_there_is_no_way_to_approve_or_start_a_plan_through_mcp(self):
+        names = {n for n in dir(t) if not n.startswith("_") and callable(getattr(t, n)) and getattr(getattr(t, n), "__module__", "") == t.__name__}
+        self.assertTrue({"list_prep_plans", "get_prep_plan", "request_prep_plan"} <= names)
+        self.assertFalse({n for n in names if "prep" in n and any(w in n for w in ("approve", "start", "activate", "accept", "delete", "remove", "discard"))})
+        from tracker.mcp_registry import build_server
+
+        registered = {tool.name for tool in __import__("asgiref.sync", fromlist=["async_to_sync"]).async_to_sync(build_server().list_tools)()}
+        self.assertFalse({n for n in registered if "prep" in n and any(w in n for w in ("approve", "start", "activate", "accept", "delete", "remove", "discard"))})
+        self.assertLessEqual(len(registered), 36)

@@ -1,10 +1,10 @@
 """AI settings for the new app. Keys are write-only: nothing here ever returns a key, only whether one is saved. The classic page's form does
 the checking, so a restricted (non-staff) person still cannot choose a command-line provider or a local or private address."""
 from django.db.models import Count, Sum
-from django.utils import timezone
 from ninja import Router
 
 from .. import forms
+from ..services import tz
 from ..models import AIUsageEvent, UserProfile
 from .account import merged, read_payload
 from .common import validate_form
@@ -33,7 +33,7 @@ FIELDS = [
 
 
 def _usage(user) -> dict:
-    now = timezone.localtime()
+    now = tz.now_for(user)
     month = AIUsageEvent.objects.filter(owner=user, created_at__year=now.year, created_at__month=now.month)
     total = month.aggregate(input_tokens=Sum("input_tokens"), output_tokens=Sum("output_tokens"), cost_usd=Sum("cost_usd"), calls=Count("id"))
     return {

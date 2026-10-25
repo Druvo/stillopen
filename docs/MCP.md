@@ -25,9 +25,10 @@ Then ask things like *"summarise my job search and what to apply to next"*, *"ju
 | | |
 | --- | --- |
 | Whose data | Only the person who made it. Every tool runs as that person; another person's jobs return "not found" |
-| Read only | Can list and read (jobs, profile, CV versions, interviews, offers). Cannot change anything, and does not even see the tools that do |
+| Read only | Can list and read (jobs, profile, CV versions, interviews, offers, prep plans). Cannot change anything, and does not even see the tools that do |
 | Read and make changes | Can also add jobs, notes, evaluations, interviews, contacts and offers, save a tailored CV, and record that *you* applied |
-| Never | Delete anything, read settings, API keys or files, approve a flagged CV, apply to a job or send a message for you |
+| Prep plans | `list_prep_plans` and `get_prep_plan` read; `request_prep_plan` (needs a read-and-change token) starts a plan for a job. It always arrives as a **draft** written by the person's own AI account, with the same limits as the app. It never returns practice questions or answers, and there is no tool to approve or start a plan: only the person can, in the web app |
+| Never | Delete anything, read settings, API keys or files, approve a flagged CV, start or approve a prep plan, apply to a job or send a message for you |
 | Revoke | Press **Revoke** on the same page: it stops working immediately. Tokens also expire (30 days, 90 days, 1 year or never) |
 | Limits | 10 active tokens per person; 120 calls a minute per token; repeated wrong tokens from one address are blocked for a minute |
 
@@ -49,5 +50,6 @@ It acts for the only superuser, or for the account named in the `STILLOPEN_USER`
 
 - **Turn it off:** admin > Site configuration > Dashboard > *Mcp remote enabled*. The page disappears and `/mcp/` answers 404.
 - **Limits** (environment): `STILLOPEN_MAX_API_TOKENS`, `STILLOPEN_TOKEN_ISSUES_PER_HOUR`, `STILLOPEN_MCP_CALLS_PER_MINUTE`, `STILLOPEN_MCP_BAD_TOKENS_PER_MINUTE`.
-- **Behind a proxy:** keep `/mcp/` on HTTPS and set `ALLAUTH_TRUSTED_PROXY_COUNT` so the wrong-token limit sees the caller, not the proxy.
+- **Behind a proxy:** keep `/mcp/` on HTTPS and set `ALLAUTH_TRUSTED_PROXY_COUNT` so the wrong-token limit sees the caller, not the proxy (`manage.py check` warns when `DJANGO_BEHIND_PROXY=1` is set without it).
+- **Several workers:** the per-token call limit is counted in Django's cache. With one worker that is process memory; with more than one, set `REDIS_URL` (see docs/SELF-HOSTING.md, "More than one worker") so all workers share the count.
 - The endpoint is the simple, stateless form of MCP's streamable HTTP: one JSON reply per POST, no sessions, no browser cookies (so there is nothing for a cross-site page to ride on).

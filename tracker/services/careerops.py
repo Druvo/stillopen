@@ -147,6 +147,9 @@ def _kind_for(name: str, kinds: list[DocumentKind]) -> DocumentKind | None:
 
 
 def _status(name: str) -> Status:
+    from .board import canonical_name
+
+    name = canonical_name(name)  # the tracker file still says "Discarded" and "SKIP"
     existing = Status.objects.filter(name__iexact=name).first()
     if existing:
         return existing

@@ -56,6 +56,9 @@ from tracker.models import (
 )
 from tracker.services import ai, fit, geo, integrations, knowledge
 from tracker.services.jobtext import html_to_text
+from tracker.services.adzuna import fetch_adzuna  # noqa: F401  (looked up by name in _fetch; asked with roles via _fetch_search)
+from tracker.services.careerpage import fetch_careerpage  # noqa: F401  (looked up by name in _fetch)
+from tracker.services.openboards import fetch_getonbrd, fetch_jobtech  # noqa: F401  (same)
 from tracker.services.netguard import FetchError, safe_get
 from tracker.services.text import terms as _terms
 
@@ -513,6 +516,9 @@ SMARTRECRUITERS_MAX = 500  # most postings read from one employer
 JOOBLE_PLACES = {
     "bd": "Bangladesh", "my": "Malaysia", "ae": "United Arab Emirates", "sa": "Saudi Arabia",
     "qa": "Qatar", "kw": "Kuwait", "bh": "Bahrain", "om": "Oman",
+    # added with the Adzuna/open-API work: Jooble's own country sites exist for each (checked 2026-10)
+    "pk": "Pakistan", "in": "India", "sg": "Singapore", "id": "Indonesia", "ph": "Philippines", "th": "Thailand",
+    "eg": "Egypt", "ng": "Nigeria", "za": "South Africa", "br": "Brazil", "mx": "Mexico", "pl": "Poland", "tr": "Turkey",
 }
 JOOBLE_ROLES_PER_PLACE = 3
 _TAG = re.compile(r"<[^>]+>")
@@ -559,6 +565,65 @@ def fetch_jooble(token: str, roles: list[str] | None = None, key: str = "") -> l
     return out
 
 
+# Connectors that are a *search* (asked with each person's own roles, one country or region each) rather than a company's list.
+from tracker.seed_sources import SEARCH_CONNECTORS  # noqa: E402
+KEYED_CONNECTORS = ("jooble", "adzuna")  # skipped silently until the site owner adds a free key
+
+
+def site_keys() -> dict:
+    """The site's search keys, read once on the caller's thread (worker threads must not touch the database)."""
+    config = SiteConfig.load()
+    return {"jooble": config.effective_jooble_key, "adzuna_id": config.effective_adzuna_id, "adzuna_key": config.effective_adzuna_key}
+
+
+def _as_keys(keys) -> dict:
+    """A bare string is the old single-argument form: the Jooble key."""
+    if isinstance(keys, dict):
+        return keys
+    return {"jooble": keys or ""}
+
+
+def key_ready(connector: str, keys: dict) -> bool:
+    if connector == "jooble":
+        return bool(keys.get("jooble"))
+    if connector == "adzuna":
+        return bool(keys.get("adzuna_id") and keys.get("adzuna_key"))
+    return True
+
+
+def search_codes(connector: str, token: str) -> set[str] | None:
+    """The country codes one search source can see, or None when it is not a country search."""
+    token = (token or "").lower()
+    if connector == "jooble" and token in JOOBLE_PLACES:
+        return {token.upper()}
+    if connector == "adzuna" and token in adzuna_countries():
+        return {token.upper()}
+    if connector == "jobtech" and token == "se":
+        return {"SE"}
+    if connector == "getonbrd" and token == "latam":
+        return set(geo.REGIONS["latam"])
+    return None
+
+
+def adzuna_countries() -> dict:
+    from tracker.services.adzuna import COUNTRIES
+
+    return COUNTRIES
+
+
+def _fetch_search(connector: str, token: str, roles: list[str] | None, keys: dict) -> list[dict]:
+    """A search connector asked with one person's roles. Resolved by module-level name so tests can patch each fetcher."""
+    if connector == "jooble":
+        return fetch_jooble(token, roles, keys.get("jooble", ""))
+    if connector == "adzuna":
+        return fetch_adzuna(token, roles, (keys.get("adzuna_id", ""), keys.get("adzuna_key", "")))
+    if connector == "jobtech":
+        return fetch_jobtech(token, roles)
+    if connector == "getonbrd":
+        return fetch_getonbrd(token, roles)
+    raise FetchError(f"Unknown connector: {connector}")
+
+
 def _fetch(connector: str, token: str) -> list[dict]:
     # Resolved by name against this module's own namespace (not a dict built at import time) so that
     # mock.patch("tracker.services.scan.fetch_greenhouse", ...) in tests reaches the call that's actually made.
@@ -601,21 +666,22 @@ def _is_cross_source_duplicate(existing_jobs: dict, company: str, title: str, so
     return sources is not None and source.pk not in sources
 
 
-def _fetch_cached(source: JobSource, roles: list[str] | None = None, jooble_key: str = "") -> list[dict]:
+def _fetch_cached(source: JobSource, roles: list[str] | None = None, jooble_key="") -> list[dict]:
     """One read of a source's public list is shared by every person's search for a while, so a hundred people
     searching never means a hundred requests to the same company (and public feeds with a fair-use limit stay happy)."""
     seconds = settings.STILLOPEN_SCAN_CACHE_SECONDS
     key = f"scan-source:{source.connector}:{source.board_token}"
-    if source.connector == "jooble":  # a search, not a list: the answer depends on whose roles were asked for
+    keys = _as_keys(jooble_key)
+    if source.connector in SEARCH_CONNECTORS:  # a search, not a list: the answer depends on whose roles were asked for
         key += ":" + hashlib.md5("|".join(sorted((roles or [])[:JOOBLE_ROLES_PER_PLACE])).encode()).hexdigest()[:16]
     if seconds > 0:
         hit = cache.get(key)
         if hit is not None:
             return hit
-    if not TOKEN_RE.match(source.board_token):
+    if source.connector != "careerpage" and not TOKEN_RE.match(source.board_token):
         raise FetchError("Invalid board token.")
-    if source.connector == "jooble":
-        postings = fetch_jooble(source.board_token, roles, jooble_key)
+    if source.connector in SEARCH_CONNECTORS:
+        postings = _fetch_search(source.connector, source.board_token, roles, keys)
     else:
         postings = _fetch(source.connector, source.board_token)
     if seconds > 0:
@@ -623,12 +689,34 @@ def _fetch_cached(source: JobSource, roles: list[str] | None = None, jooble_key:
     return postings
 
 
+def _area_codes(owner) -> set[str] | None:
+    """The countries a person's search areas cover; None when there is no restriction (no areas, an "anywhere" area, or one
+    that cannot be resolved: unknown is never excluded)."""
+    codes: set[str] = set()
+    areas = list(owner.search_areas.all())
+    if not areas:
+        return None
+    for area in areas:
+        found = geo.resolve_place(area.place)
+        if found is None or "*" in found:
+            return None
+        codes |= found
+    return codes
+
+
 def searchable_sources(owner):
-    """The enabled sources a person's search can really use. Jooble sources need the site's key and the person's roles."""
+    """The enabled sources a person's search can really use. A country search needs the person's roles (and, for Jooble and
+    Adzuna, the site's free key), and is only asked about countries the person's search areas cover."""
     qs = JobSource.for_user(owner, enabled=True)
-    if not SiteConfig.load().effective_jooble_key or not _roles(owner):
-        qs = qs.exclude(connector="jooble")
-    return qs
+    keys = site_keys()
+    roles = bool(_roles(owner))
+    wanted = _area_codes(owner)
+    drop = []
+    for pk, connector, token in qs.filter(connector__in=SEARCH_CONNECTORS).values_list("pk", "connector", "board_token"):
+        codes = search_codes(connector, token)
+        if not roles or not key_ready(connector, keys) or (wanted is not None and codes is not None and not (codes & wanted)):
+            drop.append(pk)
+    return qs.exclude(pk__in=drop) if drop else qs
 
 
 GENERIC_MIN_CORPUS = 200
@@ -749,7 +837,7 @@ def _worker(run_id: int):
 
         # Stage 1 starts as soon as the fast majority has answered; stage 2 adds what the slow hosts bring.
         answered, finish = _prefetch_staged(
-            sources, roles, SiteConfig.load().effective_jooble_key, on_progress=reading,  # key read here: threads must not touch the database
+            sources, roles, site_keys(), on_progress=reading,  # key read here: threads must not touch the database
             first_wait=settings.STILLOPEN_SCAN_FIRST_WAIT_SECONDS,
         )
 
@@ -857,6 +945,7 @@ def _worker(run_id: int):
                 app = Application(
                     owner=owner, company=item["company"][:160], role=p["title"][:200], url=p["url"][:600],
                     location_text=(probe.location_text or "")[:160], description=probe.description, status=default_status,
+                    advertised_pay=(p.get("salary") or "")[:160],
                     description_is_excerpt=bool(probe.description.strip()), found_date=today, posting=posting,
                     **{k: getattr(probe, k) for k in found if k != "location_text"},
                 )
@@ -931,14 +1020,19 @@ def start_run(owner, background: bool = True) -> ScanRun:
 
 
 def scan_digest_text(apps) -> str:
+    from tracker.services import links
+
     lines = ["New jobs matching your search on StillOpen:", ""]
     for app in apps:
         where = f" ({app.location_text})" if app.location_text else ""
         lines.append(f"- {app.company} - {app.role}{where}")
         if app.url:
-            lines.append(f"  {app.url}")
-    lines += ["", "They are saved on your dashboard. Open it to check each fit and decide what to apply to.",
-              "Turn these emails off any time under Profile > Job alerts."]
+            lines.append(f"  Posting: {app.url}")
+        if links.job_link(app.pk):
+            lines.append(f"  In StillOpen: {links.job_link(app.pk)}")
+
+    lines += ["", links.link_line("They are saved on your dashboard. Open it to check each fit and decide what to apply to", "/", "your dashboard"),
+              "Turn these emails off any time under Profile > Job alerts (or Profile > Emails)."]
     return "\n".join(lines)
 
 

@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from ..models import Application, Interview, JobSource, Posting, PrepPlan, ScoreBand, SiteConfig, UserProfile
 from . import apply as apply_service
-from . import geo, quiz, scan
+from . import geo, quiz, scan, tz
 from .cards import band_for
 
 WEEKS = 8
@@ -26,12 +26,12 @@ def _pct(part, whole):
     return round(100 * part / whole) if whole else None
 
 
-def _day(value):
-    """A date from a date or a datetime (in the person's timezone)."""
+def _day(value, zone=None):
+    """A date from a date or a datetime (in the person's timezone; `zone` is theirs, else the site's)."""
     if value is None:
         return None
     if isinstance(value, datetime):
-        return timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
+        return timezone.localtime(value, zone).date() if timezone.is_aware(value) else value.date()
     return value
 
 
@@ -84,7 +84,7 @@ def _market(user, profile) -> dict | None:
     return result
 
 
-def _prep(user, config) -> dict | None:
+def _prep(user, config, today: date) -> dict | None:
     if not config.prep_enabled:
         return None
     plans = list(PrepPlan.objects.filter(owner=user, status__in=["active", "done"]))
@@ -98,12 +98,63 @@ def _prep(user, config) -> dict | None:
         "active_plans": sum(1 for p in plans if p.status == "active"),
         "lessons_done": done,
         "lessons_total": total,
-        "streak": max(quiz.streak(plan) for plan in plans),
+        "streak": max(quiz.streak(plan, today) for plan in plans),
     }
 
 
+def _n(count: int, noun: str) -> str:
+    return f"{count} {noun}" + ("" if count == 1 else "s")
+
+
+def summary_text(has_jobs: bool, week: dict, waiting: dict, skills: dict) -> str:
+    """The week's numbers as three to five plain sentences. Free: it only rephrases counts already worked out, and predicts nothing."""
+    if not has_jobs:
+        return "Nothing to report yet. Add a job or run a search, and your week will be summed up here."
+    parts = []
+    if week["found"] or week["applied"]:
+        parts.append(f"This week you added {_n(week['found'], 'job')} and applied to {week['applied']}.")
+    else:
+        parts.append("You have not added a job or applied to one in the last week.")
+    if week["interviews_soon"]:
+        parts.append(f"You have {_n(week['interviews_soon'], 'interview')} coming up.")
+    if week["followups_due"]:
+        parts.append(f"{_n(week['followups_due'], 'follow-up')} {'is' if week['followups_due'] == 1 else 'are'} due.")
+    if waiting["count"]:
+        longest = waiting["longest"][0]["days"] if waiting["longest"] else None
+        tail = f"; the longest has waited {longest} days" if longest else ""
+        parts.append(f"{waiting['count']} {'is' if waiting['count'] == 1 else 'are'} waiting for a reply{tail}.")
+    if skills["gaps"]:
+        parts.append(f"The skill that keeps coming up in your jobs and is not in your CV is {skills['gaps'][0]['term']}.")
+    elif week["closing_soon"]:
+        parts.append(f"{_n(week['closing_soon'], 'job')} close{'s' if week['closing_soon'] == 1 else ''} soon.")
+    return " ".join(parts[:5])
+
+
+CALIBRATION_MIN = 8
+CALIBRATION_CAVEAT = "A small number of applications; read it as a hint, not a rule."
+
+
+def calibration(applied, answered_ids: set, percents: dict, bands) -> dict:
+    """Among the jobs the person applied to that have a match percent: per match band, how many they applied to and how many got a reply
+    (an interview or an offer). A count of what happened, never a prediction; shown only from CALIBRATION_MIN scored applications on."""
+    scored = [a for a in applied if percents.get(a.pk) is not None]
+    out = {"enough": len(scored) >= CALIBRATION_MIN, "scored": len(scored), "needed": CALIBRATION_MIN, "caveat": CALIBRATION_CAVEAT, "bands": []}
+    if not out["enough"]:
+        return out
+    rows = {b.label: {"label": b.label, "color": b.color, "min_percent": b.min_percent, "applied": 0, "replies": 0} for b in bands}
+    for a in scored:
+        band = band_for(percents[a.pk], bands)
+        if band is None:
+            continue
+        rows[band.label]["applied"] += 1
+        rows[band.label]["replies"] += 1 if a.pk in answered_ids else 0
+    out["bands"] = [{**r, "reply_rate": _pct(r["replies"], r["applied"])} for r in rows.values()]
+    return out
+
+
 def candidate_stats(user, today: date | None = None) -> dict:
-    today = today or timezone.localdate()
+    zone = tz.zone_for(user)
+    today = today or timezone.now().astimezone(zone).date()
     config = SiteConfig.for_user(user)
     profile = UserProfile.for_user(user)
     bands = list(ScoreBand.objects.all())
@@ -119,16 +170,16 @@ def candidate_stats(user, today: date | None = None) -> dict:
     answered_ids = {a.pk for a in answered}
 
     # --- this week ------------------------------------------------------------------------------
-    window_end = timezone.make_aware(datetime.combine(today + timedelta(days=15), time.min))
+    window_end = datetime.combine(today + timedelta(days=15), time.min, tzinfo=zone)
     interviews_soon = Interview.objects.filter(owner=user, outcome="pending", scheduled_at__gte=timezone.now(), scheduled_at__lt=window_end).count()
     week = {
         "found": sum(1 for a in apps if a.found_date >= week_start),
-        "checked": sum(1 for a in apps if a.ai_evaluated_at and _day(a.ai_evaluated_at) >= week_start),
+        "checked": sum(1 for a in apps if a.ai_evaluated_at and _day(a.ai_evaluated_at, zone) >= week_start),
         "applied": sum(1 for a in apps if a.applied_date and a.applied_date >= week_start),
         "interviews_soon": interviews_soon,
         "followups_due": apply_service.due_followups(user, today).count(),
         "closing_soon": sum(1 for a in apps if a.deadline and 0 <= (a.deadline - today).days <= config.urgent_days and not a.status.is_terminal),
-        "went_cold": sum(1 for a in apps if a.live_state == "expired" and a.live_checked_at and _day(a.live_checked_at) >= week_start),
+        "went_cold": sum(1 for a in apps if a.live_state == "expired" and a.live_checked_at and _day(a.live_checked_at, zone) >= week_start),
     }
 
     # --- the last eight weeks ---------------------------------------------------------------------
@@ -139,7 +190,7 @@ def candidate_stats(user, today: date | None = None) -> dict:
         weekly.append({
             "start": start.isoformat(),
             "found": sum(1 for a in apps if start <= a.found_date <= end),
-            "checked": sum(1 for a in apps if a.ai_evaluated_at and start <= _day(a.ai_evaluated_at) <= end),
+            "checked": sum(1 for a in apps if a.ai_evaluated_at and start <= _day(a.ai_evaluated_at, zone) <= end),
             "applied": sum(1 for a in apps if a.applied_date and start <= a.applied_date <= end),
         })
 
@@ -191,18 +242,22 @@ def candidate_stats(user, today: date | None = None) -> dict:
     waiting_rows.sort(key=lambda r: -r["days"])
     waited = [(today - a.applied_date).days for a in applied if a.applied_date and a.pk not in answered_ids and not a.status.is_terminal]
 
+    skills = _skills(apps)
+    waiting_out = {"count": len(waited), "median_days": int(median(waited)) if waited else None, "longest": waiting_rows[:5], "after_days": WAITING_AFTER_DAYS}
     return {
         "as_of": today.isoformat(),
         "has_jobs": bool(apps),
+        "summary_text": summary_text(bool(apps), week, waiting_out, skills),
         "week": week,
         "weekly": weekly,
         "match": match,
         "applied": {"count": len(applied), "reply_rate": _pct(len(answered), len(applied))},
+        "calibration": calibration(applied, answered_ids, percents, bands),
         "sources": sources,
         "work": [{"kind": k, "count": c} for k, c in work.most_common()],
         "countries": [{"name": n, "count": c} for n, c in countries.most_common(5)],
-        "waiting": {"count": len(waited), "median_days": int(median(waited)) if waited else None, "longest": waiting_rows[:5], "after_days": WAITING_AFTER_DAYS},
-        "skills": _skills(apps),
-        "prep": _prep(user, config),
+        "waiting": waiting_out,
+        "skills": skills,
+        "prep": _prep(user, config, today),
         "market": _market(user, profile),
     }

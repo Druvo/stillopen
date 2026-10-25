@@ -2,10 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { CreditLink } from "@/components/credit";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
-import { jobsApi, type PostingRow } from "./api";
+import { jobsApi, type Duplicate, type PostingRow } from "./api";
+import { duplicateMessage, duplicateOf } from "./jobmgmt";
 import { postingsQuery, readPostingsQuery, repostHint } from "./logic";
 
 const CONTROL = "rounded-md border border-border bg-surface px-3 py-1.5 text-sm";
@@ -16,6 +18,8 @@ export function Postings() {
   const [draft, setDraft] = useState(state.q);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const search = postingsQuery(state);
+  // The same company and role is already tracked under another link: say so, and let the person open it or add this one anyway.
+  const [dup, setDup] = useState<{ row: PostingRow; same: Duplicate } | null>(null);
 
   useEffect(() => {
     window.history.replaceState(null, "", `${window.location.pathname}${search}`);
@@ -23,13 +27,22 @@ export function Postings() {
 
   const query = useQuery({ queryKey: ["postings", search], queryFn: () => jobsApi.postings(search), placeholderData: (previous) => previous });
   const add = useMutation({
-    mutationFn: (row: PostingRow) => jobsApi.addPosting(row.id),
+    mutationFn: ({ row, allow }: { row: PostingRow; allow: boolean }) => jobsApi.addPosting(row.id, allow),
     onSuccess: async (made) => {
+      setDup(null);
       setMessage({ tone: "success", text: made.created ? `Added ${made.company} - ${made.role}.` : "Already in your tracker." });
       await client.invalidateQueries({ queryKey: ["postings"] });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
     },
-    onError: (e) => setMessage({ tone: "error", text: errorText(e) }),
+    onError: (e, vars) => {
+      const same = duplicateOf(e);
+      if (same) {
+        setDup({ row: vars.row, same });
+        setMessage(null);
+      } else {
+        setMessage({ tone: "error", text: errorText(e) });
+      }
+    },
   });
 
   if (query.isPending) return <Loading what="the postings" />;
@@ -83,6 +96,26 @@ export function Postings() {
       <p role="status" aria-live="polite" className="min-h-5 text-sm text-muted">
         {message?.text}
       </p>
+      {dup && (
+        <div className="mb-3">
+          <Notice tone="info">
+            <p>
+              <strong>{duplicateMessage(dup.same)}</strong>
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link to={`/jobs/${dup.same.id}/edit`} className={buttonClass("outline", true)}>
+                Open it
+              </Link>
+              <Button small variant="outline" disabled={add.isPending} onClick={() => add.mutate({ row: dup.row, allow: true })}>
+                Add this one anyway
+              </Button>
+              <Button small variant="ghost" onClick={() => setDup(null)}>
+                Cancel
+              </Button>
+            </div>
+          </Notice>
+        </div>
+      )}
 
       {data.postings.length === 0 ? (
         <Card className="py-10 text-center">
@@ -104,6 +137,11 @@ export function Postings() {
                   <p className="text-sm text-muted">
                     {p.company || "Company not named"} · {p.source.name} ({p.source.connector}){p.location ? ` · ${p.location}` : ""} · first seen {p.first_seen}, last seen {p.last_seen}
                   </p>
+                  {p.credit && (
+                    <p className="text-xs text-muted">
+                      <CreditLink credit={p.credit} />
+                    </p>
+                  )}
                   {p.repost && (
                     <>
                       <span title={repostHint(p.repost)}>
@@ -130,7 +168,7 @@ export function Postings() {
                       <Badge tone="good">Tracked</Badge>
                     )
                   ) : (
-                    <Button small variant="outline" disabled={add.isPending} onClick={() => add.mutate(p)}>
+                    <Button small variant="outline" disabled={add.isPending} onClick={() => add.mutate({ row: p, allow: false })}>
                       Add to tracker
                     </Button>
                   )}

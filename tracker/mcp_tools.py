@@ -11,7 +11,7 @@ import contextvars
 from django.utils import timezone
 
 from .models import Application, Bucket, CVVersion, Event, KnowledgeSource, SiteConfig, Status, UserProfile
-from .services import ai, cvversions, knowledge, liveness
+from .services import ai, cvversions, knowledge, liveness, tz
 from .services import apply as apply_service
 from .services import fit as fit_service, geo
 from .services.factcheck import fact_check
@@ -53,7 +53,9 @@ def _clip(text, limit):
 
 
 def _status(name: str) -> Status:
-    status = Status.objects.filter(name__iexact=name.strip()).first()
+    from .services.board import find_status
+
+    status = find_status(name)  # old names ("Discarded", "SKIP") still mean what they did
     if not status:
         names = ", ".join(Status.objects.values_list("name", flat=True))
         raise ValueError(f'Unknown status "{name}". Valid statuses: {names}')
@@ -67,7 +69,8 @@ def _app(app_id: int) -> Application:
     return app
 
 
-def _row(app: Application, config: SiteConfig) -> dict:
+def _row(app: Application, config: SiteConfig, today=None) -> dict:
+    today = today or tz.today_for(app.owner_id)
     return {
         "id": app.pk,
         "company": app.company,
@@ -78,7 +81,7 @@ def _row(app: Application, config: SiteConfig) -> dict:
         "verdict": app.decision,
         "posting": app.get_live_state_display(),
         "deadline": app.deadline.isoformat() if app.deadline else None,
-        "days_left": app.days_left(),
+        "days_left": app.days_left(today),
         "applied_date": app.applied_date.isoformat() if app.applied_date else None,
         "url": app.url,
     }
@@ -91,10 +94,11 @@ def summary() -> dict:
     for app in apps:
         tabs[app.effective_bucket(config).label] = tabs.get(app.effective_bucket(config).label, 0) + 1
     percents = [p for p in (a.match_percent(config.score_scale) for a in apps) if p is not None]
+    today = tz.today_for(_owner())
     urgent = [
-        {"id": a.pk, "company": a.company, "role": a.role, "days_left": a.days_left(), "status": a.status.name}
+        {"id": a.pk, "company": a.company, "role": a.role, "days_left": a.days_left(today), "status": a.status.name}
         for a in apps
-        if a.days_left() is not None and 0 <= a.days_left() <= config.urgent_days and not a.status.is_terminal
+        if a.days_left(today) is not None and 0 <= a.days_left(today) <= config.urgent_days and not a.status.is_terminal
     ]
     return {
         "site": config.site_title,
@@ -117,7 +121,8 @@ def list_applications(tab: str = "", status: str = "", query: str = "", limit: i
         from django.db.models import Q
 
         qs = qs.filter(Q(company__icontains=query) | Q(role__icontains=query) | Q(notes__icontains=query))
-    rows = [_row(a, config) for a in qs]
+    today = tz.today_for(_owner())
+    rows = [_row(a, config, today) for a in qs]
     if tab:
         rows = [r for r in rows if r["tab"].lower() == tab.lower()]
     rows.sort(key=lambda r: (r["match_percent"] is None, -(r["match_percent"] or 0)))
@@ -235,7 +240,7 @@ def update_status(app_id: int, status: str, note: str = "") -> dict:
     if app.status_id != new.pk:
         app.status = new
         if new.counts_as_applied and not app.applied_date:
-            app.applied_date = timezone.localdate()
+            app.applied_date = tz.today_for(app.owner_id)
         app.save()
         text = f"Status set to {new.name} (MCP)" + (f": {_clip(note, 300)}" if note else "")
         Event.objects.create(application=app, kind="applied" if new.counts_as_applied else "status", text=text)
@@ -629,3 +634,79 @@ def compare_offers() -> list[dict]:
         ]}
         for g in groups
     ]
+
+
+# --- prep plans (drafts only) ---------------------------------------------------------------------------------------------
+
+def _plan(plan_id: int):
+    from .models import PrepPlan
+
+    plan = PrepPlan.objects.select_related("application").filter(owner=_owner(), pk=plan_id).first()
+    if not plan:
+        raise ValueError(f"No prep plan with id {plan_id}.")
+    return plan
+
+
+def _plan_row(plan) -> dict:
+    done, total = plan.progress_counts()
+    return {
+        "id": plan.pk, "title": plan.title, "status": plan.status, "status_label": plan.get_status_display(),
+        "application_id": plan.application_id, "company": plan.application.company if plan.application_id else "",
+        "role": plan.application.role if plan.application_id else "", "lessons_done": done, "lessons_total": total,
+        "created": timezone.localtime(plan.created_at).date().isoformat(),
+    }
+
+
+def list_prep_plans() -> list[dict]:
+    """The person's prep plans (a plan is a study schedule for one job), newest first, with how far along each is."""
+    from .models import PrepPlan
+
+    plans = PrepPlan.objects.filter(owner=_owner()).select_related("application")
+    return [_plan_row(p) for p in plans[:50]]
+
+
+def get_prep_plan(plan_id: int) -> dict:
+    """One prep plan: summary, the skill gaps it targets, and its weeks with lessons, tasks and progress. Practice questions and their
+    answers are never included (they belong to the person's own daily practice); only how many there are."""
+    plan = _plan(plan_id)
+    done, total = plan.progress_counts()
+    weeks = []
+    for week in plan.weeks.prefetch_related("lessons", "milestones"):
+        weeks.append({
+            "week": week.order, "title": week.title, "goal": week.goal, "hours": week.hours,
+            "lessons": [
+                {"title": lesson.title, "topics": lesson.topics, "gap": lesson.gap, "done": lesson.done_at is not None,
+                 "sources": [{"title": s.get("title", ""), "url": s.get("url", "")} for s in lesson.sources if isinstance(s, dict)]}
+                for lesson in week.lessons.all()
+            ],
+            "tasks": [{"kind": m.kind, "text": m.text, "done": m.done_at is not None} for m in week.milestones.all()],
+        })
+    return {
+        **_plan_row(plan), "summary": plan.summary, "gap_skills": plan.gap_skills, "hours_per_week": plan.hours_per_week,
+        "progress_note": plan.progress, "error": plan.error, "percent": round(100 * done / total) if total else 0,
+        "question_count": plan.questions.filter(removed=False).count(), "weeks": weeks,
+        "next_step": {
+            "generating": "Being written; check again in a few minutes.",
+            "failed": "It could not be written; the person can ask again in the web app.",
+            "draft": "A draft. Only the person can read it through and start it, in the web app.",
+        }.get(plan.status, ""),
+    }
+
+
+def request_prep_plan(job_id: int, weeks: int = 0, hours: int = 0) -> dict:
+    """Ask for a prep plan for one job. It is written by the person's own AI account in the background and arrives as a DRAFT:
+    only the person can review and start it in the web app, this tool cannot. Uses the same rules and limits as the app (one at a
+    time, a daily cap, needs the job's description). weeks/hours of 0 use the site's defaults."""
+    from .models import PrepPlan
+    from .services import prep
+
+    app = _app(job_id)
+    existing = PrepPlan.objects.filter(owner=_owner(), application=app).exclude(status="failed").first()
+    if existing:
+        return {**_plan_row(existing), "existing": True, "note": "This job already has a plan; nothing new was started."}
+    config = SiteConfig.for_user(_owner())
+    try:
+        plan = prep.create_plan(app, config, weeks=weeks or None, hours=hours or None)
+    except prep.PrepError as exc:
+        raise ValueError(str(exc)) from exc
+    return {**_plan_row(plan), "existing": False, "note": "Started. It will be a draft; the person reviews and starts it in the web app."}

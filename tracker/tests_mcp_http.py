@@ -175,3 +175,62 @@ class TokensAndAccounts(McpHttpBase):
     def test_tokens_vanish_with_the_account(self):
         self.ann.delete()
         self.assertEqual(ApiToken.objects.filter(name__in=["read", "write"]).count(), 0)
+
+
+class PrepPlans(McpHttpBase):
+    """Read tokens may list and read prep plans; only read-and-change tokens may ask for one; nobody can approve one; owners only."""
+
+    def setUp(self):
+        super().setUp()
+        from tracker.models import PrepPlan
+
+        self.job = Application.objects.get(owner=self.ann)
+        self.job.description = "We need Kubernetes experience."
+        self.job.save()
+        from tracker.models import UserProfile
+
+        UserProfile.objects.update_or_create(user=self.ann, defaults={"ai_provider": "anthropic", "ai_model": "test-model"})
+        self.plan = PrepPlan.objects.create(owner=self.ann, application=self.job, title="Plan", status="draft")
+        self.bobs = PrepPlan.objects.create(owner=self.bob, application=Application.objects.get(owner=self.bob), title="Bob's", status="draft")
+
+    def names(self, token):
+        return {t["name"] for t in rpc(self.client, token, "tools/list").json()["result"]["tools"]}
+
+    def test_a_read_only_token_sees_the_two_read_tools_but_not_the_request_tool(self):
+        names = self.names(self.read)
+        self.assertTrue({"list_prep_plans", "get_prep_plan"} <= names)
+        self.assertNotIn("request_prep_plan", names)
+        self.assertIn("request_prep_plan", self.names(self.write))
+
+    def test_reading_works_and_is_owner_only(self):
+        listed = call(self.client, self.read, "list_prep_plans")["result"]["structuredContent"]["result"]
+        self.assertEqual([p["id"] for p in listed], [self.plan.pk])
+        got = call(self.client, self.read, "get_prep_plan", {"plan_id": self.plan.pk})
+        self.assertEqual(json.loads(text_of(got))["id"], self.plan.pk)
+        theirs = call(self.client, self.read, "get_prep_plan", {"plan_id": self.bobs.pk})
+        self.assertIn("No prep plan", str(theirs))
+        self.assertNotIn("Bob", str(theirs))
+
+    def test_a_read_only_token_cannot_request_one(self):
+        reply = call(self.client, self.read, "request_prep_plan", {"job_id": self.job.pk})
+        self.assertIn("read-only", reply["error"]["message"])
+
+    def test_a_write_token_can_request_a_draft_but_nothing_approves_it(self):
+        from unittest import mock
+
+        from tracker.models import PrepPlan
+
+        PrepPlan.objects.filter(pk=self.plan.pk).delete()
+        with mock.patch("tracker.services.prep.generate"):
+            reply = call(self.client, self.write, "request_prep_plan", {"job_id": self.job.pk})
+        data = json.loads(text_of(reply))
+        plan = PrepPlan.objects.get(pk=data["id"])
+        self.assertEqual((plan.owner, plan.status, plan.approved_at), (self.ann, "generating", None))
+        for approve in ("approve_prep_plan", "start_prep_plan", "activate_prep_plan"):
+            self.assertIn("error", call(self.client, self.write, approve, {"plan_id": plan.pk}))
+        plan.refresh_from_db()
+        self.assertNotIn(plan.status, ("active", "done"))
+
+    def test_bobs_token_cannot_plan_annes_job(self):
+        reply = call(self.client, self.bob_token, "request_prep_plan", {"job_id": self.job.pk})
+        self.assertIn("No application", str(reply))

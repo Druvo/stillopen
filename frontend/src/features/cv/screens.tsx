@@ -9,7 +9,9 @@ import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { coverApi, cvApi, type CvSummary } from "./api";
+import { AtsCard } from "./ats";
 import { diffSummary, findingText, parseBlocks, parseInline, type Finding } from "./logic";
+import { applySuggestion, readinessTone } from "./quality";
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -89,6 +91,11 @@ function Row({ v, children }: { v: CvSummary; children?: React.ReactNode }) {
           {v.label || `Version ${v.id}`}
         </Link>
         {v.current && <Badge className="ml-2">current</Badge>}
+        {typeof v.ats_readiness === "number" && (
+          <Badge tone={readinessTone(v.ats_readiness)} className="ml-2">
+            ATS check {v.ats_readiness}/100
+          </Badge>
+        )}
         <p className="text-sm text-muted">
           v{v.id} · {when(v.created_at)} · {v.source_label}
           {v.provider ? ` (${v.provider})` : ""}
@@ -117,7 +124,7 @@ export function CvList() {
   const { masters, tailored } = query.data;
   return (
     <>
-      <PageHeader title="Your CV versions" />
+      <PageHeader title="Your CV versions" actions={<Link to="/cv/new" className={buttonClass("outline")}>Build a CV step by step</Link>} />
       <p className="mb-4 text-sm text-muted">Every change to your CV is kept. Each tailored CV is saved with the job it was made for, so you always know exactly what you sent. Tailor a CV from a job on the dashboard.</p>
       {message && <div className="mb-3"><Notice tone="error">{message}</Notice></div>}
 
@@ -140,7 +147,11 @@ export function CvList() {
       <Card>
         {masters.length === 0 ? (
           <p className="text-sm text-muted">
-            Add your CV in your <Link to="/profile" className="text-brand underline">profile</Link> and it appears here.
+            No CV yet?{" "}
+            <Link to="/cv/new" className="text-brand underline">
+              Build one in five minutes
+            </Link>
+            , or add the one you have in your <Link to="/profile" className="text-brand underline">profile</Link> and it appears here.
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -177,6 +188,7 @@ export function CvDetail({ id }: { id: number }) {
   const query = useQuery({ queryKey: ["cv", "one", id], queryFn: () => cvApi.get(id) });
   const [message, setMessage] = useState("");
   const [saved, setSaved] = useState("");
+  const [draft, setDraft] = useState<string | null>(null); // the editor's text when it differs from the saved version (an applied suggestion or typing)
   const form = useSubmit();
   const refresh = () => client.invalidateQueries({ queryKey: ["cv"] });
   const act = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn(), onSuccess: refresh, onError: (e) => setMessage(errorText(e)) });
@@ -186,7 +198,7 @@ export function CvDetail({ id }: { id: number }) {
   const master = v.kind === "master";
   return (
     <>
-      <PageHeader title={<>{v.label || "CV"} <Badge>v{v.id}</Badge></>} subtitle={<Link to="/cv" className="text-brand underline">All versions</Link>} />
+      <PageHeader title={<>{v.label || "CV"} <Badge>v{v.id}</Badge></>} subtitle={<Link to="/cv" className="link-target text-brand underline">All versions</Link>} />
       <p className="mb-3 text-sm text-muted">
         {v.kind_label} · {v.source_label}
         {v.provider ? ` (${v.provider})` : ""} · {when(v.created_at)}
@@ -258,15 +270,27 @@ export function CvDetail({ id }: { id: number }) {
         )}
       </div>
 
+      <AtsCard
+        cvId={id}
+        defaultJobId={v.job?.id ?? null}
+        onApply={(s) => {
+          const result = applySuggestion(draft ?? v.content, s);
+          if (!result.applied) return false;
+          setDraft(result.text);
+          document.getElementById("cv-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          return true;
+        }}
+      />
+
       <h2 className="mb-2 font-semibold">Preview</h2>
       <Card className="mb-6 bg-white text-neutral-900">
         <Document text={v.content} />
       </Card>
 
-      <h2 className="mb-1 font-semibold">Edit</h2>
+      <h2 id="cv-editor" className="mb-1 font-semibold">Edit</h2>
       <p className="mb-2 text-sm text-muted">Saving creates a new version; this one stays as it is.{master ? " The saved text becomes your current CV." : ""}</p>
       <Card className="mb-6">
-        <EditForm key={v.id} id={id} initial={v.content} form={form} onNoChange={() => setSaved("No changes to save.")} />
+        <EditForm key={v.id} id={id} content={draft ?? v.content} setContent={setDraft} changed={draft !== null && draft !== v.content} form={form} onNoChange={() => setSaved("No changes to save.")} />
       </Card>
 
       {v.job_snapshot && (
@@ -281,9 +305,8 @@ export function CvDetail({ id }: { id: number }) {
   );
 }
 
-function EditForm({ id, initial, form, onNoChange }: { id: number; initial: string; form: ReturnType<typeof useSubmit>; onNoChange: () => void }) {
+function EditForm({ id, content, setContent, changed, form, onNoChange }: { id: number; content: string; setContent: (text: string) => void; changed: boolean; form: ReturnType<typeof useSubmit>; onNoChange: () => void }) {
   const client = useQueryClient();
-  const [content, setContent] = useState(initial);
   const [label, setLabel] = useState("");
   return (
     <form
@@ -307,6 +330,7 @@ function EditForm({ id, initial, form, onNoChange }: { id: number; initial: stri
         errors={form.fields.content}
       />
       <FormError message={form.error} />
+      {changed && <p role="status" className="mb-1 text-sm text-muted">You have changes that are not saved yet.</p>}
       <Button type="submit" className="mt-2" disabled={form.busy}>
         {form.busy ? "Saving…" : "Save as new version"}
       </Button>
@@ -323,7 +347,7 @@ export function CvDiff({ id }: { id: number }) {
   const data = query.data;
   return (
     <>
-      <PageHeader title="Compare" subtitle={<Link to={`/cv/${id}`} className="text-brand underline">Back to v{id}</Link>} />
+      <PageHeader title="Compare" subtitle={<Link to={`/cv/${id}`} className="link-target text-brand underline">Back to v{id}</Link>} />
       {!data.other ? (
         <Notice>There is nothing to compare this version with yet. Pick another version below, or save an edit first.</Notice>
       ) : (
@@ -392,7 +416,7 @@ export function CoverDetail({ id }: { id: number }) {
     <>
       <PageHeader
         title={`Cover letter for ${letter.job.company}`}
-        subtitle={<Link to={`/jobs/${letter.job.id}/apply`} className="text-brand underline">Back to applying for {letter.job.role}</Link>}
+        subtitle={<Link to={`/jobs/${letter.job.id}/apply`} className="link-target text-brand underline">Back to applying for {letter.job.role}</Link>}
       />
       <p className="mb-3 text-sm text-muted">
         {letter.source_label}

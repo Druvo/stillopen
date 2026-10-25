@@ -76,7 +76,7 @@ test("a board that is already added is plain information, not an error", async (
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ source: null, openings: 0, message: "", info: "You already added that board." }) });
   });
   await page.getByLabel(/The company's name in that address/).fill("acme");
-  await page.getByRole("button", { name: "Check and add" }).click();
+  await page.locator("form").filter({ hasText: "Which hiring system" }).getByRole("button", { name: "Check and add" }).click();
   await expect(page.getByRole("status").filter({ hasText: "You already added that board." })).toBeVisible();
   // (Next.js keeps an empty, always-present alert for announcing page changes; an error would have words in it)
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveCount(0);

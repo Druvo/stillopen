@@ -2,7 +2,12 @@
 
 The classic pages and the JSON API both call these, so the rules (the limit, the starting status, the details read from the posting) live once.
 Everything is for one owner; nothing here looks at anyone else's rows."""
+import re
+import unicodedata
+
 from django.conf import settings
+from django.db import transaction
+from django.db.models import ProtectedError, RestrictedError
 from django.utils import timezone
 
 from tracker.models import Application, Event, KnowledgeSource, Posting, SiteConfig, Status
@@ -11,6 +16,14 @@ from tracker.services import geo, jobtext, knowledge
 
 class TrackingError(Exception):
     """Plain words for the person (a limit reached, nothing to read)."""
+
+
+class Duplicate(TrackingError):
+    """The person already tracks this company and role; `job` is that job."""
+
+    def __init__(self, job):
+        self.job = job
+        super().__init__(duplicate_message(job))
 
 
 def starting_status() -> Status:
@@ -40,14 +53,143 @@ def add_job(owner, form) -> Application:
     return app
 
 
-def add_posting(owner, posting: Posting) -> tuple[Application, bool]:
+# --- the same job twice ---------------------------------------------------------------------------------
+
+_SENIORITY = {"senior", "sr", "junior", "jr", "lead", "principal"}
+_COMPANY_SUFFIX = {"inc", "ltd", "llc", "limited", "corp", "corporation", "gmbh", "co", "company", "plc", "pte", "pvt", "bv", "sa", "ag"}
+
+
+def _words(text: str) -> list[str]:
+    plain = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower()
+    return re.findall(r"[a-z0-9+#]+", plain)
+
+
+def norm_key(company: str, role: str) -> str:
+    """Company and role as one comparable text: case, punctuation, seniority words (Senior, Sr, Jr...) and company endings (Inc, Ltd...) ignored."""
+    company_words = [w for w in _words(company) if w not in _COMPANY_SUFFIX] or _words(company)
+    role_words = [w for w in _words(role) if w not in _SENIORITY] or _words(role)
+    return f"{' '.join(company_words)}|{' '.join(role_words)}"
+
+
+def duplicate_info(app: Application) -> dict:
+    return {"id": app.pk, "company": app.company, "role": app.role, "status": app.status.name}
+
+
+def duplicate_message(app: Application) -> str:
+    return f"You already track {app.role} at {app.company} ({app.status.name})."
+
+
+def find_duplicate(owner, company: str, role: str, url: str = "", exclude_id: int | None = None) -> Application | None:
+    """The person's own job that is the same as this one: the same link, or the same company and role once case, punctuation and seniority words are ignored."""
+    mine = Application.objects.filter(owner=owner).select_related("status")
+    if exclude_id:
+        mine = mine.exclude(pk=exclude_id)
+    if url:
+        same_link = mine.filter(url=url).first()
+        if same_link:
+            return same_link
+    if not (company or "").strip() or not (role or "").strip():
+        return None
+    key = norm_key(company, role)
+    for app in mine.order_by("id"):
+        if norm_key(app.company, app.role) == key:
+            return app
+    return None
+
+
+# --- taking a job off the tracker -------------------------------------------------------------------------
+
+def _count_phrase(count: int, one: str, many: str) -> str:
+    return f"its {one}" if count == 1 else f"{count} {many}"
+
+
+def _preview(counts: dict, prep_plans: int, jobs: int = 1) -> dict:
+    parts = []
+    for key, one, many in (
+        ("tailored_cvs", "tailored CV", "tailored CVs"), ("cover_letters", "cover letter", "cover letters"),
+        ("interviews", "interview", "interviews"), ("referrals", "referral", "referrals"), ("offers", "offer", "offers"),
+        ("files", "attached file", "attached files"),
+    ):
+        if counts.get(key):
+            parts.append(_count_phrase(counts[key], one, many))
+    if counts.get("prep_notes"):
+        parts.append("its interview practice notes")
+    if counts.get("history"):
+        parts.append("its history")
+    if parts:
+        text = "This also removes " + (", ".join(parts[:-1]) + " and " + parts[-1] if len(parts) > 1 else parts[0]) + "."
+    else:
+        text = "Nothing else is attached to it."
+    if jobs > 1:
+        text = text.replace("its ", "their ").replace("This also removes", "This also removes").replace("Nothing else is attached to it.", "Nothing else is attached to them.")
+    keeps = []
+    if prep_plans:
+        keeps.append("Your prep plan stays, but it will no longer be linked to the job.")
+    keeps.append("A CV you already sent stays in your CV list, and the posting itself is not touched.")
+    return {"counts": counts, "text": text, "keeps": " ".join(keeps)}
+
+
+def removal_preview(app: Application) -> dict:
+    """What removing one job takes with it, in numbers and in a sentence the confirm box shows word for word."""
+    counts = {
+        "tailored_cvs": app.cv_versions.count(),
+        "cover_letters": app.cover_letters.count(),
+        "interviews": app.interviews.count(),
+        "referrals": app.referrals.count(),
+        "offers": app.offers.count(),
+        "files": app.documents.count(),
+        "history": app.events.count(),
+        "prep_notes": 1 if hasattr(app, "interview_prep") else 0,
+    }
+    return _preview(counts, app.prep_plans.count())
+
+
+def bulk_removal_preview(ids: list[int]) -> dict:
+    """The same, added up over several jobs (the caller has already checked every id is the person's own)."""
+    from tracker.models import CoverLetter, CVVersion, Document, Interview, InterviewPrep, Offer, Referral
+    from tracker.prep_models import PrepPlan
+
+    ids = list(ids)
+    counts = {
+        "tailored_cvs": CVVersion.objects.filter(application_id__in=ids).count(),
+        "cover_letters": CoverLetter.objects.filter(application_id__in=ids).count(),
+        "interviews": Interview.objects.filter(application_id__in=ids).count(),
+        "referrals": Referral.objects.filter(application_id__in=ids).count(),
+        "offers": Offer.objects.filter(application_id__in=ids).count(),
+        "files": Document.objects.filter(application_id__in=ids).count(),
+        "history": Event.objects.filter(application_id__in=ids).count(),
+        "prep_notes": InterviewPrep.objects.filter(application_id__in=ids).count(),
+    }
+    return _preview(counts, PrepPlan.objects.filter(application_id__in=ids).count(), jobs=len(ids))
+
+
+def remove_jobs(owner, ids) -> int:
+    """Delete these jobs of `owner` and everything that hangs off them (the caller has already checked every id is theirs). Returns how many went.
+
+    Tailored CVs, cover letters, interviews, referrals, offers, files, fit notes, history and interview practice notes go with the job; a prep plan
+    stays (unlinked), and so does the cost record of any AI check. Raises TrackingError if the database refuses (nothing is changed then)."""
+    mine = Application.objects.filter(owner=owner, pk__in=list(ids))
+    try:
+        with transaction.atomic():
+            count = mine.count()
+            mine.delete()
+    except (ProtectedError, RestrictedError):
+        raise TrackingError("This job is still in use, so it could not be removed. Nothing was changed.")
+    return count
+
+
+def add_posting(owner, posting: Posting, allow_duplicate: bool = False) -> tuple[Application, bool]:
     """Track a posting a search found. Returns (job, created); `created` is False when the person already tracks that link.
-    Raises TrackingError at the limit."""
+    Raises TrackingError at the limit, and `Duplicate` when the same company and role is already tracked under another link."""
     existing = Application.objects.filter(owner=owner, url=posting.url).first()
     if existing:
         return existing, False
     if at_job_limit(owner):
         raise TrackingError(job_limit_message())
+    if not allow_duplicate:
+        same = find_duplicate(owner, posting.company or posting.source.name, posting.title)
+        if same:
+            raise Duplicate(same)
     app = Application(
         owner=owner,
         company=posting.company or posting.source.name,

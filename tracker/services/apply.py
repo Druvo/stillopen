@@ -11,7 +11,7 @@ from django.db import models
 from django.utils import timezone
 
 from tracker.models import Application, CVVersion, Event, SiteConfig, Status
-from tracker.services import cvversions, integrations
+from tracker.services import cvversions, integrations, links, tz
 
 MAX_FOLLOW_UP_DAYS = 90
 CHANNELS = {value for value, _ in Application.CHANNELS if value}
@@ -41,7 +41,7 @@ def checklist(app: Application, config: SiteConfig, versions: list[CVVersion]) -
         items.append({"level": "ok", "text": "The posting was open the last time it was checked."})
     else:
         items.append({"level": "info", "text": "Not checked yet whether the posting is still open. Press “Are they still open?” on the dashboard."})
-    days = app.days_left()
+    days = app.days_left(tz.today_for(app.owner_id))
     if days is not None:
         if days < 0:
             items.append({"level": "warn", "text": f"The deadline passed {-days} day{'s' if days != -1 else ''} ago."})
@@ -89,7 +89,7 @@ def record(app: Application, version: CVVersion | None, channel: str, note: str,
         raise ApplyError("Unknown channel.")
     if not 1 <= follow_up_days <= MAX_FOLLOW_UP_DAYS:
         raise ApplyError(f"Follow-up must be between 1 and {MAX_FOLLOW_UP_DAYS} days.")
-    today = timezone.localdate()
+    today = tz.today_for(app.owner_id)
     applied_on = applied_on or today
     if applied_on > today:
         raise ApplyError("The application date cannot be in the future.")
@@ -114,7 +114,7 @@ def record(app: Application, version: CVVersion | None, channel: str, note: str,
 
 
 def due_followups(owner, today: date | None = None):
-    today = today or timezone.localdate()
+    today = today or tz.today_for(owner)
     return (
         Application.objects.filter(owner=owner, follow_up_date__isnull=False, follow_up_date__lte=today, status__is_terminal=False)
         .select_related("status", "applied_cv")
@@ -125,18 +125,21 @@ def due_followups(owner, today: date | None = None):
 def due_followups_to_email(owner, today: date | None = None):
     """Due follow-ups this owner hasn't already been emailed about for their current follow_up_date -- a snooze
     or a new follow-up date naturally clears the "already emailed" marker, so it fires again when it falls due."""
-    today = today or timezone.localdate()
+    today = today or tz.today_for(owner)
     return due_followups(owner, today).exclude(follow_up_emailed_for=models.F("follow_up_date"))
 
 
 def followup_digest_text(apps) -> str:
-    today = timezone.localdate()
+    today = tz.today_for(apps[0].owner_id) if apps else timezone.localdate()
     lines = ["Follow-ups due on your StillOpen tracker:", ""]
     for app in apps:
         overdue = (today - app.follow_up_date).days
         when = "today" if overdue == 0 else f"{overdue} day{'s' if overdue != 1 else ''} overdue"
         lines.append(f"- {app.company} - {app.role} ({when}, applied {app.applied_date:%d %b %Y})" if app.applied_date else f"- {app.company} - {app.role} ({when})")
-    lines += ["", "Open your dashboard to mark one done or push it back a few days."]
+        link = links.job_link(app.pk)
+        if link:
+            lines.append(f"  {link}")
+    lines += ["", links.link_line("Open your dashboard to mark one done or push it back a few days", "/", "your dashboard"), links.CHANGE_LINE]
     return "\n".join(lines)
 
 
@@ -170,7 +173,7 @@ def followup_done(app: Application) -> None:
 
 def followup_snooze(app: Application, days: int) -> None:
     days = max(1, min(days, MAX_FOLLOW_UP_DAYS))
-    app.follow_up_date = timezone.localdate() + timedelta(days=days)
+    app.follow_up_date = tz.today_for(app.owner_id) + timedelta(days=days)
     app.save(update_fields=["follow_up_date"])
     Event.objects.create(application=app, kind="followup", text=f"Follow-up postponed to {app.follow_up_date:%d %b %Y}")
 

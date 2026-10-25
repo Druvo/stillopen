@@ -106,3 +106,20 @@ export function cardTiles(stats: Pick<Stats, "week" | "waiting">): { label: stri
     { label: "Waiting for a reply", value: stats.waiting.count },
   ];
 }
+
+// ---- how the match percent lined up with replies --------------------------------------------------------------------------
+
+type CalibrationShape = { enough: boolean; scored: number; needed: number; bands: { label: string; applied: number; replies: number; reply_rate: number | null }[] };
+
+/** One band as a plain sentence: "Strong: 6 applied, 3 got a reply (50%)". A band nobody applied in says so. */
+export function calibrationLine(b: CalibrationShape["bands"][number]): string {
+  if (b.applied === 0) return `${b.label}: you did not apply to any.`;
+  const reply = b.replies === 1 ? "1 got a reply" : b.replies === 0 ? "none got a reply" : `${b.replies} got a reply`;
+  return `${b.label}: ${b.applied} applied, ${reply}${b.reply_rate === null ? "" : ` (${b.reply_rate}%)`}.`;
+}
+
+/** What to say while there are too few applications with a match percent to show anything. */
+export function calibrationWaiting(c: Pick<CalibrationShape, "scored" | "needed">): string {
+  const left = Math.max(0, c.needed - c.scored);
+  return `This shows once you have applied to ${c.needed} jobs that have a match percent. You have ${c.scored} so far, ${left} to go. Press Check my fit on a job before you apply, and it counts.`;
+}

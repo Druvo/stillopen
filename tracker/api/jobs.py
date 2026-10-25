@@ -7,6 +7,7 @@ import json
 
 from django.conf import settings
 from django.core.paginator import Paginator
+from django.http import JsonResponse
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from ninja import Router
@@ -15,7 +16,7 @@ from ninja.errors import HttpError
 from .. import forms
 from ..models import Application, JobSource, Posting, SiteConfig
 from ..services import fit as fit_service
-from ..services import jobtext, scan, tracking
+from ..services import adzuna, blockedhosts, jobtext, scan, tracking
 from .common import ApiFormError, owned_job, throttle, validate_form
 
 router = Router()
@@ -40,6 +41,20 @@ def read_json(request) -> dict:
     return body
 
 
+def duplicate_response(same: Application) -> JsonResponse:
+    """409: the person already tracks this job. The screen offers "Open it" or "Add this one anyway" (the same call with `allow_duplicate: true`)."""
+    return JsonResponse({"error": tracking.duplicate_message(same), "duplicate": tracking.duplicate_info(same)}, status=409)
+
+
+def _allows_duplicate(request) -> bool:
+    """True when the body says `{"allow_duplicate": true}`. No body, or a body that is not JSON, simply means no."""
+    try:
+        body = json.loads(request.body or b"{}")
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("allow_duplicate") is True
+
+
 def _text(payload: dict, names: list[str]) -> dict:
     """The named fields of a JSON body as the strings a form expects (missing or null = empty)."""
     return {name: "" if payload.get(name) is None else str(payload[name]) for name in names}
@@ -55,18 +70,30 @@ def quick_add(request):
     url = str(read_json(request).get("url") or "").strip()
     if not url:
         raise HttpError(400, "Paste a job URL first.")
+    blocked = blockedhosts.blocked_reply(url)
+    if blocked:  # LinkedIn, Indeed, Glassdoor...: nothing is requested. Keep the link and ask the person for the text
+        same = tracking.find_duplicate(request.user, "", "", blocked["url"])
+        return {"ok": True, "role": "", "company": "", "description": "", **blocked, "duplicate": tracking.duplicate_info(same) if same else None}
     try:
-        return {"ok": True, **tracking.fetch_prefill(url, SiteConfig.for_user(request.user))}
+        found = tracking.fetch_prefill(url, SiteConfig.for_user(request.user))
     except jobtext.FetchError as exc:
         raise HttpError(400, str(exc))
+    # Say now if the person already tracks this link (or this company and role), so the form can warn before they fill it in.
+    same = tracking.find_duplicate(request.user, found.get("company", ""), found.get("role", ""), found.get("url", url))
+    return {"ok": True, **found, "duplicate": tracking.duplicate_info(same) if same else None}
 
 
 @router.post("/jobs", summary="Add a job to the tracker")
 def add_job(request):
     if tracking.at_job_limit(request.user):
         raise ApiFormError({}, tracking.job_limit_message())
-    form = forms.JobForm(_text(read_json(request), ADD_FIELDS))
+    payload = read_json(request)
+    form = forms.JobForm(_text(payload, ADD_FIELDS))
     validate_form(form)
+    if payload.get("allow_duplicate") is not True:
+        same = tracking.find_duplicate(request.user, form.cleaned_data["company"], form.cleaned_data["role"], form.cleaned_data.get("url", ""))
+        if same:
+            return duplicate_response(same)
     app = tracking.add_job(request.user, form)
     return {"id": app.pk, "company": app.company, "role": app.role}
 
@@ -79,6 +106,7 @@ def _detail(app: Application) -> dict:
         "id": app.pk, "company": app.company, "role": app.role,
         "values": {k: ("" if v is None else str(v)) for k, v in values.items()},
         "details_source": app.details_source,
+        "credit": adzuna.credit_for(app.posting) if app.posting_id else None,
         "options": _options(form, ["arrangement", "sponsorship", "relocation", "employment_type", "seniority"]),
         "fit": fit_service.fit_flags(app),
     }
@@ -137,7 +165,7 @@ def list_postings(request, q: str = "", source: str = "", page: int = 1):
                 "id": p.pk, "title": p.title, "company": p.company, "location": p.location, "url": p.url,
                 "source": {"id": p.source_id, "name": p.source.name, "connector": p.source.get_connector_display()},
                 "first_seen": p.first_seen_at.date().isoformat(), "last_seen": p.last_seen_at.date().isoformat(),
-                "repost": _repost(p), "tracked": p.url in tracked, "job_id": tracked.get(p.url),
+                "credit": adzuna.credit_for(p), "repost": _repost(p), "tracked": p.url in tracked, "job_id": tracked.get(p.url),
             }
             for p in paged
         ],
@@ -148,7 +176,9 @@ def list_postings(request, q: str = "", source: str = "", page: int = 1):
 def add_posting(request, posting_id: int):
     posting = get_object_or_404(Posting.objects.select_related("source"), pk=posting_id, source__in=JobSource.for_user(request.user))
     try:
-        app, created = tracking.add_posting(request.user, posting)
+        app, created = tracking.add_posting(request.user, posting, allow_duplicate=_allows_duplicate(request))
+    except tracking.Duplicate as same:
+        return duplicate_response(same.job)
     except tracking.TrackingError as exc:
         raise HttpError(400, str(exc))
     return {"id": app.pk, "created": created, "company": app.company, "role": app.role}

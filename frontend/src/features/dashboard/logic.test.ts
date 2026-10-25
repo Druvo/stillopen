@@ -173,7 +173,7 @@ describe("saved filters", () => {
 
   it("reads the saved tab, sort and the six filters (match is the band, posting is live)", () => {
     expect(filtersFromPrefs(prefs({ tab: "active", sort: "oldest" }, { fit: "fits", match: "Strong", work: "remote", country: "MY", posting: "active", found: "week" }))).toEqual({
-      stage: "active", q: "", fit: "fits", band: "Strong", work: "remote", country: "MY", live: "active", found: "week", sort: "oldest",
+      stage: "active", q: "", fit: "fits", band: "Strong", work: "remote", country: "MY", live: "active", found: "week", sort: "oldest", hideWeak: false,
     });
     expect(filtersFromPrefs(prefs({ tab: "all" })).stage).toBe("");
   });

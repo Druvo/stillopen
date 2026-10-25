@@ -189,3 +189,151 @@ class LegalWarningInTheApp(TestCase):
         self.assertFalse(self.warned("boss"))  # closed by default
         SiteConfig.objects.filter(pk=1).update(signup_mode="open", privacy_text="Acme Ltd, hello@acme.test.", terms_text="Be kind. hello@acme.test.")
         self.assertFalse(self.warned("boss"))
+
+
+class OffsiteBackupScript(TestCase):
+    """deploy/backup-offsite.sh: syntax, dry run, and a full run against a fake rclone (no network, no credentials)."""
+
+    SCRIPT = ROOT / "deploy" / "backup-offsite.sh"
+
+    def setUp(self):
+        self.bash = self.find_bash()
+        if self.bash is None:
+            self.skipTest("a working bash is not available")
+        import tempfile
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name) / "backups"
+        self.dir.mkdir()
+        self.old = self.dir / "stillopen-20250101T000000Z.dump"
+        self.new = self.dir / "stillopen-20260101T000000Z.dump"
+        self.old.write_bytes(b"old dump")
+        self.new.write_bytes(b"new dump bytes")
+        import os
+
+        os.utime(self.old, (1, 1))
+        (self.dir / "secret_key").write_text("THE-SECRET-KEY-VALUE", encoding="utf-8")
+        self.env = {**__import__("os").environ, "BACKUP_DIR": str(self.dir), "OFFSITE_REMOTE": "myremote:backups", "OFFSITE_ENV_FILE": str(Path(self.tmp.name) / "none"),
+                    "HOME": self.tmp.name}
+
+    @staticmethod
+    def find_bash():
+        """A bash that really runs (on Windows `bash` can be the WSL stub, so try Git's first)."""
+        import shutil
+        import subprocess
+
+        for candidate in ("C:/Program Files/Git/bin/bash.exe", "/usr/bin/bash", shutil.which("bash")):
+            if candidate and (Path(candidate).exists() or candidate == shutil.which("bash")):
+                try:
+                    if subprocess.run([candidate, "-c", "echo ok"], capture_output=True, text=True, timeout=20).stdout.strip() == "ok":
+                        return candidate
+                except (OSError, subprocess.SubprocessError):
+                    continue
+        return None
+
+    @staticmethod
+    def find_bash():
+        """A bash that really runs (on Windows `bash` can be the WSL stub, so try Git's first)."""
+        import shutil
+        import subprocess
+
+        for candidate in ("C:/Program Files/Git/bin/bash.exe", "/usr/bin/bash", shutil.which("bash")):
+            if candidate and (Path(candidate).exists() or candidate == shutil.which("bash")):
+                try:
+                    if subprocess.run([candidate, "-c", "echo ok"], capture_output=True, text=True, timeout=20).stdout.strip() == "ok":
+                        return candidate
+                except (OSError, subprocess.SubprocessError):
+                    continue
+        return None
+
+    def run_script(self, **extra):
+        import subprocess
+
+        return subprocess.run([self.bash, self.SCRIPT.as_posix()], env={**self.env, **extra}, capture_output=True, text=True, cwd=ROOT, timeout=60)
+
+    def fake_rclone(self, fail_check=False):
+        """A stand-in `rclone` first on PATH that logs each call and copies into a local folder."""
+        bin_dir = Path(self.tmp.name) / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        remote = Path(self.tmp.name) / "remote"
+        remote.mkdir(exist_ok=True)
+        for n in range(1, 10):  # nine older copies already at the remote
+            (remote / f"stillopen-2024010{n}T000000Z.dump").write_text("x", encoding="utf-8")
+        log = Path(self.tmp.name) / "rclone.log"
+        script = (
+            "#!/bin/bash\n"
+            f'echo "$@" >> "{log.as_posix()}"\n'
+            'cmd=$1; shift\n'
+            'args=(); pat="*"; while [ $# -gt 0 ]; do case "$1" in --quiet|--one-way|--files-only) ;; --include) shift; pat="${1#/}" ;; *) args+=("$1") ;; esac; shift; done\n'
+            f'R="{remote.as_posix()}"\n'
+            'case "$cmd" in\n'
+            '  copyto) cp "${args[0]}" "$R/$(basename "${args[1]}")" ;;\n'
+            f'  check) {"exit 1" if fail_check else "exit 0"} ;;\n'
+            '  lsf) (cd "$R" && ls -1 $pat 2>/dev/null) ;;\n'
+            '  deletefile) rm -f "$R/$(basename "${args[0]}")" ;;\n'
+            "esac\n"
+        )
+        (bin_dir / "rclone").write_text(script, encoding="utf-8", newline="\n")
+        return bin_dir, remote, log
+
+    def test_the_script_parses_and_is_in_the_schedule_and_docs(self):
+        import subprocess
+
+        self.assertEqual(subprocess.run([self.bash, "-n", self.SCRIPT.as_posix()], capture_output=True, text=True).returncode, 0)
+        self.assertIn("backup-offsite.sh", (ROOT / "deploy" / "crontab.docker.example").read_text(encoding="utf-8"))
+        docs = (ROOT / "docs" / "SELF-HOSTING.md").read_text(encoding="utf-8")
+        self.assertIn("Restoring from the off-site copy", docs)
+        self.assertIn("OFFSITE_DRY_RUN=1", docs)
+        self.assertTrue((ROOT / "deploy" / "offsite.env.example").exists())
+
+    def test_dry_run_names_the_newest_file_copies_nothing_and_prints_no_secret(self):
+        result = self.run_script(OFFSITE_DRY_RUN="1", OFFSITE_INCLUDE_SECRET_KEY="1", OFFSITE_RCLONE="no-such-rclone")  # no rclone needed to preview
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("DRY RUN", result.stdout)
+        self.assertIn("stillopen-20260101T000000Z.dump", result.stdout)
+        self.assertNotIn("20250101", result.stdout)
+        self.assertNotIn("THE-SECRET-KEY-VALUE", result.stdout + result.stderr)
+
+    def test_it_fails_loudly_without_a_backup_a_remote_or_the_tool(self):
+        self.new.unlink()
+        self.old.unlink()
+        self.assertNotEqual(self.run_script().returncode, 0)
+        self.new.write_bytes(b"x")
+        self.assertNotEqual(self.run_script(OFFSITE_REMOTE="").returncode, 0)
+        missing = self.run_script(OFFSITE_RCLONE="no-such-rclone")
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("rclone is not installed", missing.stderr)
+
+    def test_a_full_run_copies_verifies_and_keeps_only_the_newest_copies(self):
+        bin_dir, remote, log = self.fake_rclone()
+        result = self.run_script(OFFSITE_RCLONE=(bin_dir / "rclone").as_posix(), OFFSITE_KEEP="3", OFFSITE_INCLUDE_SECRET_KEY="1")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        names = sorted(p.name for p in remote.iterdir())
+        self.assertIn("stillopen-20260101T000000Z.dump", names)
+        self.assertIn("secret_key", names)
+        self.assertEqual(len([n for n in names if n.endswith(".dump")]), 3)  # the newest three; the older ones were removed
+        self.assertNotIn("stillopen-20240101T000000Z.dump", names)
+        calls = log.read_text(encoding="utf-8")
+        self.assertIn("check", calls)  # the copy was verified
+        self.assertIn("verified", result.stdout)
+        self.assertNotIn("THE-SECRET-KEY-VALUE", result.stdout + result.stderr)
+
+    def test_a_copy_that_does_not_match_is_a_failure(self):
+        bin_dir, _remote, _log = self.fake_rclone(fail_check=True)
+        result = self.run_script(OFFSITE_RCLONE=(bin_dir / "rclone").as_posix())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match", result.stderr)
+
+    def test_the_env_file_is_read_but_only_plain_assignments_run(self):
+        env_file = Path(self.tmp.name) / "offsite.env"
+        marker = Path(self.tmp.name) / "pwned"
+        env_file.write_text(f"OFFSITE_KEEP=2\n# comment\ntouch {marker.as_posix()}\nOFFSITE_REMOTE=myremote:backups\n", encoding="utf-8")
+        result = self.run_script(OFFSITE_ENV_FILE=str(env_file), OFFSITE_DRY_RUN="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("keep 2", result.stdout)
+        self.assertFalse(marker.exists())
+        self.assertIn("unrecognised line", result.stderr)
+
+    def test_logrotate_file_and_compose_log_caps_exist(self):
+        self.assertIn("rotate", (ROOT / "deploy" / "logrotate.stillopen").read_text(encoding="utf-8"))

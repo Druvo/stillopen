@@ -10,17 +10,25 @@ import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import type { Dashboard as DashboardData, Job, Progress, ScanStatus, ViewMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useStats } from "@/features/stats/api";
+import { jobsApi } from "@/features/jobs/api";
+import { CSV_EXPORT_URL, troubleLine } from "@/features/jobs/jobmgmt";
+import { RemoveDialog } from "@/features/jobs/remove";
+import { STATS_KEY, useStats } from "@/features/stats/api";
+import { useCoverageLine } from "@/features/account/coverage";
 import { dashboardApi, useMe } from "./api";
 import { FilterPanel } from "./filters";
 import { JobCard, type CardExtras } from "./job-card";
 import {
-  activeFilterCount, applyMove, checkButtonText, emptyKind, filtersFromPrefs, headerLine, importMessage, isFiltered, patchFromFilters, resultsText, scanButtonText, stageChips,
+  activeFilterCount, applyMove, checkButtonText, emptyKind, filtersFromPrefs, headerLine, hiddenWeakCount, importMessage, isFiltered, patchFromFilters, resultsText, scanButtonText, stageChips,
   visibleJobs, type Filters,
 } from "./logic";
+import { allSelected, movedText, notForMeStatus, pruneSelection, removedText, selectAllIn, statusLabel, toggleId, undoText, weakLine } from "./jobmgmt";
+import { SelectionBar, UndoBar } from "./selection";
+import { comingUpItems } from "./coming-up";
 import { AiKeyPrompt, AsideCard, ComingUpBody, FollowupsBody, LastSearchBody, NextStepBody, QuickAdd, Spinner, StaffBanners, StatTiles, ThisWeekBody, YourSearchBody } from "./panels";
 import { StageTabs, TAB_PANEL_ID, tabId, Toolbar } from "./toolbar";
 import { useRun } from "./use-run";
+import { TimezonePrompt } from "./timezone-prompt";
 
 // The board (and the drag-and-drop library it needs) is fetched only when someone asks for the board view.
 const Board = lazy(() => import("./board"));
@@ -34,6 +42,7 @@ export function Dashboard() {
   const client = useQueryClient();
   const query = useQuery({ queryKey: KEY, queryFn: api.dashboard });
   const me = useMe();
+  const emptyPlaces = useCoverageLine(Boolean(query.data?.has_areas));
   const stats = useStats(); // fetched together with the dashboard, not after it; the card just appears when it is there
   const { prefs, update } = usePreferences();
   // The header's search box sets this text (also through `?q=` in the address). It is the one thing not saved.
@@ -43,6 +52,13 @@ export function Dashboard() {
   const [importing, setImporting] = useState(false);
   const [pendingCard, setPendingCard] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE);
+  // Looking after several jobs at once: the choice, the Undo bar after a move, and the "remove for good" confirmation.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [undo, setUndo] = useState<{ key: number; text: string; ids: number[] } | null>(null);
+  const [undoing, setUndoing] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [removing, setRemoving] = useState<{ ids: number[]; name: string } | null>(null);
 
   const refresh = useCallback(() => client.invalidateQueries({ queryKey: KEY }), [client]);
   const data = query.data;
@@ -79,12 +95,12 @@ export function Dashboard() {
   );
   const clearFilters = useCallback(() => {
     setQ("");
-    update({ filters: { fit: "", match: "", work: "", country: "", posting: "", found: "" } });
+    update({ hide_weak: false, filters: { fit: "", match: "", work: "", country: "", posting: "", found: "" } });
     setLimit(PAGE);
   }, [update]);
   const showEverything = useCallback(() => {
     setQ("");
-    update({ tab: "all", filters: { fit: "", match: "", work: "", country: "", posting: "", found: "" } });
+    update({ tab: "all", hide_weak: false, filters: { fit: "", match: "", work: "", country: "", posting: "", found: "" } });
     setLimit(PAGE);
   }, [update]);
 
@@ -102,6 +118,15 @@ export function Dashboard() {
     if (Object.keys(change).length) update(change);
   }, [data, prefs, options, update]);
 
+  const offerUndo = useCallback((text: string, ids: number[]) => setUndo({ key: Date.now(), text, ids }), []);
+  // Choosing several jobs only makes sense in the list: the board hides it.
+  useEffect(() => {
+    if (prefs.view === "board" && selecting) {
+      setSelecting(false);
+      setSelected(new Set());
+    }
+  }, [prefs.view, selecting]);
+
   const move = useMutation({
     mutationFn: ({ job, statusId }: { job: Job; statusId: number }) => api.setStatus(job.id, statusId),
     onMutate: async ({ job, statusId }) => {
@@ -115,8 +140,10 @@ export function Dashboard() {
       if (ctx?.before) client.setQueryData(KEY, ctx.before); // put the card back
       setMessage(`Could not move ${ctx?.job.role ?? "the job"}: ${errorText(error, "please try again.")}`);
     },
-    onSuccess: (_data, _vars, ctx) => {
-      setMessage(`Moved ${ctx?.job.role ?? "job"} to ${ctx?.status?.name ?? "its new status"}.`);
+    onSuccess: (done, _vars, ctx) => {
+      const label = statusLabel(ctx?.status);
+      setMessage(`Moved ${ctx?.job.role ?? "job"} to ${label}.`);
+      if (done.changed && ctx) offerUndo(undoText(1, label, ctx.job.role), [ctx.job.id]);
       refresh();
     },
   });
@@ -152,6 +179,7 @@ export function Dashboard() {
   };
 
   const jobs = useMemo(() => (data ? visibleJobs(data.jobs, filters) : []), [data, filters]);
+  const selectedIds = useMemo(() => pruneSelection(selected, jobs), [selected, jobs]);
 
   // A link to one card (the next-step button, or #job-N in the address) must never land on a filtered-out job.
   const goToCard = useCallback(
@@ -186,12 +214,64 @@ export function Dashboard() {
   if (query.isError || !data) return <ErrorBox message="We could not load your jobs." onRetry={() => query.refetch()} />;
 
   const view: ViewMode = prefs.view;
+  const hiddenWeak = hiddenWeakCount(data.jobs, filters);
+  const notForMe = notForMeStatus(data.statuses);
+  const afterChange = () => Promise.all([refresh(), client.invalidateQueries({ queryKey: STATS_KEY })]);
+  const leaveSelecting = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
+  const doUndo = async () => {
+    if (!undo) return;
+    setUndoing(true);
+    try {
+      if (undo.ids.length === 1) await jobsApi.undoStatus(undo.ids[0]);
+      else await jobsApi.bulkUndo(undo.ids);
+      setMessage("Undone.");
+      await refresh();
+    } catch (e) {
+      setMessage(errorText(e, "It is too late to undo that."));
+    } finally {
+      setUndo(null);
+      setUndoing(false);
+    }
+  };
+  const bulkMove = async (statusId: number, ids: number[] = [...selectedIds]) => {
+    const target = data.statuses.find((s) => s.id === statusId);
+    setBulkBusy(true);
+    try {
+      const done = await jobsApi.bulkStatus(ids, statusId);
+      const label = statusLabel(target ?? done.status);
+      const role = done.changed.length === 1 ? data.jobs.find((j) => j.id === done.changed[0])?.role : undefined;
+      setMessage(movedText(done.changed.length, label, role));
+      if (done.changed.length > 0) offerUndo(undoText(done.changed.length, label, role), done.changed);
+      leaveSelecting();
+      await afterChange();
+    } catch (e) {
+      setMessage(errorText(e, "That did not work. Nothing was changed."));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+  const askRemove = (ids: number[], name = "") => setRemoving({ ids, name });
+  const removeOne = (job: Job) => askRemove([job.id], `${job.role} at ${job.company}`);
+  const notForMeOne = (job: Job) => {
+    if (notForMe) onMove(job, notForMe.id);
+  };
+  const startSelecting = () => {
+    if (view === "board") update({ view: "list" });
+    setSelecting(true);
+  };
   const tabs = stageChips(data.jobs, data.buckets);
   const activeTab = tabs.find((t) => t.key === filters.stage) ?? tabs[0];
   const filtered = isFiltered(filters);
-  const extras: CardExtras = { judgeLabel: data.judge_label, prepEnabled: data.prep_enabled, paperlessUrl: data.paperless_on ? data.paperless_url : "", refresh };
+  const extras: CardExtras = {
+    judgeLabel: data.judge_label, prepEnabled: data.prep_enabled, paperlessUrl: data.paperless_on ? data.paperless_url : "", refresh,
+    notForMe: notForMe ? notForMeOne : undefined, remove: removeOne,
+  };
   const common = { statuses: data.statuses, extras, onMove, onCheckFit, checkingId };
   const scanView = scan.current;
+  const comingUp = comingUpItems(data);
   const empty = emptyKind(data.jobs.length, jobs.length, scanView, activeTab.count);
   const boardColumns = filters.stage ? data.buckets.filter((b) => b.key === filters.stage) : data.buckets;
   const checkText = checkButtonText(liveness.running, liveness.starting, liveness.current?.done ?? 0, liveness.current?.total ?? 0);
@@ -204,7 +284,7 @@ export function Dashboard() {
     </Button>
   ) : null;
   const addJob = (
-    <Link to="/jobs/add" className={cn(buttonClass(data.can_scan ? "outline" : "primary"), TOUCH)}>
+    <Link to="/jobs/add" aria-label="Add job by hand" className={cn(buttonClass(data.can_scan ? "outline" : "primary"), TOUCH)}>
       Add job
     </Link>
   );
@@ -230,7 +310,11 @@ export function Dashboard() {
     { key: "check", label: checkText, onSelect: liveness.begin, disabled: liveness.running || liveness.starting },
     ...(data.can_import ? [{ key: "import", label: importing ? "Importing…" : "Import from career-ops", onSelect: importNow, disabled: importing }] : []),
     ...(data.paperless_on ? [{ key: "paperless", label: "Paperless", href: data.paperless_url }] : []),
+    { key: "select", label: "Select several jobs", onSelect: startSelecting },
+    { key: "export", label: "Export my jobs (CSV)", onSelect: () => window.location.assign(CSV_EXPORT_URL) },
   ];
+  // On a wide screen the buttons stay, and these two sit in a small menu next to them.
+  const moreWide: MenuItem[] = moreItems.filter((item) => item.key === "select" || item.key === "export");
 
   const announce = resultsText(jobs.length, activeTab.count, activeTab.label, view, filtered);
   const hasFollowups = data.followups.length > 0;
@@ -248,6 +332,7 @@ export function Dashboard() {
           {checkButton}
           {importButton}
           {paperlessLink}
+          <ActionMenu label="More actions for your jobs" items={moreWide} variant="chevron" />
         </div>
         <div className="flex gap-2 sm:hidden">
           {scanButton ?? addJob}
@@ -256,6 +341,7 @@ export function Dashboard() {
       </header>
       <StaffBanners me={me.data} />
       {data.ai_prompt?.show && !prefs.ai_prompt_dismissed && <AiKeyPrompt onDismiss={() => update({ ai_prompt_dismissed: true })} />}
+      <TimezonePrompt />
       {liveness.error && (
         <p role="alert" className="text-theme-sm text-bad">
           {liveness.error}
@@ -263,6 +349,14 @@ export function Dashboard() {
       )}
 
       <StatTiles data={data} />
+      {troubleLine(data.source_trouble) && (
+        <p className="text-theme-sm text-muted">
+          {troubleLine(data.source_trouble)}{" "}
+          <Link to="/sources" className="text-brand underline">
+            See which
+          </Link>
+        </p>
+      )}
 
       <div className="grid gap-[var(--stack-gap)] xl:grid-cols-[minmax(0,1fr)_20rem]">
         <aside aria-label="Next steps and your search" className="so-stack xl:col-start-2 xl:row-start-1">
@@ -276,9 +370,9 @@ export function Dashboard() {
               <FollowupsBody items={data.followups} onChanged={refresh} />
             </AsideCard>
           )}
-          {data.upcoming_interviews.length > 0 && (
+          {comingUp.length > 0 && (
             <AsideCard title="Coming up">
-              <ComingUpBody items={data.upcoming_interviews} />
+              <ComingUpBody items={comingUp} />
             </AsideCard>
           )}
           {stats.data?.has_jobs && (
@@ -287,7 +381,7 @@ export function Dashboard() {
             </AsideCard>
           )}
           <AsideCard title="Your search">
-            <YourSearchBody summary={data.search_summary} />
+            <YourSearchBody summary={data.search_summary} emptyPlaces={emptyPlaces} />
           </AsideCard>
           <AsideCard title="Last search" defaultOpen={searching}>
             <LastSearchBody scan={scanView} starting={scan.starting} canScan={data.can_scan} />
@@ -308,7 +402,40 @@ export function Dashboard() {
             onView={(v) => update({ view: v })}
           />
           {prefs.filters_open && (
-            <FilterPanel id={FILTER_PANEL_ID} filters={filters} set={setFilter} reset={clearFilters} jobs={data.jobs} bandLabels={data.band_labels} inStage={activeTab.count} shown={jobs.length} />
+            <FilterPanel id={FILTER_PANEL_ID} filters={filters} set={setFilter} reset={clearFilters} jobs={data.jobs} bandLabels={data.band_labels} inStage={activeTab.count} shown={jobs.length} hidden={hiddenWeak} />
+          )}
+          {(hiddenWeak > 0 || (view === "list" && !selecting && data.jobs.length > 0)) && (
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-theme-sm text-muted">
+              <p>
+                {/* with the filter panel open, the same words and button are in the panel's own "Showing N of M" line */}
+                {!prefs.filters_open && weakLine(hiddenWeak)}{" "}
+                {hiddenWeak > 0 && !prefs.filters_open && (
+                  <button type="button" onClick={() => setFilter({ hideWeak: false })} className="min-h-11 text-brand underline sm:min-h-0">
+                    Show them
+                  </button>
+                )}
+              </p>
+              {view === "list" && !selecting && data.jobs.length > 0 && (
+                <Button variant="ghost" onClick={startSelecting} className="min-h-11 sm:min-h-9">
+                  Select jobs
+                </Button>
+              )}
+            </div>
+          )}
+          {selecting && view === "list" && (
+            <SelectionBar
+              count={selectedIds.size}
+              total={jobs.length}
+              allChecked={allSelected(selectedIds, jobs)}
+              onToggleAll={() => setSelected(allSelected(selectedIds, jobs) ? new Set() : selectAllIn(jobs))}
+              statuses={data.statuses}
+              canNotForMe={!!notForMe}
+              onNotForMe={() => notForMe && void bulkMove(notForMe.id)}
+              onSetStatus={(id) => void bulkMove(id)}
+              onRemove={() => askRemove([...selectedIds])}
+              onCancel={leaveSelecting}
+              busy={bulkBusy}
+            />
           )}
 
           <p role="status" aria-live="polite" className={message ? "text-theme-sm text-muted" : "sr-only"}>
@@ -341,13 +468,22 @@ export function Dashboard() {
                   </p>
                 )}
                 {empty === "no-jobs" && (
-                  <p>
-                    No jobs yet. Paste a link above, or{" "}
-                    <Link to="/jobs/add" className="text-brand underline">
-                      add one by hand
-                    </Link>
-                    .
-                  </p>
+                  <>
+                    <p>
+                      No jobs yet. Paste a link above, or{" "}
+                      <Link to="/jobs/add" className="text-brand underline">
+                        add one by hand
+                      </Link>
+                      .
+                    </p>
+                    <p className="mt-1 text-theme-sm">
+                      New here?{" "}
+                      <Link to="/help" className="text-brand underline">
+                        Read how StillOpen works
+                      </Link>
+                      .
+                    </p>
+                  </>
                 )}
                 {empty === "stage-empty" && <p>Nothing is in {activeTab.label} right now. That is fine. Pick another stage above.</p>}
                 {empty === "no-matches" && (
@@ -367,7 +503,16 @@ export function Dashboard() {
               <>
                 <div className="so-stack">
                   {jobs.slice(0, limit).map((job) => (
-                    <JobCard key={job.id} job={job} statuses={data.statuses} extras={extras} onMove={onMove} onCheckFit={onCheckFit} checking={checkingId === job.id} />
+                    <JobCard
+                      key={job.id}
+                      job={job}
+                      statuses={data.statuses}
+                      extras={extras}
+                      onMove={onMove}
+                      onCheckFit={onCheckFit}
+                      checking={checkingId === job.id}
+                      select={selecting ? { checked: selectedIds.has(job.id), onToggle: () => setSelected(toggleId(selectedIds, job.id)) } : undefined}
+                    />
                   ))}
                 </div>
                 {jobs.length > limit && (
@@ -382,6 +527,36 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+      {undo && <UndoBar key={undo.key} text={undo.text} onUndo={doUndo} onDismiss={() => setUndo(null)} busy={undoing} />}
+      {removing && (
+        <RemoveDialog
+          ids={removing.ids}
+          name={removing.name}
+          onClose={() => setRemoving(null)}
+          onSoft={
+            notForMe
+              ? () => {
+                  const ids = removing.ids;
+                  setRemoving(null);
+                  if (ids.length === 1) {
+                    const job = data.jobs.find((j) => j.id === ids[0]);
+                    if (job) onMove(job, notForMe.id);
+                  } else {
+                    void bulkMove(notForMe.id, ids);
+                  }
+                }
+              : undefined
+          }
+          onRemoved={(count) => {
+            const only = removing.ids.length === 1 ? data.jobs.find((j) => j.id === removing.ids[0])?.role : undefined;
+            setRemoving(null);
+            leaveSelecting();
+            setUndo(null);
+            notify(removedText(count, only));
+            void afterChange();
+          }}
+        />
+      )}
     </div>
   );
 }

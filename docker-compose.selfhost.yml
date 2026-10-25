@@ -15,6 +15,11 @@
 # `docker compose -f docker-compose.selfhost.yml up -d --build`; migrations run on start.
 services:
   stillopen:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     build: .
     image: stillopen:selfhost
     restart: unless-stopped
@@ -32,6 +37,7 @@ services:
       STILLOPEN_DB: /data/db.sqlite3
       STILLOPEN_MEDIA: /data/media
       CAREEROPS_PATH: ""
+      STILLOPEN_WORKERS: ${STILLOPEN_WORKERS:-1}   # more than 1 only together with docker-compose.redis.yml (shared rate limits)
     volumes:
       - stillopen_data:/data
     command:
@@ -44,7 +50,7 @@ services:
           export DJANGO_SECRET_KEY="$$(cat /data/.secret_key)"
         fi
         python manage.py migrate --noinput
-        exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 16 --timeout 180
+        exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${STILLOPEN_WORKERS:-1} --threads 16 --timeout 180
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/robots.txt', timeout=5)"]
       interval: 30s

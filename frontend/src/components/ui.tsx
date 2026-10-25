@@ -13,7 +13,7 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 export function buttonClass(variant: Variant = "primary", small = false) {
-  return cn("inline-flex items-center justify-center gap-1 rounded-md font-medium disabled:opacity-60", small ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm", VARIANTS[variant]);
+  return cn("inline-flex items-center justify-center gap-1 rounded-md font-medium disabled:opacity-60", small ? "min-h-11 px-2.5 py-1 text-xs sm:min-h-6" : "min-h-11 px-3 py-1.5 text-sm sm:min-h-9", VARIANTS[variant]);
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; small?: boolean }>(function Button(

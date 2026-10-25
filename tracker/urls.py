@@ -1,6 +1,7 @@
 from django.urls import include, path, re_path
 
-from . import views, views_app, views_cover, views_cv, views_mcp, views_public
+from . import views_export
+from . import views, views_app, views_calendar, views_cover, views_cv, views_mcp, views_public
 
 urlpatterns = [
     path("", views_public.landing, name="landing"),
@@ -18,7 +19,10 @@ urlpatterns = [
     path("mcp/", views_mcp.mcp_endpoint, name="mcp_endpoint"),
     # files the app links to by these addresses (not JSON, so they are not in /api/v1/)
     path("profile/export/", views.export_data, name="export_data"),
+    path("jobs/export.csv", views_export.jobs_csv, name="jobs_export_csv"),
     path("document/<int:pk>/", views.document_file, name="document_file"),
+    path("interviews/calendar.ics", views_calendar.interviews_calendar, name="interviews_calendar"),
+    path("interviews/<int:pk>/calendar.ics", views_calendar.interview_calendar, name="interview_calendar"),
     path("cv/<int:pk>/print/", views_cv.cv_print, name="cv_print"),
     path("cv/<int:pk>/download/<str:fmt>/", views_cv.cv_download, name="cv_download"),
     path("cover/<int:pk>/download/<str:fmt>/", views_cover.cover_download, name="cover_download"),

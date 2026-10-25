@@ -71,10 +71,12 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "tracker.middleware.ApiGZipMiddleware",  # outermost of the two: compresses last, after the ETag has been worked out on the plain body
     "tracker.middleware.ApiConditionalGetMiddleware",
+    "tracker.middleware.ProxyWatchMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "tracker.middleware.PersonTimezoneMiddleware",  # after authentication: each signed-in request runs in that person's time zone
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
@@ -172,6 +174,11 @@ if os.environ.get("DATABASE_URL"):
 
     DATABASES["default"] = dj_database_url.parse(os.environ["DATABASE_URL"], conn_max_age=60)
 
+# Shared cache for per-person rate limits and locks: local memory per process unless REDIS_URL is set (see config/cache_config.py).
+from config.cache_config import build_caches  # noqa: E402
+
+CACHES = build_caches(os.environ)
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -220,15 +227,19 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 # tracker.auth.AccountAdapter.pre_login makes confirmation mandatory for accounts created through the sign-up form.
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_FORMS = {"signup": "tracker.forms.SignupForm"}
-# Bot protection without any third-party service (the no-CDN rule): a hidden trap field, a minimum time to fill the
-# sign-up form (0 turns the timing check off), and per-IP rate limits. Behind a reverse proxy set
-# ALLAUTH_TRUSTED_PROXY_COUNT (e.g. 1) so the limits see the visitor's address and not the proxy's.
-STILLOPEN_SIGNUP_MIN_SECONDS = int(os.environ.get("STILLOPEN_SIGNUP_MIN_SECONDS", "3"))
-ACCOUNT_RATE_LIMITS = {
-    "signup": os.environ.get("STILLOPEN_SIGNUP_RATE", "5/h/ip"),
-    "login_failed": os.environ.get("STILLOPEN_LOGIN_FAILED_RATE", "10/10m/ip,5/5m/key"),
-}
+# Bot protection without any third-party service (the no-CDN rule: no CAPTCHA script is ever loaded): a hidden trap field, a minimum time to
+# fill the sign-up form, and rate limits on wrong passwords, sign-ups, password resets and confirmation emails. The numbers are set in the
+# admin (Site configuration > Registration, see tracker/services/abuse.py); the environment variables below, when set, win over the admin.
+#   STILLOPEN_SIGNUP_MIN_SECONDS (0 turns the timing check off), STILLOPEN_SIGNUP_RATE ("5/h/ip"), STILLOPEN_LOGIN_FAILED_RATE ("10/10m/ip,5/5m/key").
+# Behind a reverse proxy set ALLAUTH_TRUSTED_PROXY_COUNT (e.g. 1) so the limits see the visitor's address and not the proxy's; a wrong value
+# is reported by `manage.py check` and in the log (tracker/checks.py, tracker/middleware.py).
+STILLOPEN_SIGNUP_MIN_SECONDS = int(os.environ["STILLOPEN_SIGNUP_MIN_SECONDS"]) if os.environ.get("STILLOPEN_SIGNUP_MIN_SECONDS") else None
+STILLOPEN_SIGNUP_MAX_AGE = None  # seconds a sign-up page stays valid; None = the admin's number
+from tracker.services.abuse import ConfiguredRateLimits  # noqa: E402
+
+ACCOUNT_RATE_LIMITS = ConfiguredRateLimits()
 ALLAUTH_TRUSTED_PROXY_COUNT = int(os.environ.get("ALLAUTH_TRUSTED_PROXY_COUNT", "0"))
+STILLOPEN_BEHIND_PROXY = os.environ.get("DJANGO_BEHIND_PROXY") == "1"  # a TLS proxy (nginx, Caddy, a load balancer) sits in front
 ACCOUNT_PASSWORD_MIN_LENGTH = 10
 # Two-step sign-in, optional and per person (Profile > Your account > Two-step sign-in): an authenticator app, a hardware security
 # key or passkey as a second step, and one-time recovery codes. Runs entirely in this app, no third-party service.
@@ -319,6 +330,12 @@ STILLOPEN_SOURCE_ADDS_PER_HOUR = int(os.environ.get("STILLOPEN_SOURCE_ADDS_PER_H
 STILLOPEN_MAX_PIPELINE = int(os.environ.get("STILLOPEN_MAX_PIPELINE", "500"))
 STILLOPEN_MAX_CV_VERSIONS = int(os.environ.get("STILLOPEN_MAX_CV_VERSIONS", "200"))
 STILLOPEN_CVGEN_PER_HOUR = int(os.environ.get("STILLOPEN_CVGEN_PER_HOUR", "20"))
+STILLOPEN_CVIMPROVE_PER_HOUR = int(os.environ.get("STILLOPEN_CVIMPROVE_PER_HOUR", "20"))  # "Improve with AI" on a CV and "Polish my wording" in the builder
+STILLOPEN_ATS_PER_HOUR = int(os.environ.get("STILLOPEN_ATS_PER_HOUR", "240"))  # the free, rule-based ATS check (cheap, but still bounded)
+STILLOPEN_CVBUILDER_PER_HOUR = int(os.environ.get("STILLOPEN_CVBUILDER_PER_HOUR", "30"))
+# Optional AI help (interview questions, answer feedback, application answers, posting summary, role suggestions, message drafts):
+# how many times each of them may call the person's own AI in an hour. Counted per person and per kind of help.
+STILLOPEN_ASSIST_PER_HOUR = int(os.environ.get("STILLOPEN_ASSIST_PER_HOUR", "20"))
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 ACCOUNT_ADAPTER = "tracker.auth.AccountAdapter"
 SOCIALACCOUNT_ADAPTER = "tracker.auth.SocialAdapter"

@@ -1,11 +1,12 @@
 "use client";
 
 import { Dashboard } from "@/features/dashboard/dashboard";
-import { BadgeDollarSign, BarChart3, Bot, CalendarClock, FileText, FolderOpen, GraduationCap, LayoutDashboard, Search, PlusCircle, Radar, Sparkles, UserRound, Users, type LucideIcon } from "lucide-react";
+import { BadgeDollarSign, BarChart3, Bot, CalendarClock, FileText, FolderOpen, GraduationCap, HelpCircle, LayoutDashboard, Search, PlusCircle, Radar, Sparkles, UserRound, Users, type LucideIcon } from "lucide-react";
 import { lazy } from "react";
 import type { Route } from "@/lib/router";
 import * as account from "@/features/account/routes";
 import * as cv from "@/features/cv/routes";
+import * as help from "@/features/help/routes";
 import * as jobs from "@/features/jobs/routes";
 import * as pipeline from "@/features/pipeline/routes";
 
@@ -24,6 +25,7 @@ export const ROUTES: Route[] = [
   ...cv.ROUTES,
   ...pipeline.ROUTES,
   ...account.ROUTES,
+  ...help.ROUTES,
 ];
 
 export type NavItem = { label: string; to: string; icon: LucideIcon; needs?: "prep_enabled" | "assistant_enabled" };
@@ -58,6 +60,7 @@ export const NAV: NavGroup[] = [
       { label: "AI settings", to: "/profile/ai", icon: Sparkles },
       { label: "Job sources", to: "/sources", icon: Radar },
       { label: "Assistant", to: "/profile/assistant", icon: Bot, needs: "assistant_enabled" },
+      { label: "Help", to: "/help", icon: HelpCircle },
     ],
   },
 ];

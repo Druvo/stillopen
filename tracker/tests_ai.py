@@ -391,7 +391,7 @@ class JobTextTests(TestCase):
         self.assertNotIn("steal", text)
 
     @mock.patch("tracker.services.netguard.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))])
-    @mock.patch("tracker.services.netguard.requests.get")
+    @mock.patch("tracker.services.netguard._get_pinned")
     def test_fetch_and_thin_page(self, get, _dns):
         config = SiteConfig.load()
         config.careerops_path = ""
@@ -402,7 +402,7 @@ class JobTextTests(TestCase):
             fetch_description("https://jobs.example.com/1", config)
 
     @mock.patch("tracker.services.netguard.socket.getaddrinfo")
-    @mock.patch("tracker.services.netguard.requests.get")
+    @mock.patch("tracker.services.netguard._get_pinned")
     def test_redirect_to_private_address_is_refused(self, get, dns):
         dns.side_effect = lambda host, port: [(2, 1, 6, "", ("127.0.0.1" if host == "internal.test" else "93.184.216.34", port))]
         get.return_value = mock.Mock(status_code=302, is_redirect=True, headers={"location": "http://internal.test/admin"}, text="")
@@ -418,7 +418,7 @@ class JobTextTests(TestCase):
         self.assertEqual(guess_role_company("Careers"), ("Careers", ""))
 
     @mock.patch("tracker.services.netguard.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))])
-    @mock.patch("tracker.services.netguard.requests.get")
+    @mock.patch("tracker.services.netguard._get_pinned")
     def test_fetch_posting_returns_title_and_description(self, get, _dns):
         config = SiteConfig.load()
         config.careerops_path = ""

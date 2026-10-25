@@ -19,5 +19,6 @@ RUN DJANGO_SECRET_KEY=build python manage.py collectstatic --noinput
 RUN useradd --create-home --uid 10001 app && mkdir -p /data && chown -R app:app /app /data
 USER app
 EXPOSE 8000
-# One worker with threads: the per-person rate limits live in process memory, so all requests must share one process.
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 16 --timeout 180"]
+# One worker with threads by default: without Redis the per-person rate limits live in process memory, so all requests must share one process.
+# With REDIS_URL set (docker-compose.redis.yml) raise STILLOPEN_WORKERS; the limits are then shared.
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${STILLOPEN_WORKERS:-1} --threads 16 --timeout 180"]

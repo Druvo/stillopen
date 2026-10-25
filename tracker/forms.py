@@ -1,46 +1,64 @@
 import re
 import time
+from urllib.parse import urlparse
 
 from allauth.account.forms import SignupForm as AllauthSignupForm
 from django import forms
 from django.conf import settings
-from django.core import signing
 
 from .models import (
     Application, Contact, Interview, JobSource, KnowledgeSource, Offer, PersonalSettings, Referral, SearchArea, UserProfile,
 )
-from .services import geo, knowledge
+from .services import abuse, geo, knowledge
 from .services.netguard import FetchError, check_public_url
 
-SIGNUP_SALT = "tracker.signup-form"
-SIGNUP_MAX_AGE = 2 * 24 * 3600  # a sign-up page left open longer than this has to be reloaded
+SIGNUP_SALT = abuse.SIGNUP_SALT  # kept for older imports
 
 
 class SignupForm(AllauthSignupForm):
-    """Sign-up with two invisible bot traps and no third-party service: a text box real people never see (bots fill
-    every box), and a signed timestamp so a form submitted faster than a person could type it is refused."""
+    """Sign-up with two invisible bot traps and no third-party service: a text box real people never see (bots fill every box),
+    and a signed timestamp so a form sent faster than a person could type it, or replayed from another day, is refused.
 
-    website = forms.CharField(required=False, label="Leave this empty", widget=forms.TextInput(attrs={"tabindex": "-1", "autocomplete": "off"}))
+    A bot is never told why: if it fills the trap or is too fast, it gets the same "check your email" page as everyone and no
+    account is made (`try_save`). A person whose page simply went stale is told to reload it. The switch and the numbers are in
+    the admin (Site configuration > Registration); see services/abuse.py."""
+
+    website = forms.CharField(required=False, label="Leave this empty", widget=forms.TextInput(attrs={"tabindex": "-1", "autocomplete": "off", "aria-hidden": "true"}))
     form_started = forms.CharField(required=False, widget=forms.HiddenInput)
+
+    suspected_bot = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not self.is_bound:
-            self.initial["form_started"] = signing.dumps(time.time(), salt=SIGNUP_SALT)
+            self.initial["form_started"] = abuse.make_signup_token()
 
     def clean(self):
         cleaned = super().clean()
+        self.suspected_bot = False
+        if not abuse.signup_protection_on():
+            return cleaned
         if cleaned.get("website"):
-            raise forms.ValidationError("We could not create this account. Please try again.")
-        minimum = settings.STILLOPEN_SIGNUP_MIN_SECONDS
+            self.suspected_bot = True
+        minimum = abuse.signup_min_seconds()
         if minimum > 0:
-            try:
-                started = signing.loads(cleaned.get("form_started") or "", salt=SIGNUP_SALT, max_age=SIGNUP_MAX_AGE)
-            except signing.BadSignature:
-                raise forms.ValidationError("This page expired. Please reload it and try again.") from None
-            if time.time() - started < minimum:
-                raise forms.ValidationError("That was very quick. Please check your details and press the button again.")
+            token = cleaned.get("form_started") or ""
+            started = abuse.read_signup_token(token)
+            if started is None:  # missing, tampered with, or older than the allowed age: a person needs to reload the page
+                raise forms.ValidationError("This page expired. Please reload it and try again.")
+            if time.time() - started < minimum or abuse.token_already_used(token):
+                self.suspected_bot = True
         return cleaned
+
+    def try_save(self, request):
+        if self.suspected_bot:
+            from allauth.account.adapter import get_adapter
+
+            return None, get_adapter().respond_email_verification_sent(request, None)  # looks like success; nothing was created
+        user, response = super().try_save(request)
+        if user is not None:
+            abuse.mark_token_used(self.cleaned_data.get("form_started") or "")
+        return user, response
 
 
 RESTRICTED_PROVIDERS = {"claude_cli", "agent_sdk"}  # these run commands on the server: site admins only
@@ -163,7 +181,8 @@ class ProfileForm(forms.ModelForm):
         model = UserProfile
         fields = [
             "target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages",
-            "notice_period", "salary_floor", "deal_breakers", "about", "profile_cv", "scan_digest_enabled",
+            "notice_period", "salary_floor", "deal_breakers", "about", "profile_cv", "scan_digest_enabled", "timezone",
+            "email_followups", "email_interviews", "email_weekly",
         ]
         widgets = {
             "target_roles": forms.Textarea(attrs={"rows": 3, "placeholder": "Senior Backend Engineer\nSolutions Architect"}),
@@ -508,6 +527,20 @@ class OwnSourceForm(forms.Form):
         cleaned = super().clean()
         connector = cleaned.get("connector")
         if not connector or "board_token" not in cleaned:
+            return cleaned
+        if connector == "careerpage":
+            from tracker.services import careerpage
+            try:
+                url = careerpage.normalise_url(cleaned["board_token"])
+                check_public_url(url)
+            except ValueError as exc:
+                self.add_error("board_token", str(exc))
+                return cleaned
+            except FetchError:
+                self.add_error("board_token", "That address is not a public website.")
+                return cleaned
+            cleaned["board_token"] = url
+            cleaned["name"] = (cleaned.get("name") or "").strip() or (urlparse(url).hostname or "")[:120]
             return cleaned
         token = board_token_from(connector, cleaned["board_token"])
         if not _OWN_TOKEN.fullmatch(token):

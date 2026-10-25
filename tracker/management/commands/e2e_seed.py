@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from django.utils import timezone
 
-from tracker.models import Application, Interview, ScanLogEntry, ScanRun, Status, UserProfile
+from tracker.models import Application, Interview, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile
 
 CV = """# Alice Example
 
@@ -24,12 +24,13 @@ PASSWORD = "e2e-pass-12345"  # test-only value; the users exist only in the thro
 
 
 class Command(BaseCommand):
-    help = "Create the e2e people (alice, bob, carol, dave and erin) Needs STILLOPEN_E2E=1."
+    help = "Create the e2e people (alice, bob, carol, dave, erin and frank) Needs STILLOPEN_E2E=1."
 
     def handle(self, *args, **options):
         if os.environ.get("STILLOPEN_E2E") != "1":
             raise CommandError("Set STILLOPEN_E2E=1 to run this. It creates users with a known password and is only for the browser tests.")
         User = get_user_model()
+        SiteConfig.objects.filter(pk=SiteConfig.load().pk).update(signup_mode="open")  # the hardening spec looks at the sign-up page itself
         statuses = {s.name: s for s in Status.objects.all()}
         today = timezone.localdate()
         for name, jobs in (
@@ -46,6 +47,7 @@ class Command(BaseCommand):
             ("carol", []),  # has not seen the welcome questions yet
             ("dave", [("Umbrella", "SRE", "Saved", 3.5)]),  # the account the delete test removes
             ("erin", []),  # the welcome-questions test saves her answers
+            ("frank", []),  # the CV builder test builds his CV (so bob stays a person with no CV)
         ):
             user, _ = User.objects.get_or_create(username=name, defaults={"email": f"{name}@example.com"})
             user.set_password(PASSWORD)
@@ -64,4 +66,4 @@ class Command(BaseCommand):
                 run = ScanRun.objects.create(owner=user, running=False, total=2, done=2, found=40, added=3, note="Only the best matches were added.")
                 ScanLogEntry.objects.create(run=run, source_name="Acme Careers", connector="greenhouse", found=30, matched=6, added=3, duplicates=1, outside=2)
                 ScanLogEntry.objects.create(run=run, source_name="Broken Board", connector="lever", error="The board did not answer.")
-        self.stdout.write("Seeded alice, bob, carol, dave and erin.")
+        self.stdout.write("Seeded alice, bob, carol, dave, erin and frank.")

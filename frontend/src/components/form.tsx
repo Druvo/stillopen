@@ -1,11 +1,39 @@
 "use client";
 
-import { useId, useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { useEffect, useId, useRef, useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { describedBy, problemsText } from "@/lib/a11y";
 import { ApiError, errorText } from "@/lib/api";
+import { announce } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { Notice } from "./ui";
 
-const CONTROL = "w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm";
+const CONTROL = "min-h-11 w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm sm:min-h-9";
+
+/** The ids a control's hint and error messages get, so the control can point at them with aria-describedby. */
+export const hintId = (id: string) => `${id}-hint`;
+export const errorId = (id: string) => `${id}-error`;
+const describes = (id: string, hint: ReactNode, errors: string[] | undefined, extra?: string) => describedBy(extra, hint ? hintId(id) : false, errors?.length ? errorId(id) : false);
+
+function Messages({ id, hint, errors }: { id?: string; hint?: ReactNode; errors?: string[] }) {
+  return (
+    <>
+      {hint && (
+        <p id={id ? hintId(id) : undefined} className="mt-1 text-xs text-muted">
+          {hint}
+        </p>
+      )}
+      {!!errors?.length && (
+        <div id={id ? errorId(id) : undefined}>
+          {errors.map((message) => (
+            <p key={message} className="mt-1 text-xs text-bad">
+              {message}
+            </p>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 /** A labelled control with its hint and the server's messages for it. `errors` is `fields[name]` from a refused form. */
 export function Field({ label, hint, errors, children, htmlFor }: { label: ReactNode; hint?: ReactNode; errors?: string[]; children: ReactNode; htmlFor?: string }) {
@@ -15,12 +43,7 @@ export function Field({ label, hint, errors, children, htmlFor }: { label: React
         {label}
       </label>
       {children}
-      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
-      {errors?.map((message) => (
-        <p key={message} role="alert" className="mt-1 text-xs text-bad">
-          {message}
-        </p>
-      ))}
+      <Messages id={htmlFor} hint={hint} errors={errors} />
     </div>
   );
 }
@@ -31,7 +54,7 @@ export function TextField({ label, hint, errors, className, ...props }: Common &
   const id = useId();
   return (
     <Field label={label} hint={hint} errors={errors} htmlFor={id}>
-      <input id={id} className={cn(CONTROL, className)} aria-invalid={errors?.length ? true : undefined} {...props} />
+      <input id={id} className={cn(CONTROL, className)} aria-invalid={errors?.length ? true : undefined} {...props} aria-describedby={describes(id, hint, errors, props["aria-describedby"])} />
     </Field>
   );
 }
@@ -40,7 +63,7 @@ export function TextAreaField({ label, hint, errors, className, ...props }: Comm
   const id = useId();
   return (
     <Field label={label} hint={hint} errors={errors} htmlFor={id}>
-      <textarea id={id} className={cn(CONTROL, className)} aria-invalid={errors?.length ? true : undefined} {...props} />
+      <textarea id={id} className={cn(CONTROL, className)} aria-invalid={errors?.length ? true : undefined} {...props} aria-describedby={describes(id, hint, errors, props["aria-describedby"])} />
     </Field>
   );
 }
@@ -49,7 +72,7 @@ export function SelectField({ label, hint, errors, className, children, ...props
   const id = useId();
   return (
     <Field label={label} hint={hint} errors={errors} htmlFor={id}>
-      <select id={id} className={cn(CONTROL, className)} aria-invalid={errors?.length ? true : undefined} {...props}>
+      <select id={id} className={cn(CONTROL, className)} aria-invalid={errors?.length ? true : undefined} {...props} aria-describedby={describes(id, hint, errors, props["aria-describedby"])}>
         {children}
       </select>
     </Field>
@@ -60,24 +83,20 @@ export function CheckField({ label, hint, errors, ...props }: Common & Omit<Inpu
   const id = useId();
   return (
     <div className="mb-3">
-      <label htmlFor={id} className="flex items-start gap-2 text-sm">
-        <input id={id} type="checkbox" className="mt-0.5" {...props} />
+      <label htmlFor={id} className="flex min-h-11 items-center gap-2 text-sm sm:min-h-6">
+        <input id={id} type="checkbox" aria-invalid={errors?.length ? true : undefined} {...props} aria-describedby={describes(id, hint, errors, props["aria-describedby"])} />
         <span>{label}</span>
       </label>
-      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
-      {errors?.map((message) => (
-        <p key={message} role="alert" className="mt-1 text-xs text-bad">
-          {message}
-        </p>
-      ))}
+      <Messages id={id} hint={hint} errors={errors} />
     </div>
   );
 }
 
 /** A few choices of which exactly one applies, as radio buttons (better than a dropdown for two or three options). */
 export function RadioGroup<T extends string>({ legend, hint, name, value, options, onChange }: { legend: ReactNode; hint?: ReactNode; name: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
+  const id = useId();
   return (
-    <fieldset className="mb-4">
+    <fieldset className="mb-4" aria-describedby={hint ? hintId(id) : undefined}>
       <legend className="mb-1 text-sm font-medium">{legend}</legend>
       <div className="flex flex-wrap gap-2">
         {options.map((o) => (
@@ -87,7 +106,7 @@ export function RadioGroup<T extends string>({ legend, hint, name, value, option
           </label>
         ))}
       </div>
-      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
+      <Messages id={id} hint={hint} />
     </fieldset>
   );
 }
@@ -103,8 +122,15 @@ export function useSubmit() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [fields, setFields] = useState<Record<string, string[]>>({});
-  const handle = (action: () => Promise<unknown>) => async (event?: { preventDefault: () => void }) => {
+  const [focusTick, setFocusTick] = useState(0);
+  const formRef = useRef<HTMLElement | null>(null);
+  // Once the messages are on the screen (after the render, never before it), the person lands on the first control that needs fixing.
+  useEffect(() => {
+    if (focusTick > 0) (formRef.current ?? document).querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+  }, [focusTick]);
+  const handle = (action: () => Promise<unknown>) => async (event?: { preventDefault: () => void; currentTarget?: unknown }) => {
     event?.preventDefault();
+    formRef.current = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
     setBusy(true);
     setError("");
     setFields({});
@@ -112,7 +138,14 @@ export function useSubmit() {
       await action();
     } catch (e) {
       setError(errorText(e));
-      if (e instanceof ApiError) setFields(e.fields);
+      if (e instanceof ApiError) {
+        setFields(e.fields);
+        const problems = Object.values(e.fields).reduce((n, messages) => n + messages.length, 0);
+        if (problems > 0) {
+          announce(problemsText(problems));
+          setFocusTick((n) => n + 1);
+        }
+      }
     } finally {
       setBusy(false);
     }

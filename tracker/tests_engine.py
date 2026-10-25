@@ -555,9 +555,9 @@ class JoobleKeyInAdmin(TestCase):
 
 class RegionalSources(TestCase):
     def test_regional_and_jooble_lists_are_well_formed(self):
-        from tracker.seed_sources import JOOBLE, REGIONAL
+        from tracker.seed_sources import JOOBLE, JOOBLE_MORE, REGIONAL
         self.assertGreaterEqual(len(REGIONAL), 15)
-        self.assertEqual({t for _, c, t in JOOBLE}, set(scan.JOOBLE_PLACES))
+        self.assertEqual({t for _, c, t in JOOBLE + JOOBLE_MORE}, set(scan.JOOBLE_PLACES))
         for _, connector, token in REGIONAL:
             self.assertIn(connector, JobSource.OWN_CONNECTORS)
             self.assertRegex(token, r"^[A-Za-z0-9._-]+$")
@@ -568,10 +568,11 @@ class RegionalSources(TestCase):
         self.client.login(username="rina", password=PW)
         total = JobSource.objects.filter(owner__isnull=True).count()
         jooble = JobSource.objects.filter(connector="jooble").count()
-        self.assertEqual(jooble, 8)
-        self.assertEqual(len(self.client.get("/api/v1/sources").json()["shared"]), total - jooble)
+        adzuna = JobSource.objects.filter(connector="adzuna").count()
+        self.assertEqual((jooble, adzuna), (21, 19))
+        self.assertEqual(len(self.client.get("/api/v1/sources").json()["shared"]), total - jooble - adzuna)
         SiteConfig.objects.filter(pk=1).update(jooble_api_key="k")
-        self.assertEqual(len(self.client.get("/api/v1/sources").json()["shared"]), total)
+        self.assertEqual(len(self.client.get("/api/v1/sources").json()["shared"]), total - adzuna)
 
     def test_one_seed_run_gives_every_region_its_sources(self):
         seed.ensure_default_sources(JobSource)

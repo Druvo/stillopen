@@ -6,7 +6,10 @@ import { Badge, Button, Card, ErrorBox, Loading, Notice, PageHeader } from "@/co
 import { FormError, SelectField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
 import { notify } from "@/lib/toast";
+import { sourceHealthText, troubleLine } from "@/features/jobs/jobmgmt";
 import { accountApi } from "./api";
+import { CareerPageCard } from "./careerpage";
+import { CoverageCard } from "./coverage";
 
 const KEY = ["account", "sources"] as const;
 
@@ -30,6 +33,7 @@ export function SourcesPage() {
   if (query.isError) return <ErrorBox message={errorText(query.error, "We could not load your job sources.")} onRetry={() => query.refetch()} />;
   const data = query.data;
   const chosen = connector || data.connectors[0]?.value || "";
+  const sharedTrouble = (data.shared_health ?? []).filter((s) => s.health.state === "error");
 
   const add = form.handle(async () => {
     setDone("");
@@ -52,7 +56,15 @@ export function SourcesPage() {
         You do not need to set anything up. We already search {data.shared.length} job sources for you automatically, whenever you open your dashboard, and keep the openings that match what you are looking for and where you would work. Add a
         company below only if you want one we do not cover. Your own list is private to you.
       </p>
+      {troubleLine(data.trouble) && (
+        <div className="mb-4">
+          <Notice tone="info">
+            {troubleLine(data.trouble)} A board that does not answer is skipped for now and tried again at your next search; nothing is lost.
+          </Notice>
+        </div>
+      )}
       <div className="space-y-4">
+        <CoverageCard />
         <Card>
           <h2 className="mb-3 font-semibold">Add a company</h2>
           <form onSubmit={add}>
@@ -82,6 +94,8 @@ export function SourcesPage() {
           </form>
         </Card>
 
+        <CareerPageCard queryKey={KEY} limit={data.limit} />
+
         <section aria-label="Your companies">
           <h2 className="mb-2 font-semibold">Your companies</h2>
           {rowError && <div className="mb-2"><Notice tone="error">{rowError}</Notice></div>}
@@ -95,8 +109,13 @@ export function SourcesPage() {
                     <div>
                       <strong>{s.name}</strong> {!s.enabled && <Badge tone="warn">paused</Badge>}
                       <p className="text-sm text-muted">
-                        {s.connector_label} · {s.board_token}
+                        {s.connector === "careerpage" ? `Careers page on ${s.host || s.board_token}` : `${s.connector_label} · ${s.board_token}`}
                       </p>
+                      {s.health && (
+                        <p className={`text-sm ${s.health.state === "error" ? "text-bad" : "text-muted"}`} data-testid="source-health">
+                          {sourceHealthText(s.health)}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -133,10 +152,34 @@ export function SourcesPage() {
           )}
         </section>
 
+        {sharedTrouble.length > 0 && (
+          <section aria-label="Shared boards that are not answering">
+            <h2 className="mb-2 font-semibold">Not answering right now</h2>
+            <ul className="space-y-1 text-sm">
+              {sharedTrouble.map((s) => (
+                <li key={s.name}>
+                  <strong>{s.name}</strong> <span className="text-bad">{sourceHealthText(s.health)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-xs text-muted">These are searched for everyone, so only the site&apos;s owner can change them.</p>
+          </section>
+        )}
+
         {data.shared.length > 0 && (
           <details>
             <summary className="cursor-pointer text-sm text-muted">Already searched for everyone ({data.shared.length}). Show the list</summary>
-            <p className="mt-2 text-sm text-muted">{data.shared.join(", ")}</p>
+            {data.shared_health && data.shared_health.length > 0 ? (
+              <ul className="mt-2 space-y-0.5 text-sm text-muted">
+                {data.shared_health.map((s) => (
+                  <li key={s.name}>
+                    {s.name}: {sourceHealthText(s.health)}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-muted">{data.shared.join(", ")}</p>
+            )}
           </details>
         )}
       </div>

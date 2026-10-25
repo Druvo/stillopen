@@ -16,8 +16,11 @@ import { gzipSync } from "node:zlib";
 //    About 142 kB of it is Next.js and React themselves, which nothing in this app can shrink.
 //  - The total grew (331.6 to 381.7 kB) on purpose: it now holds the new features plus the cost of splitting into 37 files instead of 18.
 //    It is no longer a measure of what a person downloads; the first-load budget is. The file budget fell from 100 to 70 kB.
+//  - The total went on to 413 kB with the ATS check and CV builder, the AI helpers, job management, the Help page and the
+//    statistics screens, each its own lazily loaded chunk: a person only downloads the screens they open. The budget is 430 so the
+//    next screen is a deliberate decision, while the first-load budget (168 kB now, limit 172) is what keeps the app quick to open.
 const FIRST_LOAD_BUDGET_KB = Number(process.env.BUNDLE_FIRST_LOAD_KB || 172);
-const TOTAL_BUDGET_KB = Number(process.env.BUNDLE_TOTAL_KB || 386);
+const TOTAL_BUDGET_KB = Number(process.env.BUNDLE_TOTAL_KB || 430);
 const FILE_BUDGET_KB = Number(process.env.BUNDLE_FILE_KB || 70);
 
 function scripts(dir) {

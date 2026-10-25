@@ -7,7 +7,7 @@ from django.core.mail import send_mail
 from django.utils import timezone
 
 from tracker.models import Application, Interview
-from tracker.services import integrations
+from tracker.services import integrations, links, tz
 
 REMINDER_HOURS = 24
 
@@ -32,7 +32,7 @@ def reminder_text(items) -> str:
             lines.append(f"  Where: {i.where}")
         if i.notes:
             lines.append(f"  Your notes: {i.notes[:300]}")
-    lines += ["", "Good luck. Mark how it went on your Interviews page afterwards."]
+    lines += ["", links.link_line("Good luck. Mark how it went on your Interviews page afterwards", "/interviews", "Interviews"), links.CHANGE_LINE]
     return "\n".join(lines)
 
 
@@ -71,7 +71,7 @@ def funnel(owner) -> dict:
     first_interview_days = []
     for a in interviewed:
         if a.applied_date:
-            first = min(timezone.localtime(i.scheduled_at).date() for i in a.interviews.all())
+            first = min(tz.local_date(i.scheduled_at, owner) for i in a.interviews.all())
             first_interview_days.append(_days(a.applied_date, first))
 
     def pct(part, whole):

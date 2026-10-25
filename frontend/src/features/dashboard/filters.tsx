@@ -31,13 +31,15 @@ type Props = {
   /** How many jobs the chosen stage tab holds, and how many of those the search and filters keep. */
   inStage: number;
   shown: number;
+  /** How many jobs "Hide weak matches" is leaving out of what the other filters keep. */
+  hidden?: number;
 };
 
 /**
  * The six filters, "Showing N of M" and "Clear filters". The dashboard shows this panel only when the person pressed the Filters button;
  * the stage tabs, the search box and the sort order live in the toolbar above it.
  */
-export function FilterPanel({ id, filters, set, reset, jobs, bandLabels, inStage, shown }: Props) {
+export function FilterPanel({ id, filters, set, reset, jobs, bandLabels, inStage, shown, hidden = 0 }: Props) {
   const countries = countryOptions(jobs);
   const filtered = isFiltered(filters);
   return (
@@ -86,8 +88,21 @@ export function FilterPanel({ id, filters, set, reset, jobs, bandLabels, inStage
           <option value="week">Last 7 days</option>
         </Select>
       </div>
+      <label className="mt-3 flex min-h-11 items-center gap-2 text-theme-sm sm:min-h-6">
+        <input type="checkbox" checked={filters.hideWeak} onChange={(e) => set({ hideWeak: e.target.checked })} />
+        <span>Hide weak matches (under 40%)</span>
+      </label>
+      <p className="text-theme-xs text-muted">Jobs that have not been checked yet are always shown.</p>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-theme-sm text-muted">{filtered ? `Showing ${shown} of ${inStage}` : `Showing all ${inStage}`}</span>
+        <span className="text-theme-sm text-muted">
+          {filtered ? `Showing ${shown} of ${inStage}` : `Showing all ${inStage}`}
+          {hidden > 0 ? ` (${hidden} hidden as weak ${hidden === 1 ? "match" : "matches"}) ` : ""}
+          {hidden > 0 && (
+            <button type="button" onClick={() => set({ hideWeak: false })} className="text-brand underline">
+              Show them
+            </button>
+          )}
+        </span>
         {filtered && (
           <button type="button" onClick={reset} className="min-h-11 px-2 text-theme-sm text-brand underline sm:min-h-0">
             Clear filters

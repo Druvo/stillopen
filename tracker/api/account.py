@@ -4,6 +4,7 @@ and deleting the account. The classic pages' own forms do the checking, so every
 A CV can arrive as a file: the profile and welcome saves accept JSON, or multipart when a `cv_file` is attached."""
 import json
 
+from django.conf import settings
 from django.contrib.auth import logout
 from django.db.models import Max
 from django.urls import reverse
@@ -12,7 +13,7 @@ from ninja.errors import HttpError
 
 from .. import forms
 from ..models import Application, KnowledgeSource, SearchArea, SiteConfig, UserProfile
-from ..services import account as account_service
+from ..services import account as account_service, links, tz
 from .common import owned, validate_form
 
 router = Router()
@@ -59,19 +60,24 @@ def _profile_json(user) -> dict:
             "seniority_levels": profile.seniority_levels, "industries": profile.industries, "languages": profile.languages,
             "notice_period": profile.notice_period, "salary_floor": profile.salary_floor, "deal_breakers": profile.deal_breakers,
             "about": profile.about, "profile_cv": profile.profile_cv, "scan_digest_enabled": profile.scan_digest_enabled,
+            "timezone": profile.timezone,
+            "email_followups": profile.email_followups, "email_interviews": profile.email_interviews, "email_weekly": profile.email_weekly,
         },
         "choices": {
             "employment_types": [{"value": v, "label": label} for v, label in UserProfile.EMPLOYMENT],
             "seniority_levels": [{"value": v, "label": label} for v, label in UserProfile.SENIORITY],
             "salary_periods": [{"value": v, "label": label} for v, label in SearchArea.PERIODS],
+            "timezones": tz.COMMON_ZONES,
         },
         "areas": [area_json(a) for a in areas],
         "max_areas": forms.MAX_AREAS,
         "site": {
-            "scan_emails_enabled": site.scan_emails_enabled, "assistant_enabled": site.mcp_remote_enabled,
+            "scan_emails_enabled": site.scan_emails_enabled, "followup_emails_enabled": site.followup_emails_enabled,
+            "weekly_emails_enabled": site.weekly_emails_enabled, "assistant_enabled": site.mcp_remote_enabled,
+            "timezone": settings.TIME_ZONE,
         },
         "account": {
-            "username": user.get_username(), "email": user.email, "is_staff": user.is_staff, "can_delete": not user.is_staff,
+            "username": user.get_username(), "email": user.email, "email_verified": links.verified_address(user), "is_staff": user.is_staff, "can_delete": not user.is_staff,
             "google": user.socialaccount_set.filter(provider="google").exists(),
             "counts": {
                 "jobs": Application.objects.filter(owner=user).count(), "cv_versions": user.cv_versions.count(),

@@ -1,0 +1,24 @@
+{
+ "total": {
+  "value": 1
+ },
+ "hits": [
+  {
+   "id": "1",
+   "webpage_url": "https://example.org/platsbanken/annonser/1",
+   "headline": "Systemutvecklare",
+   "publication_date": "2026-10-20T08:00:00",
+   "description": {
+    "text": "Du arbetar med systemutveckling i ett agilt team."
+   },
+   "employer": {
+    "name": "Exempelmyndigheten"
+   },
+   "workplace_address": {
+    "municipality": "Östersund",
+    "region": "Jämtlands län",
+    "country": "Sverige"
+   }
+  }
+ ]
+}

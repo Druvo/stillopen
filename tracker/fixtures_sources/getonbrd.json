@@ -1,0 +1,67 @@
+{
+ "data": [
+  {
+   "id": "x",
+   "type": "job",
+   "attributes": {
+    "title": "Backend Developer",
+    "description": "<ul><li>Build APIs with Python.</li></ul>",
+    "functions": "<p>Own services.</p>",
+    "projects": "",
+    "remote": false,
+    "countries": [
+     "Chile"
+    ],
+    "min_salary": 3000,
+    "max_salary": 4500,
+    "published_at": 1792866099,
+    "company": {
+     "data": {
+      "id": "co-1",
+      "type": "company",
+      "attributes": {
+       "name": "Ejemplo SpA"
+      }
+     }
+    }
+   },
+   "links": {
+    "public_url": "https://example.org/getonbrd/backend-developer"
+   }
+  },
+  {
+   "id": "x",
+   "type": "job",
+   "attributes": {
+    "title": "Data Engineer",
+    "description": "<ul><li>Build APIs with Python.</li></ul>",
+    "functions": "<p>Own services.</p>",
+    "projects": "",
+    "remote": true,
+    "countries": [
+     "Remote"
+    ],
+    "min_salary": 3000,
+    "max_salary": 4500,
+    "published_at": 1792866099,
+    "company": {
+     "data": {
+      "id": "co-1",
+      "type": "company",
+      "attributes": {
+       "name": "Ejemplo SpA"
+      }
+     }
+    }
+   },
+   "links": {
+    "public_url": "https://example.org/getonbrd/data-engineer"
+   }
+  }
+ ],
+ "meta": {
+  "page": 1,
+  "per_page": 2,
+  "total_pages": 1
+ }
+}

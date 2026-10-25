@@ -1,0 +1,7 @@
+{% extends "account/base_entrance.html" %}
+{% block head_title %}Please wait a moment{% endblock %}
+{% block content %}
+<h2 class="card-title">Too many tries. Please wait a few minutes.</h2>
+<p>You (or someone on the same internet connection) have tried this a few too many times in a short while, so we have paused it to keep everyone's account safe.</p>
+<p class="text-secondary mb-0">Give it about ten minutes and try again. If you forgot your password, you can <a href="{% url 'account_reset_password' %}">reset it</a>.</p>
+{% endblock %}

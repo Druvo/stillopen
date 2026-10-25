@@ -36,11 +36,13 @@ export type Insights = {
 };
 
 type Ok = { ok: true };
+/** Saving an interview or an offer says which status the job could move to, if it is not there yet (the person decides). */
+export type Saved = { id: number; suggest_status: { id: number; name: string; label: string } | null };
 
 export const pipelineApi = {
   interviews: () => request<InterviewList>("GET", "/interviews"),
-  addInterview: (v: InterviewValues) => request<{ id: number }>("POST", "/interviews", v),
-  editInterview: (id: number, v: InterviewValues) => request<{ id: number }>("PATCH", `/interviews/${id}`, v),
+  addInterview: (v: InterviewValues) => request<Saved>("POST", "/interviews", v),
+  editInterview: (id: number, v: InterviewValues) => request<Saved>("PATCH", `/interviews/${id}`, v),
   interviewOutcome: (id: number, outcome: string) => request<Ok>("POST", `/interviews/${id}/outcome`, { outcome }),
   deleteInterview: (id: number) => request<Ok>("DELETE", `/interviews/${id}`),
 
@@ -53,8 +55,8 @@ export const pipelineApi = {
   deleteReferral: (id: number) => request<Ok>("DELETE", `/referrals/${id}`),
 
   offers: () => request<OfferList>("GET", "/offers"),
-  addOffer: (v: OfferValues) => request<{ id: number }>("POST", "/offers", v),
-  editOffer: (id: number, v: OfferValues) => request<{ id: number }>("PATCH", `/offers/${id}`, v),
+  addOffer: (v: OfferValues) => request<Saved>("POST", "/offers", v),
+  editOffer: (id: number, v: OfferValues) => request<Saved>("PATCH", `/offers/${id}`, v),
   offerStatus: (id: number, status: string) => request<Ok>("POST", `/offers/${id}/status`, { status }),
   deleteOffer: (id: number) => request<Ok>("DELETE", `/offers/${id}`),
 

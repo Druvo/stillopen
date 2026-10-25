@@ -127,10 +127,10 @@ test("the Your search card sums up what drives the matches and says where to cha
   await expect(card).toBeVisible();
   await expect(card.getByText("Backend Engineer")).toBeVisible();
   await expect(card.getByText("Your CV")).toBeVisible();
-  await expect(card.getByRole("link", { name: "Change roles" })).toHaveAttribute("href", "/app/profile");
-  await expect(card.getByRole("link", { name: "Change how fit is judged" })).toHaveAttribute("href", "/app/profile/ai");
-  await expect(card.getByRole("link", { name: /^(Change|Add) places$/ })).toHaveAttribute("href", "/app/profile#areas");
-  await card.getByRole("link", { name: "Change roles" }).click();
+  await expect(card.getByRole("link", { name: "Your search: change roles" })).toHaveAttribute("href", "/app/profile");
+  await expect(card.getByRole("link", { name: "Your search: change how fit is judged" })).toHaveAttribute("href", "/app/profile/ai");
+  await expect(card.getByRole("link", { name: /^Your search: (change|add) places$/ })).toHaveAttribute("href", "/app/profile#areas");
+  await card.getByRole("link", { name: "Your search: change roles" }).click();
   await expect(page).toHaveURL(/\/app\/profile$/);
 });
 
@@ -154,7 +154,7 @@ test("signing out removes what this tab kept", async ({ page }) => {
   await page.waitForTimeout(600);
   expect(await page.evaluate(() => sessionStorage.getItem("stillopen-query-cache"))).not.toBeNull();
   await page.getByRole("button", { name: "Your account" }).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/app/"));
   expect(await page.evaluate(() => sessionStorage.getItem("stillopen-query-cache"))).toBeNull();
 });
@@ -169,7 +169,7 @@ test("at 375 px the layout has no sideways scroll, and the side cards fold", asy
   await expect(search).toHaveAttribute("aria-expanded", "false");
   await search.click();
   await expect(search).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByRole("link", { name: "Change roles" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Your search: change roles" })).toBeVisible();
   expect(await overflow()).toBeLessThanOrEqual(0);
   // the main controls are big enough to touch
   for (const control of [page.getByRole("button", { name: "Filters" }), page.getByRole("button", { name: "Board", exact: true }), page.getByRole("tab", { name: "All 3" })]) {

@@ -7,7 +7,7 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 
 from ..models import CVVersion, SiteConfig
-from ..services import cvexport, cvgen, cvversions
+from ..services import ats, cvexport, cvgen, cvversions
 from ..services.cvversions import CVError
 from ..services.throttle import throttled
 from .common import owned, owned_job
@@ -30,6 +30,7 @@ def _summary(version: CVVersion) -> dict:
         "source": version.source, "source_label": version.get_source_display(), "provider": version.provider,
         "created_at": version.created_at.isoformat(), "job": _job(version),
         "flagged": version.flagged, "flagged_count": len(version.check_report or []), "approved": version.approved, "exportable": version.exportable,
+        "ats_readiness": ats.cached_readiness(version.pk, version.content),
     }
 
 

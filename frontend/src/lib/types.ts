@@ -1,8 +1,11 @@
 // Shapes returned by /api/v1/. Written by hand for now; the API returns plain dicts, so there is nothing to generate from yet.
 
+import type { PostingSummary } from "@/features/assist/api";
+
 export type Bucket = { key: string; label: string; description: string; is_closed: boolean };
 
-export type StatusInfo = { id: number; name: string; bucket_key: string; color: string; counts_as_applied: boolean };
+/** `label` is what a screen shows (the stored `name` is what code looks up); older answers may not have it. */
+export type StatusInfo = { id: number; name: string; label?: string; bucket_key: string; color: string; counts_as_applied: boolean };
 
 export type Repost = { distinct_urls: number; distinct_dates: number; first_seen: string; last_seen: string };
 
@@ -51,11 +54,17 @@ export type Job = {
   cv: CvBadge | null;
   repost: Repost | null;
   skill_matched: boolean;
+  /** "Jobs by Adzuna" when the job came from an Adzuna search (their terms ask for the credit). */
+  credit?: { label: string; url: string } | null;
   evaluated: boolean;
   ai_evaluated: boolean;
   ai_method: string;
   has_description: boolean;
   documents: JobDocument[];
+  /** The saved reading of the posting (what it needs, red flags), if the person asked for one. */
+  ai_summary?: PostingSummary | null;
+  /** Progress of the prep plan made for this job, if there is a started one. */
+  prep?: { id: number; percent: number } | null;
 };
 
 export type NextStep = { headline: string; body: string; label: string; url: string };
@@ -83,6 +92,9 @@ export type ScanLog = ScanStatus & { entries: ScanEntry[] };
 
 export type Followup = { id: number; company: string; role: string; follow_up_date: string; applied_date: string | null };
 
+/** One line of the dashboard's "Coming up" card: an interview, a job's apply-by date, or an offer's reply-by date. */
+export type ComingUpItem = { kind: "interview" | "deadline" | "offer"; date: string; when: string; label: string; company: string; role: string; job_id: number };
+
 export type UpcomingInterview = { id: number; when: string; kind: string; company: string; role: string; job_id: number };
 
 /** What drives the matches, for the dashboard's "Your search" card. */
@@ -108,6 +120,8 @@ export type Dashboard = {
   stats: { total: number; submitted: number; average_match: number | null; urgent: number };
   followups: Followup[];
   upcoming_interviews: UpcomingInterview[];
+  /** The next 14 days, soonest first: interviews, apply-by dates and offer reply-by dates together. */
+  coming_up?: ComingUpItem[];
   next_step: NextStep | null;
   can_scan: boolean;
   checked_at: string | null;
@@ -122,6 +136,8 @@ export type Dashboard = {
   search_summary: SearchSummary;
   /** Show the card asking, first of all, for a Google AI Studio key (nothing but the free keyword check is set up, and not dismissed). */
   ai_prompt: { show: boolean };
+  /** How many job sources had trouble in the last finished search, or null when there was none (or nothing to report). */
+  source_trouble?: { total: number; trouble: number } | null;
 };
 
 // ---- per-person preferences, saved on the server (GET/PUT /preferences, also inside /me) ----------------------------------
@@ -143,6 +159,10 @@ export type Preferences = {
   filters_open: boolean;
   /** The person said "not now" to the card asking for a Google AI Studio key. */
   ai_prompt_dismissed: boolean;
+  /** The person said "not now" to the suggestion to use this device's time zone. */
+  tz_prompt_dismissed: boolean;
+  /** Leave out jobs whose match is under 40% (a job that has not been checked yet is always shown). */
+  hide_weak: boolean;
   filters: PrefFilters;
   sidebar: "expanded" | "collapsed";
   theme: Theme;
@@ -164,6 +184,13 @@ export type Me = {
   prep_enabled: boolean;
   assistant_enabled: boolean;
   email_unverified_signups: boolean;
+  /** The person's own time zone ("" = the site's) and the site's. */
+  timezone: string;
+  site_timezone: string;
   legal_has_blanks: boolean;
+  /** Site admins only: neither a Jooble nor an Adzuna key is set, so whole countries have no job search behind them. */
+  no_search_keys?: boolean;
+  /** The site's public contact address, or "" when the site owner has not set one. */
+  contact_email?: string;
   preferences: Preferences;
 };

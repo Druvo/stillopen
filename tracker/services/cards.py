@@ -12,12 +12,12 @@ def band_for(percent, bands):
     return None
 
 
-def card_for(app, config, bands, areas=None, profile=None, reposts=None):
+def card_for(app, config, bands, areas=None, profile=None, reposts=None, today=None):
     """`reposts` is the batch from `scan.repost_signals` (one lookup for the whole page); without it each card looks its own up."""
     percent = app.match_percent(config.score_scale)
     fit = fit_service.fit_flags(app, areas if areas is not None else [], profile)
     band = band_for(percent, bands)
-    days = app.days_left()
+    days = app.days_left(today)
     return {
         "app": app,
         "percent": percent,

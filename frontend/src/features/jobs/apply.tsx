@@ -9,9 +9,13 @@ import { letterSaid, tailoredSaid, type Said } from "@/features/cv/messages";
 import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
+import { ApplicationAnswers } from "@/features/assist/answers";
+import { InterviewPrepSection } from "@/features/assist/interview-prep";
+import { MessageDraftCard } from "@/features/assist/message-draft";
 import { FitList } from "./edit-job";
 import { jobsApi, type ApplyData } from "./api";
 import { appliedMessage } from "./logic";
+import { ReplyPaste } from "./reply-paste";
 
 /** Makes a new CV version or letter for this job, then opens it so the person can review it. */
 function MakeButton({ label, busyLabel, make }: { label: string; busyLabel: string; make: () => Promise<{ path: string; said: Said }> }) {
@@ -202,6 +206,10 @@ export function ApplyAssistant({ id }: { id: number }) {
         <FitList checks={data.checks} empty="Nothing to check yet." />
       </Card>
       <RecordForm id={id} data={data} />
+      <ReplyPaste jobId={id} />
+      <ApplicationAnswers jobId={id} />
+      <InterviewPrepSection jobId={id} />
+      <MessageDraftCard jobId={id} />
     </>
   );
 }

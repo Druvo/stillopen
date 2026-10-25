@@ -104,12 +104,27 @@ DEFAULT_FROM_EMAIL=StillOpen <jobs@example.com>
 Then check it: `docker compose -f docker-compose.selfhost.yml exec stillopen python manage.py check_email --to you@example.com`
 (without Docker: `python manage.py check_email --to you@example.com`). It prints the settings (never the password) and sends one test message.
 
+## More countries (optional, free)
+
+Out of the box StillOpen reads company hiring boards and remote-job feeds. Two free job searches add whole countries, each asked with the roles every person has chosen. Without a key they are skipped and nothing breaks; the dashboard shows you, as the owner, a reminder until one is set.
+
+1. **Adzuna** (UK, US, Canada, Australia, New Zealand, India, Singapore, South Africa, Brazil, Mexico, Poland and most of western Europe). Register at <https://developer.adzuna.com>, copy the **app id** and **app key** from your dashboard, and paste them under Site configuration > Job search keys (or set `ADZUNA_APP_ID` and `ADZUNA_APP_KEY`). Test with `python manage.py check_adzuna --country gb`. Adzuna asks for a "Jobs by Adzuna" credit next to its results (the app adds it) and its free plan is rate limited, so searches are cached for a few hours and only ask the countries a person's search areas cover. Its results are never put on the public job board.
+2. **Jooble** (Bangladesh, Pakistan, India, Malaysia, Singapore, Indonesia, the Philippines, Thailand, the Gulf, Egypt, Nigeria, South Africa, Brazil, Mexico, Poland, Turkey). Request a free key at <https://jooble.org/api/about> (they approve it by email), paste it in the same place (or set `JOOBLE_API_KEY`), and test with `python manage.py check_jooble --place pk`.
+
+Two country searches need no key: JobTech (Sweden's public employment service) and Get on Board (tech jobs in Latin America). People can see where each of their search places stands, and what to do about an empty one, under Job sources > "Where we find jobs for you". Existing installs get the new sources once when you update; `python manage.py seed_sources` adds any that are missing.
+
 ## Scheduled jobs (optional)
 
 None are required: a person's search runs when they open the dashboard, and the public job board refreshes itself when a visitor arrives and it is stale.
-Schedule these only for emails and always-fresh data: interview reminders, follow-up emails, job alerts, board refresh. Ready-made files:
+Schedule these only for emails and always-fresh data: interview reminders, follow-up emails, job alerts, the weekly summary, board refresh. Ready-made files:
 [`deploy/crontab.example`](../deploy/crontab.example) (Linux/macOS) and [`deploy/windows/schedule-stillopen.ps1`](../deploy/windows/schedule-stillopen.ps1) (Windows).
 With Docker, run the same commands through `docker compose ... exec -T stillopen python manage.py <command>`.
+
+Each email type has two switches: yours (Site configuration > Dashboard: follow-up emails, job alerts, **weekly emails**) and each person's own tick under
+Profile > Emails. Nothing is sent unless both are on, and only to an email address the person has confirmed. The weekly email is
+`python manage.py send_weekly_summary` (one cron line, Monday morning is typical): one plain-text email per person, never twice in 6 days, and none at all
+when there is nothing due or coming up. Emails link back to the app using Site configuration > Email > **public_base_url** (for example `https://jobs.example.com`);
+if that is blank they fall back to the Sites domain, and without either they simply say where to go in the app instead of printing a link.
 
 ## Putting it on the internet
 
@@ -142,6 +157,35 @@ ALLAUTH_TRUSTED_PROXY_COUNT=1
 
 and restart. The compose file publishes only on `127.0.0.1`, so the proxy is the only way in. `ALLAUTH_TRUSTED_PROXY_COUNT=1` makes the per-IP sign-up limits see visitors rather than the proxy.
 Before you open registration to other people, run through the checklist in [HOSTING.md](HOSTING.md): email that works, completed legal text, schedules, and (if you show the public job board) the rules about which sources may be shown.
+
+## More than one worker (optional, needs Redis)
+
+By default StillOpen runs **one** gunicorn worker with 16 threads. That is deliberate: the per-person limits (AI checks, searches, CV tailoring, MCP calls),
+the sign-in and sign-up limits, and the public board's refresh lock are all counted in Django's cache, and the default cache is each process's own memory.
+With two workers every limit would be twice as loose. One worker is plenty for a household or a few hundred people; add workers only when
+the CPU of that one process is the bottleneck.
+
+To run several workers, give them a shared cache. Add the Redis file and a worker count:
+
+```bash
+# .env
+STILLOPEN_WORKERS=4
+# start
+docker compose -f docker-compose.selfhost.yml -f docker-compose.redis.yml up -d --build
+```
+
+(add `-f docker-compose.postgres.yml` and `-f docker-compose.caddy.yml` as usual: the files stack in any combination). `docker-compose.redis.yml` runs `redis:7-alpine`
+with no disk persistence (only counters and locks live there, so losing them on a restart merely resets everyone's rate-limit window) and sets
+`REDIS_URL=redis://redis:6379/0` for the app. Without Docker: `pip install -r requirements-hosting.txt`, set `REDIS_URL` (any `redis://` or `rediss://` address) and start gunicorn
+with `--workers N`. With Redis on, the limits are shared by every worker. If you raise `STILLOPEN_WORKERS` (or gunicorn's
+`WEB_CONCURRENCY`) without `REDIS_URL`, `manage.py check` prints warning `stillopen.W003`.
+
+What stays per process even with Redis: the **background threads**. A person's job search, the open/closed check, the prep-plan writer and the public-board refresh each run
+as a thread inside the worker that started them. That is fine (the request that starts one returns at once and the page polls the database, which every worker shares;
+a lock in the cache stops two workers refreshing the public board at the same moment), but a restart or deploy of that worker stops its threads. A search or plan that was
+running is shown as stalled after a while and can be started again. Scheduled jobs (`deploy/crontab*.example`) are separate processes and do not care how many workers there are.
+
+If Redis is unreachable, requests that count a limit fail with an error until it is back: keep it on the same host, as the compose file does.
 
 ## What leaves your server
 
@@ -206,6 +250,44 @@ that folder somewhere else (rsync, rclone, a NAS). Restore command: see the top 
 Keep the secret key (`DJANGO_SECRET_KEY`, or `/data/.secret_key` in the Docker volume) with the backup: stored API keys cannot be decrypted without it.
 To restore, put the file back and start the app.
 
+### Copying backups off the machine
+
+`deploy/backup-offsite.sh` takes the newest verified dump from `~/stillopen-backups`, copies it to a remote with **rclone** (preferred), `rsync` or `scp`, checks the copy
+(rclone compares hashes or sizes; rsync/scp compare a SHA-256 read back over ssh), and deletes all but the newest 7 copies there. It never reads, prints or logs a
+credential: rclone keeps its own in `rclone config`, and ssh uses a key file. It exits non-zero if anything fails, so cron's mail or your log shows it.
+
+```bash
+cp deploy/offsite.env.example ~/.stillopen-offsite.env && chmod 600 ~/.stillopen-offsite.env     # set OFFSITE_REMOTE (and OFFSITE_METHOD)
+OFFSITE_DRY_RUN=1 deploy/backup-offsite.sh      # shows what it would copy, copies nothing
+deploy/backup-offsite.sh                         # for real; deploy/crontab.docker.example runs it nightly at 03:10, after the dump at 02:30
+```
+
+Use an encrypted rclone remote (type `crypt`) so the provider cannot read your people's data. Optional extras in the env file: `OFFSITE_INCLUDE_MEDIA=1` (an archive of uploaded
+files) and `OFFSITE_INCLUDE_SECRET_KEY=1` (the key that unlocks stored API keys: only to a remote you encrypt). Without the secret key a restored copy still works, but people
+must paste their AI keys again.
+
+**Restoring from the off-site copy, step by step** (a new machine, or after losing this one):
+
+1. Install Docker and rclone, clone the project, and put your `.env` back (at least `POSTGRES_PASSWORD`, `DJANGO_ALLOWED_HOSTS`, the email lines).
+2. Set up the same rclone remote (`rclone config`; for a crypt remote you need its password, keep that somewhere other than the backup itself).
+3. See what is there and pick a file: `rclone lsf myremote:stillopen-backups` (the newest name sorts last).
+4. Download it, and the secret key if you saved one: `rclone copyto myremote:stillopen-backups/stillopen-20261025T023000Z.dump ./restore.dump`
+   and `rclone copyto myremote:stillopen-backups/secret_key ./secret_key`. (With rsync or scp, copy the same files from the remote folder.)
+5. Check it reads back: `docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml run --rm -T db pg_restore --list < restore.dump | head`
+6. Start only the database: `docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml up -d db`
+7. Restore: `docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml exec -T db pg_restore -U stillopen -d stillopen --clean --if-exists < restore.dump`
+8. Put the secret key where the app reads it: set `DJANGO_SECRET_KEY` in `.env` to its contents, or after the first start copy it to `/data/.secret_key` in the volume
+   (`docker compose ... cp ./secret_key stillopen:/data/.secret_key`). Do this **before** people sign in, or stored API keys cannot be decrypted.
+9. Start everything: `docker compose -f docker-compose.selfhost.yml -f docker-compose.postgres.yml up -d --build`, sign in, and check a person's jobs are there.
+10. Uploaded files (if you archived media): `docker compose ... exec -T stillopen tar -xzf - -C /data < stillopen-media-....tar.gz`.
+
+Test this once on a spare machine before you need it: a backup you have never restored is only a hope.
+
+### Logs
+
+Docker keeps each container's log in 3 files of at most 10 MB (set in every compose file), so logs cannot fill the disk. Without Docker, point gunicorn and your cron jobs at files in
+`$APP/logs/` and install `deploy/logrotate.stillopen` (copy it to `/etc/logrotate.d/stillopen`, fix the paths, test with `logrotate --debug`).
+
 ## Updating
 
 ```bash
@@ -226,6 +308,7 @@ image that ran as root, give it to that user once: `docker compose -f docker-com
 | No jobs appear | Check the person has a target role or a CV and that Job sources are not all paused; the dashboard's scan log shows each source's result |
 | Search is slow the first time | About a minute is normal while about 120 sources are read; later searches reuse a six-hour cache |
 | Emails do not arrive | `python manage.py check_email --to you@example.com`; then your provider's logs and spam folder |
+| Limits are shared by every visitor, or one person's wrong passwords lock others out | The proxy settings are wrong. Behind a proxy set `DJANGO_BEHIND_PROXY=1` **and** `ALLAUTH_TRUSTED_PROXY_COUNT=1` (the number of proxies in front), and make the proxy send `X-Forwarded-For` (Caddy and the sample nginx file do). `manage.py check` warns about the first mismatch and the log names a wrong header at most once an hour |
 | Public board is empty | `python manage.py refresh_postings`; make sure some sources are ticked *Show publicly* |
 
 ## Uninstalling

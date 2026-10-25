@@ -1,0 +1,17 @@
+# Log rotation for a StillOpen install that is NOT run in Docker (Docker rotates its own logs: the compose files cap each
+# container at 3 files of 10 MB). Install:
+#   sudo cp deploy/logrotate.stillopen /etc/logrotate.d/stillopen      (then fix the two paths and the user/group below)
+#   sudo logrotate --debug /etc/logrotate.d/stillopen                   (a dry run; nothing is changed)
+# gunicorn/systemd output goes to the journal, which has its own limits (journalctl --vacuum-size=200M). This file is for the
+# log files you point cron jobs and gunicorn at, for example $APP/logs/cron.log and $APP/logs/gunicorn.log.
+/srv/stillopen/logs/*.log {
+    weekly
+    rotate 8
+    maxsize 50M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    # copytruncate: cron's ">>" and gunicorn keep the file open, so truncate in place instead of moving it
+    copytruncate
+}

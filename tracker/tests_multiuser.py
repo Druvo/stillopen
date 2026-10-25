@@ -406,7 +406,7 @@ class AddingJobsAndDocuments(TestCase):
         self.assertFalse(Application.objects.filter(company="Third").exists())
 
     @mock.patch("tracker.services.netguard.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))])
-    @mock.patch("tracker.services.netguard.requests.get")
+    @mock.patch("tracker.services.netguard._get_pinned")
     def test_quickadd_reads_the_link_and_saves_nothing(self, get, _dns):
         get.return_value = mock.Mock(
             status_code=200, is_redirect=False, headers={},

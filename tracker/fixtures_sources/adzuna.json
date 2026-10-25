@@ -1,0 +1,45 @@
+{
+ "count": 2,
+ "results": [
+  {
+   "id": "1",
+   "title": "Senior <strong>Python</strong> Developer",
+   "description": "Build and run <strong>Python</strong> services for a growing team...",
+   "created": "2026-10-20T09:00:00Z",
+   "redirect_url": "https://www.adzuna.in/land/ad/1?se=abc&v=def",
+   "salary_min": 1200000,
+   "salary_max": 1800000,
+   "salary_is_predicted": "0",
+   "company": {
+    "display_name": "Example Pvt Ltd"
+   },
+   "location": {
+    "display_name": "Pune, Maharashtra",
+    "area": [
+     "India",
+     "Maharashtra",
+     "Pune"
+    ]
+   }
+  },
+  {
+   "id": "2",
+   "title": "Backend Engineer",
+   "description": "Work on APIs.",
+   "created": "2026-10-19T09:00:00Z",
+   "redirect_url": "https://www.adzuna.in/land/ad/2?se=abc&v=def",
+   "salary_min": 900000,
+   "salary_max": 900000,
+   "salary_is_predicted": "1",
+   "company": {
+    "display_name": "Sample Corp"
+   },
+   "location": {
+    "display_name": "India",
+    "area": [
+     "India"
+    ]
+   }
+  }
+ ]
+}

@@ -70,7 +70,7 @@ test("every job card shows what the classic card showed, with the extra actions 
   const more = (c: ReturnType<typeof card>) => c.getByRole("button", { name: /More actions/ });
 
   const acme = card(page, "Backend Engineer");
-  await expect(acme.getByText("USD 90k")).toBeVisible();
+  await expect(acme.getByText("USD 90k", { exact: true })).toBeVisible();
   await expect(acme.getByRole("button", { name: "Check my fit" })).toHaveAttribute("title", /How we judge: /);
   await more(acme).click();
   await expect(page.getByRole("menuitem", { name: "Tailor my CV" })).toBeVisible();
@@ -237,7 +237,7 @@ test("a follow-up that is due can be put off, and then it is gone from the list"
   await expect(page.getByText(/Initech — API Developer \(due/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Coming up" })).toBeVisible();
   await expect(page.getByRole("link", { name: "All interviews" })).toHaveAttribute("href", "/app/interviews");
-  await expect(page.getByRole("link", { name: "Open", exact: true }).first()).toHaveAttribute("href", /\/app\/jobs\/\d+\/apply$/);
+  await expect(page.getByRole("link", { name: /^Open the .* follow-up at / }).first()).toHaveAttribute("href", /\/app\/jobs\/\d+\/apply$/);
 
   await page.getByRole("button", { name: "In 3 days" }).click();
   await expect(page.getByRole("heading", { name: "Time to follow up" })).toHaveCount(0);

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from tracker.models import SiteConfig
+from tracker.models import SiteConfig, UserProfile
 from tracker.services import pipeline, who
 
 
@@ -25,6 +25,7 @@ class Command(BaseCommand):
                 raise CommandError(str(exc)) from exc
         else:
             owners = list(get_user_model().objects.filter(is_active=True))
+        owners = [o for o in owners if UserProfile.for_user(o).email_interviews]  # the person's own choice, once the admin switch is on
         sent = skipped = 0
         for owner in owners:
             items = pipeline.due_interview_reminders(owner)

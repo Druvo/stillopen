@@ -3,6 +3,8 @@ from tracker.models import CoverLetter, CVVersion
 
 BODIES = {
     ("POST", "/api/v1/cv/{cv_id}/edit"): {"content": "# Someone\n- a line"},
+    ("POST", "/api/v1/cv/{cv_id}/improve"): {},  # ATS check (GET /cv/{cv_id}/ats) needs no body; improve asks the person's own AI, so a stranger's CV is refused first
+    ("POST", "/api/v1/cv/builder"): {"answers": {}},
     ("POST", "/api/v1/jobs/{job_id}/tailor"): {"mode": "keywords"},
     ("POST", "/api/v1/cover/{cover_id}/save"): {"content": "Dear hiring team,"},
     ("POST", "/api/v1/jobs/{job_id}/cover-letter"): {"mode": "keywords"},

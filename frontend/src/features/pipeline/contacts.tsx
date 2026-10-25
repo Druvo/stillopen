@@ -8,6 +8,7 @@ import { errorText } from "@/lib/api";
 import { notify } from "@/lib/toast";
 import { pipelineApi, type Contact, type ContactList, type ContactValues, type ReferralValues } from "./api";
 import { dayLabel } from "./logic";
+import { ReferralDraft } from "./referral";
 
 const KEY = ["pipeline", "contacts"] as const;
 
@@ -133,6 +134,9 @@ function Person({ item, data, onEdit }: { item: Contact; data: ContactList; onEd
             Delete
           </Button>
         </div>
+      </div>
+      <div className="mt-3">
+        <ReferralDraft contact={item} jobs={data.jobs} />
       </div>
       {item.referrals.length > 0 && (
         <ul className="mt-3 space-y-2 border-t border-border pt-3">

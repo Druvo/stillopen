@@ -450,6 +450,9 @@ def toggle_done(plan: PrepPlan, item) -> None:
         return
     item.done_at = None if item.done_at else timezone.now()
     item.save(update_fields=["done_at"])
+    from tracker.services import assist  # late: assist imports ai, which imports this module's neighbours
+
+    assist.note_prep_done(plan, item)  # "Prep: finished '...'" on the job's timeline; unticking removes nothing
     done, total = plan.progress_counts()
     new_status = "done" if total and done == total else "active"
     if new_status != plan.status:

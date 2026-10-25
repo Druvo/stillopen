@@ -7,14 +7,16 @@ import { Button, buttonClass, Card, Notice, Progress } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
-import type { Dashboard, Followup, Me, NextStep, ScanStatus, SearchSummary, UpcomingInterview } from "@/lib/types";
+import type { Dashboard, Followup, Me, NextStep, ScanStatus, SearchSummary, ComingUpItem } from "@/lib/types";
 import { useIsWide } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { jobsApi } from "@/features/jobs/api";
+import { duplicateMessage } from "@/features/jobs/jobmgmt";
 import type { Stats } from "@/features/stats/api";
 import { cardTiles } from "@/features/stats/logic";
 import { dashboardApi } from "./api";
-import { entryText, interviewWhen, nextStepTarget, scanPercent, scanTitle, searchRows, shortDate } from "./logic";
+import { comingUpAllLinks, comingUpText, comingUpTo } from "./coming-up";
+import { entryText, nextStepTarget, scanPercent, scanTitle, searchRows, shortDate } from "./logic";
 import { stashPrefill } from "./prefill";
 
 export function Spinner() {
@@ -29,6 +31,15 @@ export function StaffBanners({ me }: { me?: Me }) {
       {me.email_unverified_signups && (
         <Notice>
           Sign-up is open, but this server has no email set up, so new people are let in without confirming their address. Set <code>EMAIL_HOST</code> (see docs/HOSTING.md) to turn confirmation back on.
+        </Notice>
+      )}
+      {me.no_search_keys && (
+        <Notice>
+          Add a free Jooble or Adzuna key to find jobs in more countries. Without one, whole countries have no job search behind them. Add it under{" "}
+          <a href="/admin/tracker/siteconfig/" className="text-brand underline">
+            Site configuration &gt; Job search keys
+          </a>
+          .
         </Notice>
       )}
       {me.legal_has_blanks && (
@@ -168,6 +179,9 @@ export function QuickAdd() {
     try {
       const found = await jobsApi.quickAdd(link);
       stashPrefill(found);
+      if (found.blocked_host) notify("We kept the link. That site does not let us read its pages, so the next screen asks you to paste the job text.", "info");
+      // Already tracking it? Say so now; the form that opens asks again before saving.
+      if (found.duplicate) notify(`${duplicateMessage(found.duplicate)} You can open it, or add this one anyway on the next screen.`, "info");
       navigate("/jobs/add");
     } catch (e) {
       notify(errorText(e, "Could not fetch that page"), "error");
@@ -275,59 +289,77 @@ export function LastSearchBody({ scan, starting, canScan }: { scan: ScanStatus |
 }
 
 /** What drives the matches, with where to change each thing. Read-only: the changing happens in Profile. */
-export function YourSearchBody({ summary }: { summary: SearchSummary }) {
+export function YourSearchBody({ summary, emptyPlaces }: { summary: SearchSummary; emptyPlaces?: string | null }) {
   return (
     <div>
-      <dl className="space-y-2">
+      <ul className="space-y-2">
         {searchRows(summary).map((row) => (
-          <div key={row.key} className="flex items-start justify-between gap-3 text-theme-sm">
-            <div className="min-w-0">
-              <dt className="text-theme-xs text-muted">{row.label}</dt>
-              <dd className={cn("break-words", row.empty && "text-muted")}>{row.value}</dd>
-            </div>
-            <Link to={row.to} aria-label={`${row.empty ? "Add" : "Change"} ${row.action}`} className="shrink-0 rounded px-1 py-0.5 text-theme-xs text-brand underline">
+          <li key={row.key} className="flex items-start justify-between gap-3 text-theme-sm">
+            <dl className="min-w-0">
+              <div>
+                <dt className="text-theme-xs text-muted">{row.label}</dt>
+                <dd className={cn("break-words", row.empty && "text-muted")}>{row.value}</dd>
+              </div>
+            </dl>
+            <Link to={row.to} aria-label={`Your search: ${row.empty ? "add" : "change"} ${row.action}`} className="link-target shrink-0 rounded px-1 text-theme-xs text-brand underline">
               {row.empty ? "Add" : "Change"}
             </Link>
-          </div>
+          </li>
         ))}
-      </dl>
+      </ul>
+      {emptyPlaces && (
+        <p className="mt-3 text-theme-xs text-muted">
+          {emptyPlaces}{" "}
+          <Link to="/sources" className="link-target text-brand underline">
+            See why and what to do
+          </Link>
+        </p>
+      )}
     </div>
   );
 }
 
 /** A compact "This week": found, checked, applied and waiting, with a way into the full numbers. */
-export function ThisWeekBody({ stats }: { stats: Pick<Stats, "week" | "waiting"> }) {
+export function ThisWeekBody({ stats }: { stats: Pick<Stats, "week" | "waiting"> & { summary_text?: string } }) {
   return (
     <div>
+      {stats.summary_text && <p className="mb-2 text-theme-sm">{stats.summary_text}</p>}
       <dl className="grid grid-cols-2 gap-2">
         {cardTiles(stats).map((t) => (
-          <div key={t.label} className="rounded-xl bg-surface-2 px-3 py-2">
-            <dd className="text-lg font-semibold tabular-nums leading-tight">{t.value}</dd>
+          <div key={t.label} className="flex flex-col-reverse rounded-xl bg-surface-2 px-3 py-2">
             <dt className="text-theme-xs text-muted">{t.label}</dt>
+            <dd className="text-lg font-semibold tabular-nums leading-tight">{t.value}</dd>
           </div>
         ))}
       </dl>
       <p className="mt-1 text-theme-xs text-muted">The last 7 days.</p>
-      <Link to="/insights" className="mt-2 inline-block text-theme-sm text-brand underline">
+      <Link to="/insights" className="link-target mt-2 text-theme-sm text-brand underline">
         See all your numbers
       </Link>
     </div>
   );
 }
 
-export function ComingUpBody({ items }: { items: UpcomingInterview[] }) {
+export function ComingUpBody({ items }: { items: ComingUpItem[] }) {
+  const more = comingUpAllLinks(items);
   return (
     <div>
       <ul className="space-y-1.5 text-theme-sm">
         {items.map((i) => (
-          <li key={i.id}>
-            {interviewWhen(i.when)} · {i.kind} — {i.company}, {i.role}
+          <li key={`${i.kind}-${i.job_id}-${i.when}`}>
+            <Link to={comingUpTo(i)} className="link-target text-fg underline decoration-border underline-offset-2 hover:text-brand">
+              {comingUpText(i)}
+            </Link>
           </li>
         ))}
       </ul>
-      <Link to="/interviews" className="mt-2 inline-block text-theme-sm text-brand underline">
-        All interviews
-      </Link>
+      <p className="mt-2 flex flex-wrap gap-x-4 text-theme-sm">
+        {more.map((l) => (
+          <Link key={l.to} to={l.to} className="link-target text-brand underline">
+            {l.label}
+          </Link>
+        ))}
+      </p>
     </div>
   );
 }
@@ -357,15 +389,15 @@ export function FollowupsBody({ items, onChanged }: { items: Followup[]; onChang
               (due {shortDate(f.follow_up_date)}
               {f.applied_date ? `, applied ${shortDate(f.applied_date)}` : ""})
             </span>{" "}
-            <Link to={`/jobs/${f.id}/apply`} className="text-brand underline">
+            <Link to={`/jobs/${f.id}/apply`} aria-label={`Open the ${f.role} follow-up at ${f.company}`} className="text-brand underline">
               Open
             </Link>
           </p>
           <span className="mt-1.5 flex gap-2">
-            <Button variant="outline" small disabled={busy === f.id} onClick={() => act(f, "done")} className="min-h-11 sm:min-h-0">
+            <Button variant="outline" small disabled={busy === f.id} onClick={() => act(f, "done")} aria-label={`Done with the ${f.role} follow-up at ${f.company}`} className="min-h-11 sm:min-h-0">
               Done
             </Button>
-            <Button variant="outline" small disabled={busy === f.id} onClick={() => act(f, "snooze")} className="min-h-11 sm:min-h-0">
+            <Button variant="outline" small disabled={busy === f.id} onClick={() => act(f, "snooze")} aria-label={`Remind me about ${f.company} in 3 days`} className="min-h-11 sm:min-h-0">
               In 3 days
             </Button>
           </span>
@@ -379,9 +411,9 @@ export function FollowupsBody({ items, onChanged }: { items: Followup[]; onChang
 
 function Tile({ value, label }: { value: ReactNode; label: string }) {
   return (
-    <div className="so-card rounded-2xl border border-border bg-surface px-3 py-2.5">
-      <div className="text-xl font-semibold leading-tight text-gray-800 dark:text-white/90">{value}</div>
-      <div className="text-theme-xs text-muted">{label}</div>
+    <div className="so-card flex flex-col-reverse rounded-2xl border border-border bg-surface px-3 py-2.5">
+      <dt className="text-theme-xs text-muted">{label}</dt>
+      <dd className="text-xl font-semibold leading-tight text-gray-800 dark:text-white/90">{value}</dd>
     </div>
   );
 }
@@ -390,11 +422,11 @@ export function StatTiles({ data }: { data: Pick<Dashboard, "stats" | "urgent_da
   const { stats } = data;
   if (!stats.total) return null;
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
       <Tile value={stats.total} label="Jobs you are tracking" />
       <Tile value={stats.submitted} label="Applications sent" />
       <Tile value={stats.average_match === null ? "–" : `${stats.average_match}%`} label={stats.average_match === null ? "Average fit (check a job first)" : "Average fit"} />
       <Tile value={stats.urgent} label={`Closing within ${data.urgent_days} days`} />
-    </div>
+    </dl>
   );
 }
