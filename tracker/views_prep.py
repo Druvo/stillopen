@@ -112,15 +112,11 @@ def prep_remove(request, kind, pk):
     if kind == "lesson":
         lesson = get_object_or_404(PrepLesson, pk=pk, week__plan__owner=request.user)
         plan = lesson.week.plan
-        if plan.status == "draft":
-            lesson.questions.update(removed=True)
-            lesson.delete()
+        prep.remove_lesson(lesson)
     elif kind == "question":
         question = get_object_or_404(PrepQuestion, pk=pk, plan__owner=request.user)
         plan = question.plan
-        if plan.status == "draft":
-            question.removed = True
-            question.save(update_fields=["removed"])
+        prep.remove_question(question)
     else:
         raise Http404("Unknown item.")
     return redirect("prep_plan", pk=plan.pk)
@@ -139,14 +135,7 @@ def prep_tick(request, kind, pk):
         plan = item.week.plan
     else:
         raise Http404("Unknown item.")
-    if plan.status in ("active", "done"):
-        item.done_at = None if item.done_at else timezone.now()
-        item.save(update_fields=["done_at"])
-        done, total = plan.progress_counts()
-        new_status = "done" if total and done == total else "active"
-        if new_status != plan.status:
-            plan.status = new_status
-            plan.save(update_fields=["status"])
+    prep.toggle_done(plan, item)
     return redirect("prep_plan", pk=plan.pk)
 
 

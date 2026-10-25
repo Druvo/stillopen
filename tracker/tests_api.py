@@ -1,4 +1,5 @@
 """The JSON API behind the new app: signed-out calls are refused, another person's job is a 404, and the rules of the classic pages hold."""
+import json
 import tempfile
 from pathlib import Path
 
@@ -36,60 +37,93 @@ def routes():
     return found
 
 
+def world(owner):
+    """One job and one started prep plan (a week with a lesson, a task and two questions) for `owner`; returns the ids by parameter name."""
+    from tracker.models import PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, PrepTopic, PrepWeek
+
+    app = job(owner, company=f"{owner.username}-co")
+    plan = PrepPlan.objects.create(owner=owner, application=app, title="Plan", status="active")
+    week = PrepWeek.objects.create(plan=plan, order=1, title="W1", hours=6)
+    lesson = PrepLesson.objects.create(week=week, order=1, title="L1", gap="K8s", sources=[{"title": "Docs", "url": "https://kubernetes.io/docs/"}])
+    milestone = PrepMilestone.objects.create(week=week, kind="build", text="Build it")
+    topic = PrepTopic.objects.create(plan=plan, slug="pods", title="Pods")
+    questions = [
+        PrepQuestion.objects.create(plan=plan, topic=topic, lesson=lesson, prompt=f"Q{n}", choices=["a", "b"], correct=[0], explanation="because the docs say so",
+                                    sources=[{"title": "Docs", "url": "https://kubernetes.io/docs/"}])
+        for n in range(2)
+    ]
+    return {"job_id": app.pk, "plan_id": plan.pk, "lesson_id": lesson.pk, "milestone_id": milestone.pk, "question_id": questions[0].pk}
+
+
 class RouteInventory(TestCase):
     """A new route cannot be added without these checks applying to it."""
 
     def setUp(self):
         cache.clear()
         self.a, self.b = person("alice"), person("bob")
-        self.job_a, self.job_b = job(self.a, company="AliceCo"), job(self.b, company="BobCo")
+        self.ids_a, self.ids_b = world(self.a), world(self.b)
+        self.job_a, self.job_b = Application.objects.get(pk=self.ids_a["job_id"]), Application.objects.get(pk=self.ids_b["job_id"])
 
-    def fill(self, path, pk):
-        return path.replace("{job_id}", str(pk))
+    def fill(self, path, ids):
+        for name, pk in ids.items():
+            path = path.replace("{" + name + "}", str(pk))
+        return path
 
-    def body(self, method):
-        return {"status": Status.objects.get(name="Applied").pk} if method == "PATCH" else None
+    def body(self, method, path):
+        if method == "PATCH":
+            return {"status": Status.objects.get(name="Applied").pk}
+        if path.endswith("/prep"):
+            return {}
+        if path.endswith("/answers"):
+            return {"answers": {}}
+        return None
 
-    def call(self, client, method, path, pk):
-        url = self.fill(path, pk)
+    def call(self, client, method, path, ids):
         kwargs = {"content_type": "application/json"}
-        body = self.body(method)
+        body = self.body(method, path)
         if body is not None:
-            import json
             kwargs["data"] = json.dumps(body)
-        return getattr(client, method.lower())(url, **kwargs)
+        return getattr(client, method.lower())(self.fill(path, ids), **kwargs)
 
     def test_there_are_routes(self):
-        self.assertGreaterEqual(len(routes()), 8)
+        self.assertGreaterEqual(len(routes()), 18)
 
     def test_every_route_refuses_a_signed_out_caller_with_json_401(self):
         client = Client()
         for method, path in routes():
-            r = self.call(client, method, path, self.job_a.pk)
+            r = self.call(client, method, path, self.ids_a)
             self.assertEqual(r.status_code, 401, f"{method} {path} must answer 401 when signed out")
             self.assertTrue(r["Content-Type"].startswith("application/json"), f"{method} {path}")
         self.assertEqual(Application.objects.get(pk=self.job_a.pk).status.name, "Evaluated")
 
-    def test_every_route_with_an_id_is_a_404_for_someone_elses_job(self):
+    def test_every_route_with_an_id_is_a_404_for_someone_elses_object(self):
         client = Client()
         client.force_login(self.a)
         checked = 0
         for method, path in routes():
-            if "{job_id}" not in path:
+            if "{" not in path:
                 continue
-            r = self.call(client, method, path, self.job_b.pk)
-            self.assertEqual(r.status_code, 404, f"{method} {path} must answer 404 for another person's job")
+            r = self.call(client, method, path, self.ids_b)
+            self.assertEqual(r.status_code, 404, f"{method} {path} must answer 404 for another person's object")
             checked += 1
-        self.assertGreaterEqual(checked, 2)
+        self.assertGreaterEqual(checked, 12)
         self.assertEqual(Application.objects.get(pk=self.job_b.pk).status.name, "Evaluated")
         self.assertFalse(Event.objects.filter(application=self.job_b).exists())
+        from tracker.models import PrepLesson, PrepPlan, PrepQuestion
+
+        self.assertTrue(PrepPlan.objects.filter(pk=self.ids_b["plan_id"]).exists())
+        self.assertTrue(PrepLesson.objects.filter(pk=self.ids_b["lesson_id"], done_at__isnull=True).exists())
+        self.assertTrue(PrepQuestion.objects.filter(pk=self.ids_b["question_id"], removed=False).exists())
 
     def test_unsupported_methods_are_405(self):
         client = Client()
         client.force_login(self.a)
+        allowed = {}
         for method, path in routes():
-            other = "DELETE" if method != "DELETE" else "PUT"
-            r = getattr(client, other.lower())(self.fill(path, self.job_a.pk), content_type="application/json")
+            allowed.setdefault(path, set()).add(method)
+        for path, methods in allowed.items():
+            other = next(m for m in ("PUT", "DELETE", "PATCH") if m not in methods)
+            r = getattr(client, other.lower())(self.fill(path, self.ids_a), content_type="application/json")
             self.assertEqual(r.status_code, 405, f"{other} {path} must not be allowed")
 
     def test_unsafe_methods_need_the_csrf_token(self):
@@ -97,6 +131,8 @@ class RouteInventory(TestCase):
         client.force_login(self.a)
         applied = Status.objects.get(name="Applied")
         r = client.patch(f"{BASE}/jobs/{self.job_a.pk}/status", data={"status": applied.pk}, content_type="application/json")
+        self.assertEqual(r.status_code, 403)
+        r = client.delete(f"{BASE}/prep/plans/{self.ids_a['plan_id']}")
         self.assertEqual(r.status_code, 403)
         self.assertEqual(Application.objects.get(pk=self.job_a.pk).status.name, "Evaluated")
 
@@ -241,3 +277,118 @@ class NewAppShell(TestCase):
         self.assertEqual(self.client.get("/app/_next/static/missing.js").status_code, 404)
         self.assertEqual(self.client.get("/app/_next/../secret.txt").status_code, 404)
         self.assertEqual(self.client.get("/app/_next/%2e%2e/secret.txt").status_code, 404)
+
+
+class PrepApi(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.a = person("alice")
+        self.client.force_login(self.a)
+        self.ids = world(self.a)
+        from tracker.models import PrepPlan
+
+        self.plan = PrepPlan.objects.get(pk=self.ids["plan_id"])
+
+    def url(self, tail):
+        return f"{BASE}/prep/plans/{self.plan.pk}{tail}"
+
+    def post(self, url, body=None):
+        return self.client.post(url, data=json.dumps(body or {}), content_type="application/json")
+
+    def test_list_and_detail(self):
+        rows = self.client.get(f"{BASE}/prep/plans").json()["plans"]
+        self.assertEqual([(r["id"], r["lessons_done"], r["lessons_total"]) for r in rows], [(self.plan.pk, 0, 1)])
+        detail = self.client.get(self.url("")).json()
+        self.assertEqual(detail["status"], "active")
+        self.assertEqual(detail["weeks"][0]["lessons"][0]["title"], "L1")
+        self.assertEqual(detail["question_count"], 2)
+        self.assertNotIn("questions", detail["weeks"][0]["lessons"][0])  # questions and answers are shown only while reviewing a draft
+
+    def test_a_draft_shows_questions_for_review_and_can_be_started(self):
+        self.plan.status = "draft"
+        self.plan.save()
+        lesson = self.client.get(self.url("")).json()["weeks"][0]["lessons"][0]
+        self.assertEqual(len(lesson["questions"]), 2)
+        self.assertEqual(self.client.delete(f"{BASE}/prep/questions/{self.ids['question_id']}").status_code, 200)
+        self.assertEqual(len(self.client.get(self.url("")).json()["weeks"][0]["lessons"][0]["questions"]), 1)
+        self.assertEqual(self.post(self.url("/start")).status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.status, "active")
+
+    def test_removing_once_started_changes_nothing(self):
+        self.client.delete(f"{BASE}/prep/questions/{self.ids['question_id']}")
+        self.client.delete(f"{BASE}/prep/lessons/{self.ids['lesson_id']}")
+        self.assertEqual(self.client.get(self.url("")).json()["question_count"], 2)
+
+    def test_ticking_finishes_and_reopens_the_plan(self):
+        r = self.post(f"{BASE}/prep/lessons/{self.ids['lesson_id']}/tick")
+        self.assertTrue(r.json()["done"])
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.status, "done")
+        self.assertFalse(self.post(f"{BASE}/prep/lessons/{self.ids['lesson_id']}/tick").json()["done"])
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.status, "active")
+        self.assertTrue(self.post(f"{BASE}/prep/milestones/{self.ids['milestone_id']}/tick").json()["done"])
+
+    def test_a_plan_being_written_cannot_be_discarded_but_a_finished_one_can(self):
+        self.plan.status = "generating"
+        self.plan.save()
+        r = self.client.delete(self.url(""))
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("still being written", r.json()["error"])
+        self.plan.status = "active"
+        self.plan.save()
+        self.assertEqual(self.client.delete(self.url("")).status_code, 200)
+        self.assertEqual(self.client.get(self.url("")).status_code, 404)
+
+    def test_creating_again_returns_the_existing_plan(self):
+        r = self.post(f"{BASE}/jobs/{self.ids['job_id']}/prep")
+        self.assertEqual(r.json(), {"id": self.plan.pk, "existing": True})
+
+    def test_creating_without_an_ai_account_says_what_to_do(self):
+        from tracker.models import PrepPlan
+
+        self.plan.delete()
+        r = self.post(f"{BASE}/jobs/{self.ids['job_id']}/prep")
+        self.assertEqual(r.status_code, 400)
+        self.assertTrue(r.json()["error"])
+        self.assertFalse(PrepPlan.objects.filter(owner=self.a).exists())
+
+    def test_practice_gives_nothing_away_until_it_is_sent(self):
+        data = self.client.get(self.url("/today")).json()
+        self.assertFalse(data["finished"])
+        self.assertEqual(data["total"], 2)
+        for row in data["rows"]:
+            self.assertEqual(set(row), {"id", "topic", "prompt", "kind", "choices", "review"})
+        self.assertNotIn("because the docs say so", json.dumps(data))
+
+    def test_answers_are_all_or_nothing_then_scored_and_explained(self):
+        rows = self.client.get(self.url("/today")).json()["rows"]
+        first, second = rows[0]["id"], rows[1]["id"]
+        r = self.post(self.url("/answers"), {"answers": {str(first): [0]}})
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(self.client.get(self.url("/today")).json()["finished"])
+        r = self.post(self.url("/answers"), {"answers": {str(first): [0], str(second): [1]}})
+        self.assertEqual(r.json()["right"], 1)
+        data = self.client.get(self.url("/today")).json()
+        self.assertTrue(data["finished"])
+        self.assertEqual(data["right"], 1)
+        self.assertEqual(data["streak"], 1)
+        by_id = {row["id"]: row for row in data["rows"]}
+        self.assertTrue(by_id[first]["right"])
+        self.assertFalse(by_id[second]["right"])
+        self.assertEqual(by_id[second]["chosen"], [1])
+        self.assertEqual(by_id[second]["correct"], [0])
+        self.assertEqual(by_id[second]["explanation"], "because the docs say so")
+        self.assertEqual(self.post(self.url("/answers"), {"answers": {str(first): [0], str(second): [0]}}).status_code, 400)  # only once a day
+
+    def test_practice_needs_a_started_plan(self):
+        self.plan.status = "draft"
+        self.plan.save()
+        self.assertEqual(self.client.get(self.url("/today")).status_code, 404)
+
+    def test_switched_off_by_the_admin_is_a_404_everywhere(self):
+        SiteConfig.objects.update(prep_enabled=False)
+        for url in (f"{BASE}/prep/plans", self.url(""), self.url("/today")):
+            self.assertEqual(self.client.get(url).status_code, 404, url)
+        self.assertEqual(self.post(f"{BASE}/jobs/{self.ids['job_id']}/prep").status_code, 404)

@@ -205,3 +205,10 @@ def liveness_start(request):
 @api.get("/liveness/status", summary="Progress of the latest open/closed check")
 def liveness_status(request):
     return _progress(liveness.current_run(request.user))
+
+
+# --- the rest of the app, one module per area ------------------------------------------------------
+
+from .prep import router as prep_router  # noqa: E402
+
+api.add_router("", prep_router)
