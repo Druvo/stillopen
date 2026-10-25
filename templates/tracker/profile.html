@@ -37,6 +37,19 @@
     </div>
   </div>
 
+  {% if site_config.new_app_enabled %}
+  <div class="card mb-3">
+    <div class="card-body">
+    <h3 class="mt-0">New app (beta)</h3>
+    <label class="form-check">
+      {{ form.use_new_app|bootstrap_field }}
+      <span class="form-check-label">{{ form.use_new_app.label }}</span>
+    </label>
+    <small class="form-hint">{{ form.use_new_app.help_text }}</small>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="card mb-3">
     <div class="card-body">
     <h3 class="mt-0">Where you would work</h3>

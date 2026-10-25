@@ -142,6 +142,15 @@ class SiteConfigAdmin(ModelAdmin):
             },
         ),
         (
+            "New app (beta)",
+            {
+                "classes": ("tab",),
+                "fields": ("new_app_enabled",),
+                "description": "A newer interface at /app/ with a board you can drag jobs across. Switching this on only makes it available; each person "
+                "opts in from their profile, and the classic pages keep working.",
+            },
+        ),
+        (
             "Prep plans",
             {
                 "classes": ("tab",),

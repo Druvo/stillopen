@@ -22,6 +22,20 @@ python manage.py runserver
 Open http://127.0.0.1:8000. Sign-up is closed by default: switch it to **Open** under Site configuration in `/admin/`, or just use the superuser.
 Copy `.env.example` to `.env` to change settings. Everything that changes behaviour is a setting in the admin, not code.
 
+## The new app (optional, `frontend/`)
+
+Only needed if you work on the new interface at `/app/`; Python-only contributors can skip it. Needs Node 22 or later and pnpm.
+
+```bash
+cd frontend
+pnpm install
+pnpm dev          # http://localhost:3000/app/ , proxies /api and sign-in to Django on port 8765
+pnpm lint && pnpm typecheck && pnpm test
+pnpm build        # writes frontend/out, which Django serves at /app/ (the Docker build does this for you)
+```
+
+In the admin, tick **New app (beta)** under Site configuration, then switch it on in your own profile. Rules for the API are in `tracker/api/__init__.py`.
+
 ## Tests
 
 ```bash

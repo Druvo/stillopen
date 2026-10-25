@@ -14,5 +14,8 @@ logs
 docs
 deploy
 .claude
+frontend/node_modules
+frontend/.next
+frontend/out
 *.md
 !README.md

@@ -172,6 +172,11 @@ class SiteConfig(PersonalSettings):
         "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
     )
 
+    new_app_enabled = models.BooleanField(
+        default=False, verbose_name="New app (beta)",
+        help_text="Let people try the new interface at /app/ (a board with drag-and-drop). Each person still opts in from their profile; "
+        "the classic pages keep working either way.",
+    )
     prep_enabled = models.BooleanField(
         default=True,
         help_text="Let people turn a job's skill gaps into a short prep plan (needs their own AI key). Off hides the feature.",
@@ -410,6 +415,10 @@ class UserProfile(PersonalSettings):
     scan_digest_enabled = models.BooleanField(
         default=False, verbose_name="Search for new jobs for me and email me what is found",
         help_text="Runs your saved search on a schedule and emails one short list of new matches. Off until you turn it on.",
+    )
+    use_new_app = models.BooleanField(
+        default=False, verbose_name="Try the new app (beta)",
+        help_text="Opens your dashboard in the new interface, with a board you can drag jobs across. Your data is the same; you can switch back any time.",
     )
     onboarding_done = models.BooleanField(
         default=False, editable=False,

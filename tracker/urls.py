@@ -1,6 +1,6 @@
-from django.urls import path
+from django.urls import path, re_path
 
-from . import views, views_apply, views_cover, views_cv, views_mcp, views_pipeline, views_prep, views_public, views_sources
+from . import views, views_app, views_apply, views_cover, views_cv, views_mcp, views_pipeline, views_prep, views_public, views_sources
 
 urlpatterns = [
     path("", views_public.landing, name="landing"),
@@ -12,6 +12,9 @@ urlpatterns = [
     path("privacy/", views.privacy, name="privacy"),
     path("terms/", views.terms, name="terms"),
     path("dashboard/", views.dashboard, name="dashboard"),
+    path("app/", views_app.app_shell, name="app_shell"),
+    re_path(r"^app/(?P<path>_next/.+)$", views_app.app_asset, name="app_asset_next"),
+    path("app/<path:path>", views_app.app_shell, name="app_shell_deep"),
     path("welcome/", views.welcome, name="welcome"),
     path("welcome/skip/", views.welcome_skip, name="welcome_skip"),
     path("jobs/add/", views.add_job, name="add_job"),

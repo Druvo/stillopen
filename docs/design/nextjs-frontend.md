@@ -1,7 +1,9 @@
 # Design: a staged move to Next.js for the signed-in app
 
-Status: proposal, nothing built. Decisions already taken by the owner: Django stays the backend; the new front end is built as a **static export first** (no Node server in
-production); the **dashboard with drag-and-drop** is built first. Written 2026-10-25.
+Status: **phases 0 and 1 built** (branch `feature/nextjs-phase0`): the API foundation, `frontend/`, the Docker build, CI job and the dashboard with board, list and drag-and-drop. Phases 2 to 5
+are not started. Decisions taken by the owner: Django stays the backend; the new front end is a **static export** (no Node server in production); the **dashboard with drag-and-drop** comes first.
+Open questions in section 12 were answered with the recommended options (django-ninja, pnpm, a per-person opt-in on top of a site switch, board columns grouped by the admin's tabs, sign-in restyle left to phase 5).
+Written 2026-10-25.
 
 ## 1. Why, and what for
 
