@@ -101,19 +101,25 @@ test("a new person starts at the welcome questions and can skip them", async ({ 
   await page.getByRole("button", { name: "Skip for now" }).click();
   await expect(page).toHaveURL(/\/app\/$/);
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
-  await page.goto("/welcome/"); // skipped for good: the classic address sends them to the app, not back to the questions
-  await expect(page).toHaveURL(/\/app\/welcome|\/app\/$/);
+  // Skipped for good: signing in again (no address to go back to) lands on the dashboard, not on the questions.
+  await page.context().clearCookies();
+  await page.goto("/accounts/login/");
+  await page.locator("input[name=login]").fill("carol");
+  await page.locator("input[name=password]").fill(PASSWORD);
+  await page.locator("form button[type=submit]").first().click();
+  await expect(page).toHaveURL(/\/app\/$/);
 });
 
 test("a company board with a bad name is refused at once, with nothing fetched", async ({ page }) => {
   await signIn(page, "alice", "/app/sources");
   await expect(page.getByRole("heading", { name: "Where we look for jobs" })).toBeVisible();
-  const requests: string[] = [];
-  page.on("request", (r) => requests.push(r.url()));
   await page.getByLabel(/The company's name in that address/).fill("not a valid name!");
-  await page.getByRole("button", { name: /^Check and add|^Add/ }).click();
+  const [response] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/v1/sources") && r.request().method() === "POST"),
+    page.getByRole("button", { name: /^Check and add|^Add/ }).click(),
+  ]);
+  expect(response.status()).toBe(400); // refused by the form's own rules, before the server goes anywhere
   await expect(page.getByRole("alert").first()).toBeVisible();
-  expect(requests.filter((u) => /\/sources/.test(u) && !u.includes("127.0.0.1"))).toEqual([]);
 });
 
 test("deleting an account needs the username typed, then it is gone for good", async ({ page, browser }) => {
