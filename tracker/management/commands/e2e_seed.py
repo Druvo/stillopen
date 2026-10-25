@@ -11,7 +11,7 @@ PASSWORD = "e2e-pass-12345"  # test-only value; the users exist only in the thro
 
 
 class Command(BaseCommand):
-    help = "Create the e2e people (alice and bob) and turn the new app on. Needs STILLOPEN_E2E=1."
+    help = "Create the e2e people (alice, bob, carol and dave) and turn the new app on. Needs STILLOPEN_E2E=1."
 
     def handle(self, *args, **options):
         if os.environ.get("STILLOPEN_E2E") != "1":
@@ -22,12 +22,14 @@ class Command(BaseCommand):
         for name, jobs in (
             ("alice", [("Acme", "Backend Engineer", "Saved", 4.2), ("Globex", "Platform Engineer", "Evaluated", 3.1), ("Initech", "API Developer", "Applied", 4.8)]),
             ("bob", [("SecretCo", "Hidden Role", "Saved", 3.0)]),
+            ("carol", []),  # has not seen the welcome questions yet
+            ("dave", [("Umbrella", "SRE", "Saved", 3.5)]),  # the account the delete test removes
         ):
             user, _ = User.objects.get_or_create(username=name, defaults={"email": f"{name}@example.com"})
             user.set_password(PASSWORD)
             user.save()
-            UserProfile.objects.filter(user=user).update(use_new_app=True, onboarding_done=True, target_roles="Backend Engineer", home_country="MY")
+            UserProfile.objects.filter(user=user).update(use_new_app=True, onboarding_done=name != "carol", target_roles="Backend Engineer", home_country="MY")
             Application.objects.filter(owner=user).delete()
             for company, role, status, score in jobs:
                 Application.objects.create(owner=user, company=company, role=role, status=statuses[status], score=score, summary=f"A role at {company}")
-        self.stdout.write("Seeded alice and bob.")
+        self.stdout.write("Seeded alice, bob, carol and dave.")

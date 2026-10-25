@@ -93,3 +93,46 @@ test("no page asks another host for anything, and the policy blocks nothing of o
   expect(policy).toContain("default-src 'self'");
   expect(policy.split("; ").find((p) => p.startsWith("script-src"))).not.toContain("unsafe-inline");
 });
+
+test("a new person starts at the welcome questions and can skip them", async ({ page }) => {
+  await signIn(page, "carol", "/welcome/");
+  await expect(page).toHaveURL(/\/app\/welcome/);
+  await expect(page.getByRole("heading", { name: "Welcome to StillOpen" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page).toHaveURL(/\/app\/$/);
+  await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
+  await page.goto("/welcome/"); // skipped for good: the classic address sends them to the app, not back to the questions
+  await expect(page).toHaveURL(/\/app\/welcome|\/app\/$/);
+});
+
+test("a company board with a bad name is refused at once, with nothing fetched", async ({ page }) => {
+  await signIn(page, "alice", "/app/sources");
+  await expect(page.getByRole("heading", { name: "Where we look for jobs" })).toBeVisible();
+  const requests: string[] = [];
+  page.on("request", (r) => requests.push(r.url()));
+  await page.getByLabel(/The company's name in that address/).fill("not a valid name!");
+  await page.getByRole("button", { name: /^Check and add|^Add/ }).click();
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  expect(requests.filter((u) => /\/sources/.test(u) && !u.includes("127.0.0.1"))).toEqual([]);
+});
+
+test("deleting an account needs the username typed, then it is gone for good", async ({ page, browser }) => {
+  await signIn(page, "dave", "/app/profile");
+  const remove = page.getByRole("button", { name: "Delete account and data" });
+  await expect(remove).toBeDisabled();
+  await page.getByLabel(/Delete my account/).fill("not-dave");
+  await expect(remove).toBeDisabled();
+  await page.getByLabel(/Delete my account/).fill("dave");
+  await expect(remove).toBeEnabled();
+  page.once("dialog", (dialog) => dialog.accept());
+  await remove.click();
+  await page.waitForURL((url) => !url.pathname.startsWith("/app/"));
+
+  const again = await browser.newPage();
+  await again.goto("/accounts/login/");
+  await again.locator("input[name=login]").fill("dave");
+  await again.locator("input[name=password]").fill(PASSWORD);
+  await again.locator("form button[type=submit]").first().click();
+  await expect(again).toHaveURL(/\/accounts\/login\//); // cannot sign in any more
+  await again.close();
+});
