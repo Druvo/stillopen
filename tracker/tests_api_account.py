@@ -83,13 +83,6 @@ class ProfileApi(Base):
         self.put("/profile", {"target_roles": "Mine"})
         self.assertEqual(UserProfile.for_user(self.b).target_roles, "")
 
-    def test_the_old_new_app_switch_is_gone(self):
-        before = UserProfile.objects.get(user=self.a).use_new_app
-        self.put("/profile", {"use_new_app": not before})
-        self.assertEqual(UserProfile.objects.get(user=self.a).use_new_app, before)
-        self.assertNotIn("use_new_app", self.get("/profile").json()["profile"])
-        self.assertNotIn("new_app_enabled", self.get("/profile").json()["site"])
-
     def test_the_document_count_leaves_out_the_cv(self):
         self.put("/profile", {"profile_cv": CV})
         self.assertEqual(self.get("/profile").json()["account"]["counts"]["documents"], 0)
@@ -433,39 +426,3 @@ class DeleteAccountApi(Base):
         self.assertEqual(r.status_code, 400)
         self.assertTrue(User.objects.filter(pk=staff.pk).exists())
         self.assertFalse(self.get("/profile").json()["account"]["can_delete"])
-
-
-class ClassicRedirects(Base):
-    def setUp(self):
-        super().setUp()
-        SiteConfig.objects.update(new_app_enabled=True, mcp_remote_enabled=True)
-        UserProfile.objects.filter(user=self.a).update(use_new_app=True)
-
-    PAGES = {"profile": "/app/profile", "profile_ai": "/app/profile/ai", "assistant": "/app/profile/assistant", "sources": "/app/sources", "welcome": "/app/welcome"}
-
-    def test_opted_in_people_land_on_the_new_screens(self):
-        from django.urls import reverse
-
-        for name, target in self.PAGES.items():
-            r = self.client.get(reverse(name))
-            self.assertRedirects(r, target, fetch_redirect_response=False, msg_prefix=name)
-
-    def test_classic_one_bypasses(self):
-        from django.urls import reverse
-
-        for name in self.PAGES:
-            self.assertEqual(self.client.get(reverse(name) + "?classic=1").status_code, 200, name)
-
-    def test_everyone_else_keeps_the_classic_pages(self):
-        from django.urls import reverse
-
-        UserProfile.objects.filter(user=self.a).update(use_new_app=False)
-        for name in self.PAGES:
-            self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)
-
-    def test_classic_posts_still_work_for_opted_in_people(self):
-        from django.urls import reverse
-
-        r = self.client.post(reverse("profile"), {"about": "hello"})
-        self.assertEqual(r.status_code, 302)
-        self.assertEqual(UserProfile.objects.get(user=self.a).about, "hello")

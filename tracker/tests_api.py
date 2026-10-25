@@ -1,4 +1,4 @@
-"""The JSON API behind the new app: signed-out calls are refused, another person's job is a 404, and the rules of the classic pages hold."""
+"""The JSON API behind the new app: signed-out calls are refused, another person's job is a 404, and the rules the old pages had hold."""
 import json
 import tempfile
 from pathlib import Path
@@ -6,7 +6,6 @@ from pathlib import Path
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
-from django.urls import reverse
 
 from tracker.api import api
 from tracker.tests import close_quietly
@@ -248,30 +247,14 @@ class NewAppShell(TestCase):
         self.override.enable()
         self.addCleanup(self.override.disable)
 
-    def switch(self, site=True, person_on=True):
-        SiteConfig.objects.update(new_app_enabled=site)
-        UserProfile.objects.filter(user=self.a).update(use_new_app=person_on)
-
     def test_signed_out_goes_to_sign_in(self):
-        self.switch()
         r = self.client.get("/app/")
         self.assertEqual(r.status_code, 302)
         self.assertIn("/accounts/login/", r["Location"])
         self.assertIn("next=", r["Location"])
 
-    def test_off_site_wide_sends_people_to_the_classic_dashboard(self):
-        self.client.force_login(self.a)
-        self.switch(site=False)
-        self.assertRedirects(self.client.get("/app/"), reverse("dashboard"), fetch_redirect_response=False)
-
-    def test_a_person_who_did_not_opt_in_is_sent_to_their_profile(self):
-        self.client.force_login(self.a)
-        self.switch(person_on=False)
-        self.assertRedirects(self.client.get("/app/"), reverse("profile"), fetch_redirect_response=False)
-
     def test_shell_for_any_deep_path_and_sets_the_csrf_cookie(self):
         self.client.force_login(self.a)
-        self.switch()
         for path in ("/app/", "/app/jobs/12", "/app/prep/3/today"):
             r = self.client.get(path)
             self.assertEqual(r.status_code, 200, path)
@@ -280,19 +263,12 @@ class NewAppShell(TestCase):
             self.assertEqual(r["Cache-Control"], "no-store")
         self.assertIn("csrftoken", self.client.cookies)
 
-    def test_classic_dashboard_sends_an_opted_in_person_to_the_app_unless_asked(self):
-        self.client.force_login(self.a)
-        self.switch()
-        self.assertRedirects(self.client.get(reverse("dashboard")), "/app/", fetch_redirect_response=False)
-        self.assertEqual(self.client.get(reverse("dashboard") + "?classic=1").status_code, 200)
-
     def test_the_page_carries_a_strict_policy_with_the_hashes_of_its_inline_scripts(self):
         import base64
         import hashlib
 
         (Path(self.out.name) / "index.html").write_text('<html><script>var a=1;</script><script src="/app/_next/static/x.js"></script><script>var b=2;</script></html>', encoding="utf-8")
         self.client.force_login(self.a)
-        self.switch()
         r = self.client.get("/app/")
         policy = r["Content-Security-Policy"]
         close_quietly(r)
@@ -308,16 +284,26 @@ class NewAppShell(TestCase):
     @override_settings(STILLOPEN_APP_CSP=False)
     def test_the_policy_can_be_switched_off(self):
         self.client.force_login(self.a)
-        self.switch()
         r = self.client.get("/app/")
         close_quietly(r)
         self.assertNotIn("Content-Security-Policy", r)
 
-    def test_not_built_is_a_404(self):
+    def test_not_built_says_so_in_plain_words_with_a_503(self):
         self.client.force_login(self.a)
-        self.switch()
         (Path(self.out.name) / "index.html").unlink()
-        self.assertEqual(self.client.get("/app/").status_code, 404)
+        r = self.client.get("/app/")
+        self.assertEqual(r.status_code, 503)
+        self.assertIn("text/html", r["Content-Type"])
+        page = r.content.decode()
+        self.assertIn("pnpm build", page)
+        self.assertIn("Docker", page)
+        self.assertEqual(self.client.get("/app/jobs/3").status_code, 503)
+
+    def test_everyone_signed_in_gets_the_app_with_no_switch(self):
+        self.client.force_login(self.a)
+        r = self.client.get("/app/")
+        self.assertEqual(r.status_code, 200)
+        close_quietly(r)
 
     def test_assets_are_served_with_long_cache_and_cannot_escape_the_folder(self):
         r = self.client.get("/app/_next/static/app.js")
@@ -444,30 +430,6 @@ class PrepApi(TestCase):
         self.assertEqual(self.post(f"{BASE}/jobs/{self.ids['job_id']}/prep").status_code, 404)
 
 
-class ClassicRedirects(TestCase):
-    """Classic pages with a twin in the new app send an opted-in person there; ?classic=1 and everyone else stay."""
-
-    def setUp(self):
-        cache.clear()
-        self.a = person("alice")
-        self.client.force_login(self.a)
-        self.ids = world(self.a)
-
-    def opt_in(self, on=True):
-        SiteConfig.objects.update(new_app_enabled=on)
-        UserProfile.objects.filter(user=self.a).update(use_new_app=on)
-
-    def test_prep_pages(self):
-        pid = self.ids["plan_id"]
-        pairs = [(reverse("prep_list"), "/app/prep"), (reverse("prep_plan", args=[pid]), f"/app/prep/{pid}"), (reverse("prep_today", args=[pid]), f"/app/prep/{pid}/today")]
-        for classic, new in pairs:
-            self.assertEqual(self.client.get(classic).status_code, 200, classic)  # not opted in: unchanged
-        self.opt_in()
-        for classic, new in pairs:
-            self.assertRedirects(self.client.get(classic), new, fetch_redirect_response=False)
-            self.assertEqual(self.client.get(classic + "?classic=1").status_code, 200)
-
-
 class E2ESeed(TestCase):
     """The browser tests' seed command makes users with a known password, so it must refuse to run on a real install."""
 
@@ -479,7 +441,7 @@ class E2ESeed(TestCase):
             call_command("e2e_seed")
         self.assertFalse(User.objects.filter(username__in=["alice", "bob"]).exists())
 
-    def test_with_the_switch_it_makes_two_separate_people_and_turns_the_app_on(self):
+    def test_with_the_switch_it_makes_two_separate_people(self):
         import os
         from io import StringIO
         from unittest import mock
@@ -491,5 +453,4 @@ class E2ESeed(TestCase):
         alice, bob = User.objects.get(username="alice"), User.objects.get(username="bob")
         self.assertEqual(Application.objects.filter(owner=alice).count(), 3)
         self.assertEqual(Application.objects.filter(owner=bob).count(), 1)
-        self.assertTrue(SiteConfig.load().new_app_enabled)
-        self.assertTrue(UserProfile.objects.get(user=alice).use_new_app)
+        self.assertTrue(UserProfile.objects.get(user=alice).onboarding_done)

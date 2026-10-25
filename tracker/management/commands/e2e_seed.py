@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from django.utils import timezone
 
-from tracker.models import Application, Interview, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile
+from tracker.models import Application, Interview, ScanLogEntry, ScanRun, Status, UserProfile
 
 CV = """# Alice Example
 
@@ -24,13 +24,12 @@ PASSWORD = "e2e-pass-12345"  # test-only value; the users exist only in the thro
 
 
 class Command(BaseCommand):
-    help = "Create the e2e people (alice, bob, carol, dave and erin) and turn the new app on. Needs STILLOPEN_E2E=1."
+    help = "Create the e2e people (alice, bob, carol, dave and erin) Needs STILLOPEN_E2E=1."
 
     def handle(self, *args, **options):
         if os.environ.get("STILLOPEN_E2E") != "1":
             raise CommandError("Set STILLOPEN_E2E=1 to run this. It creates users with a known password and is only for the browser tests.")
         User = get_user_model()
-        SiteConfig.objects.update(new_app_enabled=True)
         statuses = {s.name: s for s in Status.objects.all()}
         today = timezone.localdate()
         for name, jobs in (
@@ -52,7 +51,7 @@ class Command(BaseCommand):
             user.set_password(PASSWORD)
             user.save()
             UserProfile.objects.filter(user=user).update(
-                use_new_app=True, onboarding_done=name not in ("carol", "erin"), target_roles="Backend Engineer", home_country="MY",
+                onboarding_done=name not in ("carol", "erin"), target_roles="Backend Engineer", home_country="MY",
                 profile_cv=CV if name == "alice" else "",  # alice can tailor a CV in the parity specs
             )
             Application.objects.filter(owner=user).delete()

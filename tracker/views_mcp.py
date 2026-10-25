@@ -1,4 +1,4 @@
-"""Connect an AI assistant: personal tokens and the web MCP endpoint (/mcp/).
+"""The web MCP endpoint (/mcp/). Tokens are made and revoked in the app (Profile > Connect an AI assistant) through the JSON API.
 
 The endpoint speaks MCP's streamable HTTP in its simple stateless form (one JSON reply per POST) so it runs under the same
 WSGI server as the rest of the site. A token belongs to one person: every tool then runs as that person and nobody else
@@ -13,20 +13,13 @@ from urllib.parse import urlparse
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods, require_POST
 
 from . import mcp_tools
 from .models import ApiToken, SiteConfig
-from .services import assistant as tokens
-from .views import throttled
-from .views_app import new_app_redirect
 
 log = logging.getLogger(__name__)
 
@@ -173,61 +166,3 @@ def mcp_endpoint(request):
     response = JsonResponse(replies if isinstance(payload, list) else replies[0], safe=False)
     response["Cache-Control"] = "no-store"
     return response
-
-
-# --- the page where a person makes and revokes tokens -----------------------------------------------------------------
-
-
-def _config_or_404() -> SiteConfig:
-    config = SiteConfig.load()
-    if not config.mcp_remote_enabled:
-        raise Http404("Not available.")
-    return config
-
-
-def _page(request, extra=None):
-    context = {
-        "config": SiteConfig.load(), "tokens": request.user.api_tokens.all(), "endpoint": request.build_absolute_uri("/mcp/"),
-        "expiry_choices": ApiToken.EXPIRY_CHOICES, "limit": settings.STILLOPEN_MAX_API_TOKENS,
-    }
-    context.update(extra or {})
-    response = render(request, "tracker/assistant.html", context)
-    response["Cache-Control"] = "no-store"
-    return response
-
-
-@login_required
-@require_http_methods(["GET"])
-def assistant(request):
-    _config_or_404()
-    if go := new_app_redirect(request, "/profile/assistant"):
-        return go
-    return _page(request)
-
-
-@login_required
-@require_POST
-def assistant_create(request):
-    _config_or_404()
-    try:
-        tokens.check_room(request.user)
-    except tokens.TokenRefused as refused:
-        messages.error(request, str(refused))
-        return redirect("assistant")
-    if throttled(request.user, "token", settings.STILLOPEN_TOKEN_ISSUES_PER_HOUR):
-        messages.error(request, "You have made a lot of tokens in the last hour. Try again later.")
-        return redirect("assistant")
-    days = tokens.parse_days(request.POST.get("expires", "90"))
-    record, raw = ApiToken.issue(request.user, request.POST.get("name", ""), can_write=request.POST.get("access") == "write", days=days)
-    # shown in this response only and kept nowhere readable: a refresh would make another token
-    return _page(request, {"new_token": raw, "new_record": record})
-
-
-@login_required
-@require_POST
-def assistant_revoke(request, pk):
-    _config_or_404()
-    token = get_object_or_404(ApiToken, pk=pk, owner=request.user)
-    tokens.revoke(token)
-    messages.success(request, f"Revoked {token.name}. It stops working straight away.")
-    return redirect("assistant")

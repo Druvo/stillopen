@@ -1,4 +1,4 @@
-"""Serves the new app: a static export built by Next.js (frontend/), with no Node process at run time.
+"""Serves the app: a static export built by Next.js (frontend/), with no Node process at run time.
 
 `/app/` and every path under it answer with the same shell page, so deep links and refresh work; the page reads its own
 path in the browser. The hashed files under `/app/_next/` are plain assets and carry no personal data."""
@@ -11,22 +11,10 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.http import FileResponse, Http404
-from django.shortcuts import redirect
+from django.http import FileResponse, Http404, HttpResponse
 from django.utils._os import safe_join
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
-
-from .models import SiteConfig, UserProfile
-
-
-def new_app_redirect(request, path: str):
-    """A redirect to `path` inside the new app when this person has opted in (and did not ask for the classic page with ?classic=1), else None.
-
-    Classic pages that have a new-app twin call this first, so bookmarks and emails keep landing on the right screen."""
-    if "classic" in request.GET or not SiteConfig.load().new_app_enabled or not UserProfile.for_user(request.user).use_new_app:
-        return None
-    return redirect(f"/app{path}")
 
 
 _INLINE_SCRIPT = re.compile(rb"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S)
@@ -78,17 +66,29 @@ def app_asset(request, path):
     return response
 
 
+_NOT_BUILT = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The app has not been built yet</title>
+<style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;line-height:1.5}code,pre{background:#f2f2f2;padding:.1rem .3rem;border-radius:4px}pre{padding:.75rem;overflow:auto}</style>
+</head><body>
+<h1>The app has not been built yet</h1>
+<p>StillOpen's screens are a front end that is built once, ahead of time. This server has the back end but not the built front end, so there is nothing to show here yet.</p>
+<p>If you run StillOpen yourself, build it once from the project folder (you need Node.js and pnpm):</p>
+<pre>cd frontend
+pnpm install
+pnpm build</pre>
+<p>Then reload this page. You can also skip the build by using the Docker image, which already includes it. See <code>docs/SELF-HOSTING.md</code>.</p>
+</body></html>
+"""
+
+
 @login_required
 @ensure_csrf_cookie
 @require_GET
 def app_shell(request, path=""):
-    if not SiteConfig.load().new_app_enabled:
-        return redirect("dashboard")
-    if not UserProfile.for_user(request.user).use_new_app:
-        return redirect("profile")  # opting in is a switch in the person's own profile
     index = build_dir() / "index.html"
     if not index.is_file():
-        raise Http404("The new app has not been built on this server.")
+        return HttpResponse(_NOT_BUILT, status=503, content_type="text/html; charset=utf-8")
     response = FileResponse(open(index, "rb"), content_type="text/html; charset=utf-8")
     response["Cache-Control"] = "no-store"
     if settings.STILLOPEN_APP_CSP:

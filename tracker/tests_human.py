@@ -1,4 +1,5 @@
 """The first-run experience: a short sign-up, a warm welcome, plain-language guidance, no dead ends."""
+import json
 import re
 import time
 from datetime import datetime
@@ -25,6 +26,11 @@ class SignUpAndWelcome(TestCase):
         cache.clear()
         SiteConfig.objects.filter(pk=1).update(signup_mode="open")
 
+    def _built(self):
+        from tracker.views_app import build_dir
+
+        return (build_dir() / "index.html").is_file()
+
     def signup(self, email="sam.jones@example.com"):
         return self.client.post(reverse("account_signup"), {"email": email, "password1": PW})
 
@@ -49,8 +55,10 @@ class SignUpAndWelcome(TestCase):
         self.signup()
         link = re.search(r"https?://[^\s]+/accounts/confirm-email/[^\s/]+/", mail.outbox[0].body).group(0)
         response = self.client.get("/" + link.split("/", 3)[3])
-        self.assertRedirects(response, reverse("welcome"), fetch_redirect_response=False)
-        self.assertEqual(self.client.get(reverse("welcome")).status_code, 200)
+        self.assertRedirects(response, "/app/welcome", fetch_redirect_response=False)
+        shell = self.client.get("/app/welcome")
+        self.assertEqual(shell.status_code, 200 if self._built() else 503)
+        shell.close()
 
     def test_a_second_click_on_the_link_does_not_sign_anyone_in(self):
         self.signup()
@@ -59,47 +67,24 @@ class SignUpAndWelcome(TestCase):
         self.client.get(path)
         self.client.logout()
         self.client.get(path)
-        self.assertNotEqual(self.client.get(reverse("dashboard")).status_code, 200)
+        self.assertEqual(self.client.get("/app/").status_code, 302)  # still signed out: sent to sign in
 
     def test_welcome_needs_a_login(self):
-        self.assertEqual(self.client.get(reverse("welcome")).status_code, 302)
-        self.assertEqual(self.client.post(reverse("welcome_skip")).status_code, 302)
-
-    def test_saving_the_welcome_answers_fills_the_profile_and_moves_on(self):
-        u = User.objects.create_user("sam", email="sam@example.com", password=PW)
-        self.client.force_login(u)
-        r = self.client.post(reverse("welcome"), {"target_roles": "Backend Engineer", "home_country": "Bangladesh", "profile_cv": CV})
-        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)  # the search starts there; no empty "add a job" detour
-        profile = UserProfile.objects.get(user=u)
-        self.assertTrue(profile.onboarding_done)
-        self.assertEqual(profile.target_roles, "Backend Engineer")
-        self.assertEqual(profile.home_country, "BD")
-        self.assertTrue(profile.is_complete)
-
-    def test_a_bad_country_keeps_the_person_on_the_page_with_a_clear_message(self):
-        u = User.objects.create_user("sam", email="sam@example.com", password=PW)
-        self.client.force_login(u)
-        r = self.client.post(reverse("welcome"), {"target_roles": "x", "home_country": "Narnia", "profile_cv": CV})
-        self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "Not recognised as one country")
-        self.assertFalse(UserProfile.objects.get(user=u).onboarding_done)
-
-    def test_skipping_is_remembered_and_leads_to_the_dashboard(self):
-        u = User.objects.create_user("sam", email="sam@example.com", password=PW)
-        self.client.force_login(u)
-        self.assertRedirects(self.client.post(reverse("welcome_skip")), reverse("dashboard"), fetch_redirect_response=False)
-        self.assertTrue(UserProfile.objects.get(user=u).onboarding_done)
+        self.assertEqual(self.client.get("/app/welcome").status_code, 302)
+        self.assertEqual(self.client.get("/welcome/")["Location"], "/app/welcome")
+        self.assertEqual(self.client.get("/api/v1/welcome").status_code, 401)
+        self.assertEqual(self.client.post("/api/v1/welcome/skip").status_code, 401)
 
     def test_people_who_already_use_the_app_are_not_sent_to_the_welcome_page(self):
         u = User.objects.create_user("old", email="old@example.com", password=PW)
         UserProfile.objects.filter(user=u).update(onboarding_done=True)
         r = self.client.post(reverse("account_login"), {"login": "old", "password": PW})
-        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)
+        self.assertRedirects(r, "/app/", fetch_redirect_response=False)
 
     def test_a_first_sign_in_goes_to_the_welcome_page(self):
         User.objects.create_user("fresh", email="fresh@example.com", password=PW)
         r = self.client.post(reverse("account_login"), {"login": "fresh", "password": PW})
-        self.assertRedirects(r, reverse("welcome"), fetch_redirect_response=False)
+        self.assertRedirects(r, "/app/welcome", fetch_redirect_response=False)
 
 
 class NewJobsAndFit(TestCase):
@@ -110,15 +95,15 @@ class NewJobsAndFit(TestCase):
         self.client.force_login(self.u)
 
     def add(self):
-        self.client.post(reverse("add_job"), {"company": "Globex", "role": "Backend", "url": "https://jobs.example.com/1", "description": JD})
+        self.client.post("/api/v1/jobs", data=json.dumps({"company": "Globex", "role": "Backend", "url": "https://jobs.example.com/1", "description": JD}), content_type="application/json")
         return Application.objects.get(company="Globex")
 
     def test_a_new_job_is_saved_not_already_evaluated(self):
         app = self.add()
         self.assertEqual(app.status.name, "Saved")
-        page = self.client.get(reverse("dashboard")).content.decode()
-        self.assertIn("Not checked yet", page)
-        self.assertNotIn(">N/A<", page)
+        row = self.client.get("/api/v1/dashboard").json()["jobs"][0]
+        self.assertFalse(row["evaluated"])
+        self.assertIsNone(row["percent"])  # nothing to show as a number until the fit is checked
 
     def test_checking_the_fit_moves_it_to_evaluated(self):
         app = self.add()
@@ -157,9 +142,10 @@ class NewJobsAndFit(TestCase):
     def test_the_dashboard_greets_by_name_and_points_to_one_next_step(self):
         self.u.first_name = "Quinn"
         self.u.save()
-        page = self.client.get(reverse("dashboard")).content.decode()
-        self.assertRegex(page, r"Good (morning|afternoon|evening), Quinn")
-        self.assertEqual(page.count("YOUR NEXT STEP"), 1)
+        data = self.client.get("/api/v1/dashboard").json()
+        self.assertRegex(data["greeting"], r"Good (morning|afternoon|evening), Quinn")
+        self.assertTrue(data["next_step"]["label"])
+        self.assertTrue(data["next_step"]["url"].startswith("/app/"))
 
 
 class Guidance(SimpleTestCase):

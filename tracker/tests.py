@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from tracker.models import Application, Bucket, Document, DocumentKind, ScoreBand, SiteConfig, Status
+from tracker.models import Application, Bucket, Document, DocumentKind, SiteConfig, Status
 from tracker.services import careerops, liveness
 from tracker.services.paperless import PaperlessClient, PaperlessError, push_document
 
@@ -178,46 +178,11 @@ class ViewTests(TestCase):
             deadline=date.today() + timedelta(days=2),
         )
 
-    def test_login_required(self):
+    def test_the_app_needs_sign_in(self):
         self.client.logout()
-        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 302)
-
-    def test_dashboard_renders_match_and_summary(self):
-        r = self.client.get(reverse("dashboard"))
-        self.assertContains(r, "90%")
-        self.assertContains(r, "Short summary")
-        self.assertContains(r, "Strong")
-
-    def test_labels_come_from_config(self):
-        config = SiteConfig.load()
-        config.site_title = "My custom board"
-        config.save()
-        Bucket.objects.filter(key="apply").update(label="Queue")
-        r = self.client.get(reverse("dashboard"))
-        self.assertContains(r, "My custom board")
-        self.assertContains(r, "Queue (1)")
-
-    def test_score_band_editable(self):
-        ScoreBand.objects.all().delete()
-        ScoreBand.objects.create(label="Great", min_percent=50, color="#00ff00")
-        self.assertContains(self.client.get(reverse("dashboard")), "Great")
-
-    def test_set_status_stamps_applied_date(self):
-        applied = Status.objects.get(name="Applied")
-        r = self.client.post(reverse("set_status", args=[self.app.pk]), {"status": applied.pk})
-        self.assertEqual(r.status_code, 200)
-        self.app.refresh_from_db()
-        self.assertEqual(self.app.status, applied)
-        self.assertEqual(self.app.applied_date, date.today())
-        self.assertEqual(self.app.events.count(), 1)
-
-    def test_set_status_requires_post_and_csrf(self):
-        self.assertEqual(self.client.get(reverse("set_status", args=[self.app.pk])).status_code, 405)
-        from django.test import Client
-        strict = Client(enforce_csrf_checks=True)
-        strict.force_login(self.user)
-        r = strict.post(reverse("set_status", args=[self.app.pk]), {"status": self.evaluated.pk})
-        self.assertEqual(r.status_code, 403)
+        r = self.client.get("/app/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/accounts/login/", r["Location"])
 
     def test_admin_documents_are_served_only_from_allowed_folders(self):
         boss = get_user_model().objects.create_user("boss", password="x" * 20, is_staff=True)
@@ -513,19 +478,21 @@ class LandingTests(TestCase):
 
     def test_logged_in_visitor_sees_dashboard_link(self):
         self.client.force_login(get_user_model().objects.create_user("u", password="x" * 20))
-        self.assertContains(self.client.get(reverse("landing")), "Open dashboard")
+        r = self.client.get(reverse("landing"))
+        self.assertContains(r, "Open dashboard")
+        self.assertContains(r, 'href="/app/"')
 
     def test_can_be_switched_off(self):
         config = SiteConfig.load()
         config.landing_enabled = False
         config.save()
         r = self.client.get(reverse("landing"))
-        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)
-        follow = self.client.get(reverse("dashboard"))  # anonymous visitors then land on sign-in
+        self.assertRedirects(r, "/app/", fetch_redirect_response=False)
+        follow = self.client.get("/app/")  # anonymous visitors then land on sign-in
         self.assertIn("/accounts/login/", follow["Location"])
 
-    def test_dashboard_moved_and_still_protected(self):
-        self.assertEqual(reverse("dashboard"), "/dashboard/")
-        r = self.client.get(reverse("dashboard"))
+    def test_the_old_dashboard_address_redirects_and_stays_protected(self):
+        r = self.client.get("/dashboard/")
         self.assertEqual(r.status_code, 302)
-        self.assertIn("/accounts/login/", r["Location"])
+        self.assertEqual(r["Location"], "/app/")
+        self.assertIn("/accounts/login/", self.client.get(r["Location"])["Location"])

@@ -620,7 +620,7 @@ def set_offer_status(offer_id: int, status: str) -> dict:
 def compare_offers() -> list[dict]:
     """The open and accepted offers ranked by yearly total, one group per currency (never converted), with the gap to the best."""
     from .models import Offer
-    from .views_pipeline import comparison
+    from .services.pipeline import comparison
 
     groups = comparison(list(Offer.objects.filter(owner=_owner()).select_related("application")))
     return [

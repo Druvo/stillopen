@@ -77,20 +77,45 @@ class NoThirdPartyAssets(TestCase):
             self.assertIn("/static/vendor/tabler/tabler.min.css", html, name)
             self.assertIn("/static/css/stillopen.css", html, name)
 
-    def test_signed_in_pages(self):
+    def test_signed_in_account_pages(self):
         self.client.force_login(self.user)
-        app = Application.objects.get(owner=self.user)
-        urls = [reverse("dashboard"), reverse("profile"), reverse("profile_ai"), reverse("knowledge"), reverse("add_job"),
-                reverse("cv_list"), reverse("apply_page", args=[app.pk]), reverse("job_edit", args=[app.pk]),
-                reverse("account_email"), reverse("account_change_password")]
-        for url in urls:
-            html = self.assert_self_hosted(url)
-        self.assertIn("/static/vendor/tabler/tabler.min.js", self.client.get(reverse("dashboard")).content.decode())
+        for url in (reverse("account_email"), reverse("account_change_password")):
+            self.assert_self_hosted(url)
 
-    def test_job_links_are_still_ordinary_links(self):
+    def test_the_email_test_page_and_the_cv_print_page(self):
+        from tracker.models import CVVersion
+
+        boss = User.objects.create_user("boss", email="boss@example.com", password="correct-horse-battery-staple", is_staff=True)
+        self.client.force_login(boss)
+        self.assert_self_hosted(reverse("email_test"))
+        app = Application.objects.get(owner=self.user)
+        version = CVVersion.objects.create(owner=self.user, application=app, kind="master", label="CV", content="# Pat\n\nBackend engineer.")
         self.client.force_login(self.user)
-        html = self.client.get(reverse("dashboard")).content.decode()
-        self.assertIn('href="https://jobs.example.com/acme"', html)  # navigation to the posting is fine; only assets are banned
+        self.assert_self_hosted(reverse("cv_print", args=[version.pk]))
+
+    def test_the_app_shell_loads_nothing_from_elsewhere(self):
+        """The shell page of the app (the built export when this checkout has one, else a stand-in) names only this server's own files."""
+        from tracker.views_app import build_dir
+
+        self.client.force_login(self.user)
+        built = build_dir() / "index.html"
+        with tempfile.TemporaryDirectory() as root:
+            override = override_settings(STILLOPEN_FRONTEND_DIR=str(build_dir() if built.is_file() else root))
+            if not built.is_file():
+                (Path(root) / "index.html").write_text('<html><link rel="stylesheet" href="/app/_next/static/a.css"><script src="/app/_next/static/a.js"></script></html>', encoding="utf-8")
+            with override:
+                response = self.client.get("/app/")
+                self.assertEqual(response.status_code, 200)
+                html = b"".join(response.streaming_content).decode("utf-8", errors="replace")
+                response.close()
+        self.assertIsNone(EXTERNAL_ASSET.search(html), "the app shell loads something from a third-party host")
+        policy = response["Content-Security-Policy"]
+        for directive in ("default-src 'self'", "connect-src 'self'", "frame-ancestors 'none'"):
+            self.assertIn(directive, policy)
+
+    def test_the_old_pages_that_redirect_load_nothing_either(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get("/dashboard/")["Location"], "/app/")
 
     def test_admin_pages_do_not_use_a_font_cdn(self):
         admin = User.objects.create_superuser("root", password="correct-horse-battery-staple")

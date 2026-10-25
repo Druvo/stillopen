@@ -1,10 +1,12 @@
 """Search areas, home country, job details, detection and the fit check."""
+import json
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from tracker import mcp_tools
-from tracker.models import Application, SearchArea, SiteConfig, Status, UserProfile
+from tracker.models import Application, SearchArea, Status, UserProfile
 from tracker.services import fit, geo
 
 User = get_user_model()
@@ -16,6 +18,13 @@ def person(name="jane", **profile):
     u = User.objects.create_user(name, email=f"{name}@example.com", password=PW)
     UserProfile.objects.filter(user=u).update(profile_cv=CV, **profile)
     return u
+
+
+def call(client, method, path, body=None):
+    """A call to the app's JSON API."""
+    if method in ("get", "delete"):
+        return getattr(client, method)(f"/api/v1{path}")
+    return getattr(client, method)(f"/api/v1{path}", data=json.dumps(body or {}), content_type="application/json")
 
 
 def area(owner, place, remote=False, hybrid=False, onsite=False, **kw):
@@ -139,7 +148,7 @@ class FillDetails(TestCase):
 
     def test_adding_a_job_detects_its_details(self):
         self.client.force_login(self.u)
-        self.client.post(reverse("add_job"), {"company": "Acme", "role": "Backend Engineer", "description": "Hybrid role in Kuala Lumpur with visa sponsorship."})
+        call(self.client, "post", "/jobs", {"company": "Acme", "role": "Backend Engineer", "description": "Hybrid role in Kuala Lumpur with visa sponsorship."})
         app = Application.objects.get(company="Acme")
         self.assertEqual((app.arrangement, app.country, app.sponsorship), ("hybrid", "MY", "yes"))
 
@@ -270,93 +279,89 @@ class PayParsing(TestCase):
 
 
 class ProfilePage(TestCase):
+    """Search areas and preferences are saved through the app's API (more rules in tests_api_account)."""
+
     def setUp(self):
         self.u = person()
         self.client.force_login(self.u)
 
-    def base(self, **extra):
+    def save(self, **extra):
         data = {
             "target_roles": "Backend Engineer", "home_country": "Bangladesh", "industries": "", "languages": "English", "notice_period": "30 days",
             "salary_floor": "", "deal_breakers": "", "about": "", "profile_cv": CV,
-            "areas-TOTAL_FORMS": 2, "areas-INITIAL_FORMS": 0, "areas-MIN_NUM_FORMS": 0, "areas-MAX_NUM_FORMS": 25,
-            "areas-0-place": "Bangladesh", "areas-0-city": "Dhaka", "areas-0-allow_onsite": "on", "areas-0-allow_hybrid": "on",
-            "areas-0-salary_period": "month",
-            "areas-1-place": "Anywhere", "areas-1-allow_remote": "on", "areas-1-salary_period": "month",
         }
         data.update(extra)
-        return data
+        return call(self.client, "put", "/profile", data)
+
+    def add_areas(self):
+        call(self.client, "post", "/profile/areas", {"place": "Bangladesh", "city": "Dhaka", "allow_onsite": True, "allow_hybrid": True, "salary_period": "month"})
+        call(self.client, "post", "/profile/areas", {"place": "Anywhere", "allow_remote": True, "salary_period": "month"})
 
     def test_saving_search_areas_home_country_and_preferences(self):
-        r = self.client.post(reverse("profile"), self.base(employment_types=["full_time", "contract"], seniority_levels=["senior"]))
-        self.assertEqual(r.status_code, 302)
+        r = self.save(employment_types=["full_time", "contract"], seniority_levels=["senior"])
+        self.assertEqual(r.status_code, 200, r.content)
+        self.add_areas()
         profile = UserProfile.objects.get(user=self.u)
         self.assertEqual((profile.home_country, profile.notice_period, profile.employment_types, profile.seniority_levels),
                          ("BD", "30 days", ["full_time", "contract"], ["senior"]))
-        areas = list(SearchArea.objects.filter(owner=self.u))
+        areas = list(SearchArea.objects.filter(owner=self.u).order_by("order", "id"))
         self.assertEqual([(a.place, a.city) for a in areas], [("Bangladesh", "Dhaka"), ("Anywhere", "")])
-        self.assertEqual([a.order for a in areas], [0, 1])
+        self.assertLess(areas[0].order, areas[1].order)
         text = profile.preferences_text()
-        for expected in ["Lives in: Bangladesh", "Bangladesh, Dhaka" if False else "Dhaka, Bangladesh: hybrid/on-site", "Anywhere: remote",
+        for expected in ["Lives in: Bangladesh", "Dhaka, Bangladesh: hybrid/on-site", "Anywhere: remote",
                          "Employment types: Full-time, Contract", "Seniority: Senior", "Languages: English", "Notice period: 30 days"]:
             self.assertIn(expected, text)
 
-    def test_the_page_shows_what_was_saved(self):
-        self.client.post(reverse("profile"), self.base())
-        page = self.client.get(reverse("profile")).content.decode()
-        self.assertTrue('value="Bangladesh"' in page and 'value="Dhaka"' in page and 'value="Anywhere"' in page)
-        self.assertTrue("Change password" in page and "Connected accounts" in page and "Change or add email" in page)
+    def test_the_profile_shows_what_was_saved(self):
+        self.save()
+        self.add_areas()
+        data = call(self.client, "get", "/profile").json()
+        self.assertEqual(data["profile"]["home_country"], "Bangladesh")
+        self.assertEqual([a["place"] for a in data["areas"]], ["Bangladesh", "Anywhere"])
+        self.assertEqual(data["areas"][0]["city"], "Dhaka")
 
-    def test_editing_and_removing_a_row(self):
-        self.client.post(reverse("profile"), self.base())
-        first, second = SearchArea.objects.filter(owner=self.u)
-        data = self.base(**{
-            "areas-TOTAL_FORMS": 3, "areas-INITIAL_FORMS": 2,
-            "areas-0-id": first.pk, "areas-0-owner": self.u.pk, "areas-0-place": "Malaysia", "areas-0-city": "",
-            "areas-0-allow_onsite": "on", "areas-0-needs_visa_sponsorship": "on", "areas-0-min_salary": "6000", "areas-0-salary_currency": "myr",
-            "areas-1-id": second.pk, "areas-1-owner": self.u.pk, "areas-1-DELETE": "on",
-        })
-        data.pop("areas-0-allow_hybrid")
-        self.client.post(reverse("profile"), data)
+    def test_editing_and_removing_an_area(self):
+        self.add_areas()
+        first, second = SearchArea.objects.filter(owner=self.u).order_by("order", "id")
+        r = call(self.client, "patch", f"/profile/areas/{first.pk}", {"place": "Malaysia", "city": "", "allow_hybrid": False, "needs_visa_sponsorship": True, "min_salary": 6000, "salary_currency": "myr"})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(self.client.delete(f"/api/v1/profile/areas/{second.pk}").status_code, 200)
         areas = SearchArea.objects.filter(owner=self.u)
         self.assertEqual(areas.count(), 1)
         a = areas.get()
         self.assertEqual((a.place, a.needs_visa_sponsorship, a.min_salary, a.salary_currency, a.allow_hybrid), ("Malaysia", True, 6000, "MYR", False))
 
     def test_validation(self):
-        bad_arrangement = self.base(**{"areas-0-allow_onsite": "", "areas-0-allow_hybrid": ""})
-        bad_arrangement.pop("areas-0-allow_onsite"); bad_arrangement.pop("areas-0-allow_hybrid")
-        self.assertEqual(self.client.post(reverse("profile"), bad_arrangement).status_code, 200)
-        self.assertEqual(self.client.post(reverse("profile"), self.base(**{"areas-0-min_salary": "5000"})).status_code, 200)  # no currency
-        self.assertEqual(self.client.post(reverse("profile"), self.base(**{"areas-0-min_salary": "5000", "areas-0-salary_currency": "DOLLARS"})).status_code, 200)
-        self.assertEqual(self.client.post(reverse("profile"), self.base(home_country="Narnia")).status_code, 200)
+        self.assertEqual(call(self.client, "post", "/profile/areas", {"place": "Bangladesh"}).status_code, 400)  # no kind of work chosen
+        self.assertEqual(call(self.client, "post", "/profile/areas", {"place": "Bangladesh", "allow_onsite": True, "min_salary": 5000}).status_code, 400)  # no currency
+        self.assertEqual(call(self.client, "post", "/profile/areas", {"place": "Bangladesh", "allow_onsite": True, "min_salary": 5000, "salary_currency": "DOLLARS"}).status_code, 400)
+        self.assertEqual(self.save(home_country="Narnia").status_code, 400)
         self.assertFalse(SearchArea.objects.filter(owner=self.u).exists())
         self.assertEqual(UserProfile.objects.get(user=self.u).home_country, "")
 
     def test_an_unrecognised_place_is_allowed_with_a_notice(self):
-        r = self.client.post(reverse("profile"), self.base(**{"areas-0-place": "Tangail"}), follow=True)
-        self.assertContains(r, "not a place we recognise")
+        r = call(self.client, "post", "/profile/areas", {"place": "Tangail", "allow_remote": True, "salary_period": "month"})
+        self.assertIn("not a place we recognise", r.json()["warning"])
         self.assertTrue(SearchArea.objects.filter(owner=self.u, place="Tangail").exists())
 
-    def test_too_many_rows_are_refused(self):
-        data = self.base(**{"areas-TOTAL_FORMS": 22})
-        for i in range(2, 22):
-            data[f"areas-{i}-place"] = "Malaysia"
-            data[f"areas-{i}-allow_remote"] = "on"
-            data[f"areas-{i}-salary_period"] = "month"
-        self.assertEqual(self.client.post(reverse("profile"), data).status_code, 200)
-        self.assertFalse(SearchArea.objects.filter(owner=self.u).exists())
+    def test_too_many_areas_are_refused(self):
+        for i in range(20):
+            area(self.u, "Malaysia", remote=True)
+        r = call(self.client, "post", "/profile/areas", {"place": "Malaysia", "allow_remote": True, "salary_period": "month"})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(SearchArea.objects.filter(owner=self.u).count(), 20)
 
-    def test_a_post_without_the_rows_leaves_them_alone(self):
-        self.client.post(reverse("profile"), self.base())
-        self.client.post(reverse("profile"), {"target_roles": "Different", "profile_cv": CV})
+    def test_saving_the_profile_leaves_the_areas_alone(self):
+        self.add_areas()
+        self.save(target_roles="Different")
         self.assertEqual(SearchArea.objects.filter(owner=self.u).count(), 2)
         self.assertEqual(UserProfile.objects.get(user=self.u).target_roles, "Different")
 
     def test_search_areas_are_private_to_their_owner(self):
-        self.client.post(reverse("profile"), self.base())
+        self.add_areas()
         other = person("bob")
         area(other, "Narnia-secret", remote=True)
-        self.assertFalse("Narnia-secret" in self.client.get(reverse("profile")).content.decode())
+        self.assertFalse("Narnia-secret" in call(self.client, "get", "/profile").content.decode())
         self.assertEqual(SearchArea.objects.filter(owner=self.u).count(), 2)
         self.assertEqual(self.client.get(reverse("export_data")).json()["profile"]["search_areas"][0].split(":")[0], "Dhaka, Bangladesh")
 
@@ -391,54 +396,59 @@ class LegacyMigration(TestCase):
 
 
 class JobDetailsPage(TestCase):
+    """The job details screen runs on the JSON API (more rules in tests_api_jobs)."""
+
     def setUp(self):
         self.u = person()
         my_search(self.u)
         self.app = job(self.u, description="Hybrid role in Kuala Lumpur. Visa sponsorship offered.")
         self.client.force_login(self.u)
 
-    def test_page_shows_the_fit_and_what_was_detected(self):
+    def details(self, app=None):
+        return call(self.client, "get", f"/jobs/{(app or self.app).pk}/details")
+
+    def test_the_screen_shows_the_fit_and_what_was_detected(self):
         geo.fill_details(self.app)
-        page = self.client.get(reverse("job_edit", args=[self.app.pk])).content.decode()
-        self.assertTrue("Fit with what you want" in page and "fits your search area" in page)
-        self.assertTrue("suggested by reading the posting" in page)
+        data = self.details().json()
+        self.assertEqual(data["details_source"], "detected")
+        self.assertTrue(any("fits your search area" in f["text"] for f in data["fit"]))
 
     def test_editing_details_marks_them_as_yours_and_validates_country(self):
         data = {"company": "Globex", "role": "Backend Engineer", "location_text": "Penang", "country": "Malaysia", "arrangement": "onsite",
                 "sponsorship": "yes", "relocation": "", "employment_type": "full_time", "seniority": "", "description": "x", "notes": ""}
-        self.assertEqual(self.client.post(reverse("job_edit", args=[self.app.pk]), data).status_code, 302)
+        url = f"/jobs/{self.app.pk}/details"
+        self.assertEqual(call(self.client, "put", url, data).status_code, 200)
         self.app.refresh_from_db()
         self.assertEqual((self.app.country, self.app.arrangement, self.app.details_source), ("MY", "onsite", "manual"))
-        self.assertEqual(self.client.post(reverse("job_edit", args=[self.app.pk]), {**data, "country": "Narnia"}).status_code, 200)
-        self.assertEqual(self.client.post(reverse("job_edit", args=[self.app.pk]), {**data, "country": "Gulf"}).status_code, 200)  # a region is not one country
-        self.assertEqual(self.client.post(reverse("job_edit", args=[self.app.pk]), {**data, "arrangement": "remotish"}).status_code, 200)
+        self.assertEqual(call(self.client, "put", url, {**data, "country": "Narnia"}).status_code, 400)
+        self.assertEqual(call(self.client, "put", url, {**data, "country": "Gulf"}).status_code, 400)  # a region is not one country
+        self.assertEqual(call(self.client, "put", url, {**data, "arrangement": "remotish"}).status_code, 400)
 
     def test_redetect_respects_manual_details(self):
-        self.client.post(reverse("job_redetect", args=[self.app.pk]))
+        call(self.client, "post", f"/jobs/{self.app.pk}/redetect")
         self.app.refresh_from_db()
         self.assertEqual(self.app.details_source, "detected")
         Application.objects.filter(pk=self.app.pk).update(details_source="manual", arrangement="remote")
-        self.client.post(reverse("job_redetect", args=[self.app.pk]))
+        self.assertEqual(call(self.client, "post", f"/jobs/{self.app.pk}/redetect").status_code, 400)
         self.app.refresh_from_db()
         self.assertEqual(self.app.arrangement, "remote")
 
     def test_only_the_owner_can_see_or_change_it(self):
         theirs = job(person("bob"))
-        self.assertEqual(self.client.get(reverse("job_edit", args=[theirs.pk])).status_code, 404)
-        self.assertEqual(self.client.post(reverse("job_edit", args=[theirs.pk]), {"company": "x", "role": "y"}).status_code, 404)
-        self.assertEqual(self.client.post(reverse("job_redetect", args=[theirs.pk])).status_code, 404)
-        self.assertEqual(self.client.get(reverse("job_redetect", args=[self.app.pk])).status_code, 405)
+        self.assertEqual(self.details(theirs).status_code, 404)
+        self.assertEqual(call(self.client, "put", f"/jobs/{theirs.pk}/details", {"company": "x", "role": "y"}).status_code, 404)
+        self.assertEqual(call(self.client, "post", f"/jobs/{theirs.pk}/redetect").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/jobs/{self.app.pk}/redetect").status_code, 405)
 
-    def test_dashboard_pill_and_apply_page_show_fit(self):
+    def test_the_dashboard_and_apply_screen_show_fit(self):
         geo.fill_details(self.app)
-        page = self.client.get(reverse("dashboard")).content.decode()
-        self.assertTrue(">Fits</a>" in page)
         london = job(self.u, company="LondonCo", description="On-site in London.")
         geo.fill_details(london)
-        page = self.client.get(reverse("dashboard")).content.decode()
-        self.assertTrue("Check fit" in page)
-        apply_page = self.client.get(reverse("apply_page", args=[london.pk])).content.decode()
-        self.assertTrue("outside your search areas" in apply_page)
+        rows = {j["company"]: j for j in call(self.client, "get", "/dashboard").json()["jobs"]}
+        self.assertEqual(rows["Globex"]["fit_level"], "ok")
+        self.assertEqual(rows["LondonCo"]["fit_level"], "warn")
+        checks = call(self.client, "get", f"/jobs/{london.pk}/apply").json()["checks"]
+        self.assertTrue(any("outside your search areas" in c["text"] for c in checks))
 
     def test_export_includes_job_details(self):
         geo.fill_details(self.app)

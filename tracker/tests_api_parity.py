@@ -53,14 +53,11 @@ class NoClassicDependence(TestCase):
             self.assertNotIn("open_url", item)
         self.assertNotIn("apply_url", self.client.get(f"{BASE}/cover/{letter.pk}").json())
 
-    def test_the_profile_no_longer_offers_the_old_new_app_switch(self):
+    def test_the_profile_offers_no_app_switch_any_more(self):
         data = self.client.get(f"{BASE}/profile").json()
         self.assertNotIn("use_new_app", data["profile"])
         self.assertNotIn("new_app_enabled", data["site"])
         self.assertNotIn("documents", data["account"]["classic"])
-        before = UserProfile.objects.get(user=self.a).use_new_app
-        self.client.put(f"{BASE}/profile", data=json.dumps({"use_new_app": not before}), content_type="application/json")
-        self.assertEqual(UserProfile.objects.get(user=self.a).use_new_app, before)
 
 
 @override_settings(STILLOPEN_CVGEN_PER_HOUR=1)

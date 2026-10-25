@@ -73,9 +73,9 @@ class TwoStepSignIn(TestCase):
 
         self.user = get_user_model().objects.create_user("mfauser", email="mfa@example.com", password="x" * 20)
 
-    def test_profile_links_to_two_step_setup_and_the_page_loads(self):
+    def test_the_app_links_to_two_step_setup_and_the_page_loads(self):
         self.client.force_login(self.user)
-        self.assertContains(self.client.get(reverse("profile")), reverse("mfa_index"))
+        self.assertEqual(self.client.get("/api/v1/profile").json()["account"]["classic"]["two_step"], reverse("mfa_index"))
         page = self.client.get(reverse("mfa_index"))
         self.assertEqual(page.status_code, 200)
 

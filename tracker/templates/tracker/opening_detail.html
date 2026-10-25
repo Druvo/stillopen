@@ -46,7 +46,7 @@
           <span class="so-pill mb-2">Free</span>
           <h2 class="h4">Does this job fit you?</h2>
           <p class="text-secondary">Sign in and we compare it with your CV, your skills and the places you can work, then tailor your CV and cover letter for it.</p>
-          {% if user.is_authenticated %}<a class="btn btn-primary w-100" href="{% url 'dashboard' %}">Open your dashboard</a>
+          {% if user.is_authenticated %}<a class="btn btn-primary w-100" href="/app/">Open your dashboard</a>
           {% elif config.signup_open %}<a class="btn btn-primary w-100 mb-2" href="{% url 'account_signup' %}">Check my fit, free</a><a class="btn btn-outline-secondary w-100" href="{% url 'account_login' %}">Sign in</a>
           {% else %}<a class="btn btn-primary w-100" href="{% url 'account_login' %}">Sign in</a>{% endif %}
           <p class="text-secondary mt-3 mb-0" style="font-size:.85rem">We never apply for you. You press apply on the employer's page.</p>

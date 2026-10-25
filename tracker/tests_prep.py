@@ -272,129 +272,124 @@ class Preconditions(PrepBase):
 
 
 class Views(PrepBase):
+    """The prep screens run on the JSON API (the route inventory in tests_api proves signed-out 401 and another person's 404 for every route)."""
+
     def setUp(self):
         super().setUp()
         self.client.force_login(self.user)
 
-    def test_login_is_required_everywhere(self):
-        self.client.logout()
-        plan = self.make_plan()
-        for name, args in (("prep_list", []), ("prep_plan", [plan.pk])):
-            self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 302, name)
-        for name, args in (("prep_create", [self.app.pk]), ("prep_activate", [plan.pk]), ("prep_discard", [plan.pk])):
-            self.assertEqual(self.client.post(reverse(name, args=args)).status_code, 302, name)
+    def call(self, method, path, body=None):
+        if method in ("get", "delete"):
+            return getattr(self.client, method)(f"/api/v1{path}")
+        return getattr(self.client, method)(f"/api/v1{path}", data=json.dumps(body or {}), content_type="application/json")
 
     def test_another_persons_plans_and_jobs_are_not_found(self):
         theirs = self.make_plan(owner=self.other)
         lesson, question_ = PrepLesson.objects.filter(week__plan=theirs).first(), theirs.questions.first()
-        for name, args in (("prep_plan", [theirs.pk]),):
-            self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 404, name)
-        posts = [("prep_activate", [theirs.pk]), ("prep_discard", [theirs.pk]), ("prep_remove", ["lesson", lesson.pk]),
-                 ("prep_remove", ["question", question_.pk]), ("prep_tick", ["lesson", lesson.pk]),
-                 ("prep_tick", ["milestone", PrepMilestone.objects.filter(week__plan=theirs).first().pk]),
-                 ("prep_create", [theirs.application_id])]
-        for name, args in posts:
-            self.assertEqual(self.client.post(reverse(name, args=args)).status_code, 404, name)
+        self.assertEqual(self.call("get", f"/prep/plans/{theirs.pk}").status_code, 404)
+        for method, path in (
+            ("post", f"/prep/plans/{theirs.pk}/start"), ("delete", f"/prep/plans/{theirs.pk}"), ("delete", f"/prep/lessons/{lesson.pk}"),
+            ("delete", f"/prep/questions/{question_.pk}"), ("post", f"/prep/lessons/{lesson.pk}/tick"),
+            ("post", f"/prep/milestones/{PrepMilestone.objects.filter(week__plan=theirs).first().pk}/tick"),
+            ("post", f"/jobs/{theirs.application_id}/prep"),
+        ):
+            self.assertEqual(self.call(method, path).status_code, 404, path)
         theirs.refresh_from_db()
         self.assertEqual(theirs.status, "draft")
         self.assertEqual(PrepLesson.objects.filter(week__plan=theirs).count(), 2)
-        self.assertNotContains(self.client.get(reverse("prep_list")), "Plan")
+        self.assertEqual(self.call("get", "/prep/plans").json()["plans"], [])
 
     def test_the_list_shows_only_my_plans(self):
         self.make_plan()
         self.make_plan(owner=self.other)
-        self.assertEqual(len(self.client.get(reverse("prep_list")).context["plans"]), 1)
+        self.assertEqual(len(self.call("get", "/prep/plans").json()["plans"]), 1)
 
     def test_asking_for_a_plan_from_a_job_starts_one_and_does_not_duplicate(self):
         with mock.patch("tracker.services.prep.threading.Thread") as thread:
-            r = self.client.post(reverse("prep_create", args=[self.app.pk]), {"weeks": "3", "hours": "4"})
+            r = self.call("post", f"/jobs/{self.app.pk}/prep", {"weeks": 3, "hours": 4})
         plan = PrepPlan.objects.get(owner=self.user)
-        self.assertRedirects(r, reverse("prep_plan", args=[plan.pk]))
+        self.assertEqual(r.json(), {"id": plan.pk, "existing": False})
         self.assertEqual((plan.weeks_count, plan.hours_per_week, plan.status), (3, 4, "generating"))
         thread.return_value.start.assert_called_once()
-        self.client.post(reverse("prep_create", args=[self.app.pk]))
+        self.assertTrue(self.call("post", f"/jobs/{self.app.pk}/prep").json()["existing"])
         self.assertEqual(PrepPlan.objects.filter(owner=self.user).count(), 1)
 
     def test_the_defaults_come_from_the_admin_settings(self):
         SiteConfig.objects.filter(pk=1).update(prep_default_weeks=5, prep_default_hours=7)
         with mock.patch("tracker.services.prep.threading.Thread"):
-            self.client.post(reverse("prep_create", args=[self.app.pk]))
+            self.call("post", f"/jobs/{self.app.pk}/prep")
         plan = PrepPlan.objects.get(owner=self.user)
         self.assertEqual((plan.weeks_count, plan.hours_per_week), (5, 7))
 
-    def test_a_refusal_comes_back_as_a_message(self):
+    def test_a_refusal_comes_back_in_plain_words(self):
         UserProfile.objects.filter(user=self.user).update(ai_provider="none")
-        r = self.client.post(reverse("prep_create", args=[self.app.pk]), follow=True)
-        self.assertContains(r, "AI settings")
+        r = self.call("post", f"/jobs/{self.app.pk}/prep")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("AI settings", r.json()["error"])
         self.assertFalse(PrepPlan.objects.exists())
 
-    def test_each_state_of_a_plan_page(self):
+    def test_each_state_of_a_plan(self):
         generating = PrepPlan.objects.create(owner=self.user, application=self.app, status="generating", progress="Writing the weekly plan")
-        page = self.client.get(reverse("prep_plan", args=[generating.pk]))
-        self.assertContains(page, "Writing the weekly plan")
-        self.assertContains(page, 'http-equiv="refresh"')
+        data = self.call("get", f"/prep/plans/{generating.pk}").json()
+        self.assertEqual((data["status"], data["progress"]), ("generating", "Writing the weekly plan"))
         failed = PrepPlan.objects.create(owner=self.user, application=self.app, status="failed", error="Your key was refused.")
-        self.assertContains(self.client.get(reverse("prep_plan", args=[failed.pk])), "Your key was refused.")
+        self.assertEqual(self.call("get", f"/prep/plans/{failed.pk}").json()["error"], "Your key was refused.")
         draft = self.make_plan()
-        page = self.client.get(reverse("prep_plan", args=[draft.pk]))
-        self.assertContains(page, "This is a draft")
-        self.assertContains(page, "Start this plan")
-        self.assertContains(page, "kubernetes.io")
-        self.assertContains(page, 'rel="noopener noreferrer"')
-
-    def test_model_output_is_escaped_on_the_page(self):
-        plan = self.make_plan()
-        PrepLesson.objects.filter(week__plan=plan).update(title="<script>alert(1)</script>")
-        self.assertNotContains(self.client.get(reverse("prep_plan", args=[plan.pk])), "<script>alert(1)</script>")
+        data = self.call("get", f"/prep/plans/{draft.pk}").json()
+        self.assertEqual(data["status"], "draft")
+        self.assertIn("kubernetes.io", json.dumps(data["weeks"][0]["lessons"][0]["sources"]))
+        self.assertIn("questions", data["weeks"][0]["lessons"][0])  # answers are shown only while reviewing the draft
 
     def test_removing_a_lesson_removes_its_questions_too_and_only_in_a_draft(self):
         plan = self.make_plan()
         lesson = PrepLesson.objects.filter(week__plan=plan).first()
         questions = list(lesson.questions.values_list("pk", flat=True))
-        self.client.post(reverse("prep_remove", args=["lesson", lesson.pk]))
+        self.call("delete", f"/prep/lessons/{lesson.pk}")
         self.assertFalse(PrepLesson.objects.filter(pk=lesson.pk).exists())
         self.assertTrue(PrepQuestion.objects.filter(pk__in=questions, removed=True).count() == len(questions))
         plan.status = "active"
         plan.save()
         other_lesson = PrepLesson.objects.filter(week__plan=plan).first()
-        self.client.post(reverse("prep_remove", args=["lesson", other_lesson.pk]))
+        self.call("delete", f"/prep/lessons/{other_lesson.pk}")
         self.assertTrue(PrepLesson.objects.filter(pk=other_lesson.pk).exists())
 
     def test_removing_a_question_hides_it_and_a_plan_needs_one_left(self):
         plan = self.make_plan(lessons=1, questions=1)
         q = plan.questions.get()
-        self.client.post(reverse("prep_remove", args=["question", q.pk]))
+        self.call("delete", f"/prep/questions/{q.pk}")
         q.refresh_from_db()
         self.assertTrue(q.removed)
-        r = self.client.post(reverse("prep_activate", args=[plan.pk]), follow=True)
-        self.assertContains(r, "Keep at least one")
+        r = self.call("post", f"/prep/plans/{plan.pk}/start")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Keep at least one", r.json()["error"])
         plan.refresh_from_db()
         self.assertEqual(plan.status, "draft")
 
     def test_starting_a_plan_and_ticking_lessons_through_to_finished(self):
         plan = self.make_plan(lessons=2)
-        self.client.post(reverse("prep_activate", args=[plan.pk]))
+        self.call("post", f"/prep/plans/{plan.pk}/start")
         plan.refresh_from_db()
         self.assertEqual(plan.status, "active")
         self.assertIsNotNone(plan.approved_at)
         first, second = PrepLesson.objects.filter(week__plan=plan).order_by("order")
-        self.client.post(reverse("prep_tick", args=["lesson", first.pk]))
-        self.assertContains(self.client.get(reverse("prep_plan", args=[plan.pk])), "1 of 2 lessons done")
-        self.client.post(reverse("prep_tick", args=["lesson", second.pk]))
+        self.call("post", f"/prep/lessons/{first.pk}/tick")
+        data = self.call("get", f"/prep/plans/{plan.pk}").json()
+        self.assertEqual((data["lessons_done"], data["lessons_total"]), (1, 2))
+        self.call("post", f"/prep/lessons/{second.pk}/tick")
         plan.refresh_from_db()
         self.assertEqual(plan.status, "done")
-        self.client.post(reverse("prep_tick", args=["lesson", second.pk]))  # un-tick
+        self.call("post", f"/prep/lessons/{second.pk}/tick")  # un-tick
         plan.refresh_from_db()
         self.assertEqual(plan.status, "active")
         milestone = PrepMilestone.objects.get(week__plan=plan)
-        self.client.post(reverse("prep_tick", args=["milestone", milestone.pk]))
+        self.call("post", f"/prep/milestones/{milestone.pk}/tick")
         milestone.refresh_from_db()
         self.assertIsNotNone(milestone.done_at)
 
     def test_a_draft_cannot_be_ticked(self):
         plan = self.make_plan()
         lesson = PrepLesson.objects.filter(week__plan=plan).first()
-        self.client.post(reverse("prep_tick", args=["lesson", lesson.pk]))
+        self.call("post", f"/prep/lessons/{lesson.pk}/tick")
         lesson.refresh_from_db()
         self.assertIsNone(lesson.done_at)
 
@@ -402,31 +397,23 @@ class Views(PrepBase):
         SiteConfig.objects.filter(pk=1).update(prep_max_active_plans=1)
         self.make_plan(status="active")
         draft = self.make_plan()
-        r = self.client.post(reverse("prep_activate", args=[draft.pk]), follow=True)
-        self.assertContains(r, "plans in progress")
+        r = self.call("post", f"/prep/plans/{draft.pk}/start")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("plans in progress", r.json()["error"])
 
     def test_discarding_deletes_the_plan_but_not_while_it_is_being_written(self):
         writing = PrepPlan.objects.create(owner=self.user, application=self.app, status="generating")
-        self.client.post(reverse("prep_discard", args=[writing.pk]))
+        self.call("delete", f"/prep/plans/{writing.pk}")
         self.assertTrue(PrepPlan.objects.filter(pk=writing.pk).exists())
         draft = self.make_plan()
-        self.client.post(reverse("prep_discard", args=[draft.pk]))
+        self.call("delete", f"/prep/plans/{draft.pk}")
         self.assertFalse(PrepPlan.objects.filter(pk=draft.pk).exists())
 
     def test_the_whole_feature_can_be_switched_off(self):
         SiteConfig.objects.filter(pk=1).update(prep_enabled=False)
-        self.assertEqual(self.client.get(reverse("prep_list")).status_code, 404)
-        self.assertEqual(self.client.post(reverse("prep_create", args=[self.app.pk])).status_code, 404)
-        self.assertNotContains(self.client.get(reverse("dashboard")), reverse("prep_list"))
-
-    def test_the_dashboard_offers_it_only_for_a_job_with_gaps(self):
-        self.assertNotContains(self.client.get(reverse("dashboard")), "Prepare for this job")
-        from tracker.models import Insight
-
-        Insight.objects.create(application=self.app, kind="gap", text="No Kubernetes")
-        page = self.client.get(reverse("dashboard"))
-        self.assertContains(page, "Prepare for this job")
-        self.assertContains(page, reverse("prep_create", args=[self.app.pk]))
+        self.assertEqual(self.call("get", "/prep/plans").status_code, 404)
+        self.assertEqual(self.call("post", f"/jobs/{self.app.pk}/prep").status_code, 404)
+        self.assertFalse(self.call("get", "/me").json()["prep_enabled"])
 
 
 class FitCheckAndData(PrepBase):

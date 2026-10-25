@@ -5,7 +5,7 @@ from unittest import mock
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 
-from tracker.models import CoverLetter, CVVersion, SiteConfig, UserProfile
+from tracker.models import CoverLetter, CVVersion, UserProfile
 from tracker.services import ai
 from tracker.tests_api import BASE, job, person
 from tracker.tests_cv import MASTER
@@ -157,18 +157,6 @@ class CvApi(TestCase):
         mine.refresh_from_db()
         self.assertFalse(mine.approved)
 
-    def test_classic_pages_send_opted_in_people_to_the_new_screens(self):
-        v = self.flagged_version()
-        self.assertEqual(self.client.get(f"/cv/{v.pk}/").status_code, 200)
-        SiteConfig.objects.update_or_create(pk=1, defaults={"new_app_enabled": True})
-        UserProfile.objects.filter(user=self.a).update(use_new_app=True)
-        self.assertEqual(self.client.get("/cv/")["Location"], "/app/cv")
-        self.assertEqual(self.client.get(f"/cv/{v.pk}/")["Location"], f"/app/cv/{v.pk}")
-        self.assertEqual(self.client.get(f"/cv/{v.pk}/diff/?against={v.parent_id}")["Location"], f"/app/cv/{v.pk}/diff?against={v.parent_id}")
-        self.assertEqual(self.client.get(f"/cv/{v.pk}/?classic=1").status_code, 200)
-        self.assertEqual(self.client.post(f"/cv/{v.pk}/", {"content": "A new text"}).status_code, 302)  # saving still works on the classic page
-        self.assertEqual(CVVersion.objects.filter(owner=self.a, parent=v).count(), 1)
-
 
 class CoverApi(TestCase):
     def setUp(self):
@@ -237,10 +225,3 @@ class CoverApi(TestCase):
         self.assertEqual(self.write().status_code, 404)
         letter.refresh_from_db()
         self.assertEqual(letter.content, "Hello")
-
-    def test_classic_page_sends_opted_in_people_to_the_new_screen(self):
-        letter = CoverLetter.objects.create(owner=self.a, application=self.job, content="Hello")
-        SiteConfig.objects.update_or_create(pk=1, defaults={"new_app_enabled": True})
-        UserProfile.objects.filter(user=self.a).update(use_new_app=True)
-        self.assertEqual(self.client.get(f"/cover/{letter.pk}/")["Location"], f"/app/cover/{letter.pk}")
-        self.assertEqual(self.client.get(f"/cover/{letter.pk}/?classic=1").status_code, 200)

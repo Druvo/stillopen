@@ -427,7 +427,7 @@ class RobotsAndSitemap(PublicTestCase):
     def test_robots_allows_public_pages_blocks_private_ones_and_points_to_the_sitemap(self):
         text = self.client.get(reverse("robots")).content.decode()
         self.assertIn("Allow: /", text)
-        for path in ("/dashboard/", "/accounts/", "/admin/", "/api/", "/profile/", "/cv/"):
+        for path in ("/app/", "/dashboard/", "/accounts/", "/admin/", "/api/", "/profile/", "/cv/"):
             self.assertIn(f"Disallow: {path}", text)
         self.assertIn("Sitemap: http://testserver/sitemap.xml", text)
 
@@ -518,12 +518,7 @@ class KeepingItFresh(PublicTestCase):
 
 class StandardLook(PublicTestCase):
     def test_light_by_default_with_the_theme_script_and_brand_css_on_every_kind_of_page(self):
-        user = User.objects.create_user("look", password="x" * 14)
-        from tracker.models import UserProfile
-        UserProfile.objects.filter(user=user).update(onboarding_done=True, target_roles="x")
         pages = [self.client.get(reverse(n)) for n in ("landing", "openings", "privacy", "terms", "account_login", "account_signup")]
-        self.client.force_login(user)
-        pages.append(self.client.get(reverse("dashboard")))
         for r in pages:
             html = r.content.decode()
             self.assertEqual(r.status_code, 200)

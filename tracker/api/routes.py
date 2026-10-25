@@ -9,8 +9,9 @@ from ..context import staff_flags
 from ..models import Application, Bucket, JobSource, ScoreBand, SiteConfig, Status, UserProfile
 from ..services import ai, board, careerops, geo, guide, liveness, quiz, scan
 from ..services import apply as apply_service
-from ..views import card_for, throttled
-from ..views_pipeline import upcoming_interviews
+from ..services.cards import card_for
+from ..services.pipeline import upcoming_interviews
+from ..services.throttle import throttled
 from .common import ApiFormError, owned_job, too_many
 
 api = NinjaAPI(

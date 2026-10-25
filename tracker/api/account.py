@@ -91,15 +91,14 @@ def get_profile(request):
 
 
 def _save_profile(request):
-    from ..views import _save_cv_history
+    from ..services.account import save_cv_history
 
     data, files = read_payload(request)
-    data.pop("use_new_app", None)  # the old opt-in switch is gone; a stale client cannot change it
     obj = UserProfile.for_user(request.user)
     form = forms.ProfileForm(merged(forms.ProfileForm(instance=obj), data), files, instance=obj)
     validate_form(form)
     form.save()
-    _save_cv_history(request, obj, form)
+    save_cv_history(request.user, obj, form)
     return _profile_json(request.user)
 
 
@@ -167,7 +166,7 @@ def get_welcome(request):
 
 @router.post("/welcome", summary="Save the welcome answers")
 def save_welcome(request):
-    from ..views import _save_cv_history
+    from ..services.account import save_cv_history
 
     data, files = read_payload(request)
     obj = UserProfile.for_user(request.user)
@@ -175,7 +174,7 @@ def save_welcome(request):
     form = forms.WelcomeForm(merged(forms.WelcomeForm(instance=obj), data), files, instance=obj)
     validate_form(form)
     form.save()
-    _save_cv_history(request, obj, form)
+    save_cv_history(request.user, obj, form)
     forms.create_default_areas(request.user, obj.home_country, form.cleaned_data.get("open_remote", False), form.cleaned_data.get("other_places", ""))
     obj.onboarding_done = True
     obj.save(update_fields=["onboarding_done"])

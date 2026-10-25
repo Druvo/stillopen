@@ -62,7 +62,9 @@ Optional, admins only: `.venv\Scripts\python.exe manage.py import_careerops` loa
 
 Management commands act for one person: pass `--user NAME`, or leave it out when there is exactly one superuser. `check_liveness --all-users` suits a scheduled job.
 
-Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/dashboard/ (the dashboard, login required) and http://127.0.0.1:8000/admin/ (site configuration). Copy `.env.example` to `.env` first if you want to change the career-ops path or Paperless URL before the first `migrate`.
+The signed-in app is a front end built once ahead of time (Node 22 or later and pnpm, only for this step): `cd frontend && pnpm install && pnpm build`. The Docker image already includes it. Until it is built, `/app/` says so on a plain page.
+
+Open http://127.0.0.1:8000 (public landing page), http://127.0.0.1:8000/app/ (the app, login required; the old addresses such as `/dashboard/` redirect to it) and http://127.0.0.1:8000/admin/ (site configuration). Copy `.env.example` to `.env` first if you want to change the career-ops path or Paperless URL before the first `migrate`.
 
 ## What you can change in the admin
 
@@ -304,7 +306,7 @@ By design there is no delete tool, and no way to read settings, API keys, tokens
 
 ## Security notes
 
-- Dashboard and file serving require login; POST endpoints use Django CSRF.
+- The app (`/app/`), its API and file serving require login; POST endpoints use Django CSRF.
 - Document files are only served from the media folder or the configured career-ops folder.
 - Keep `DJANGO_DEBUG=0`, a real `DJANGO_SECRET_KEY` and a restricted `DJANGO_ALLOWED_HOSTS` anywhere beyond localhost. Do not expose Paperless or this app to the internet without a reverse proxy and TLS.
 - `.env`, `db.sqlite3`, `.secret_key` and `media/` are git-ignored.

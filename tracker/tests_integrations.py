@@ -167,16 +167,3 @@ class SocialFromAdmin(TestCase):
         with mock.patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "env-id", "GOOGLE_CLIENT_SECRET": "env-secret"}):
             self.assertEqual(integrations.social_credentials("google"), ("env-id", "env-secret"))
         self.assertEqual(integrations.social_credentials("google"), ("admin-id", "admin-secret"))
-
-
-class AiSettingsPage(TestCase):
-    def test_the_first_screen_asks_only_for_a_provider_and_a_key(self):
-        user = User.objects.create_user("ai", email="ai@example.com", password="x" * 20)
-        self.client.force_login(user)
-        page = self.client.get(reverse("profile_ai")).content.decode()
-        self.assertIn("1. Choose your AI provider", page)
-        self.assertIn("2. Paste your API key", page)
-        before_advanced = page.split("Advanced options")[0]
-        for technical in ("id_ai_base_url", "id_ai_model", "id_ai_custom_headers", "id_rag_top_k", "id_ai_timeout"):
-            self.assertNotIn(technical, before_advanced)
-            self.assertIn(technical, page)

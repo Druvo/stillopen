@@ -1,10 +1,10 @@
 """People's own company job boards: validation, SSRF-shaped inputs, limits, and strict isolation."""
+import json
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase, override_settings
-from django.urls import reverse
 
 from tracker.forms import OwnSourceForm, board_token_from
 from tracker.models import Application, JobSource, Posting, UserProfile
@@ -66,7 +66,7 @@ class AddingBoards(TestCase):
         self.client.login(username="alice", password=PW)
 
     def add(self, token="acme", connector="greenhouse", **kw):
-        return self.client.post(reverse("sources"), {"connector": connector, "board_token": token, "name": kw.get("name", "")})
+        return self.client.post("/api/v1/sources", data=json.dumps({"connector": connector, "board_token": token, "name": kw.get("name", "")}), content_type="application/json")
 
     def test_adds_a_working_board_as_mine(self):
         with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=[JOB]) as fetch:
@@ -79,8 +79,7 @@ class AddingBoards(TestCase):
         with mock.patch("tracker.services.scan.fetch_greenhouse", side_effect=FetchError("HTTP 404")):
             r = self.add(token="nosuchco", connector="greenhouse")
         self.assertEqual(JobSource.objects.count(), 0)
-        self.assertContains(self.client.get(reverse("sources")), "Add a company")
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 400)
 
     def test_no_fetch_at_all_for_invalid_input(self):
         with mock.patch("tracker.services.scan.fetch_greenhouse") as fetch, mock.patch("tracker.services.scan.safe_get") as get:
@@ -114,9 +113,9 @@ class AddingBoards(TestCase):
             self.client.login(username="bob", password=PW)
             self.add(name="Bob's Acme")
         self.assertEqual(JobSource.objects.count(), 2)
-        page = self.client.get(reverse("sources")).content.decode()
-        self.assertIn("Bob&#x27;s Acme", page)
-        self.assertNotIn("Alice", page)
+        mine = self.client.get("/api/v1/sources").json()["mine"]
+        self.assertEqual([m["name"] for m in mine], ["Bob's Acme"])
+        self.assertNotIn("Alice", json.dumps(mine))
         self.assertEqual(JobSource.objects.get(name="Bob's Acme").owner, self.b)
 
     @override_settings(STILLOPEN_MAX_OWN_SOURCES=2)
@@ -133,16 +132,13 @@ class AddingBoards(TestCase):
                 self.add(token=t)
         self.assertEqual(fetch.call_count, 2)
 
-    def test_name_is_escaped_on_the_page(self):
-        with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=[]):
-            self.add(name="<script>alert(1)</script>")
-        self.assertNotContains(self.client.get(reverse("sources")), "<script>alert(1)</script>")
-
     def test_login_required(self):
         self.client.logout()
-        r = self.client.get(reverse("sources"))
+        self.assertEqual(self.client.get("/api/v1/sources").status_code, 401)
+        self.assertEqual(self.add().status_code, 401)
+        r = self.client.get("/sources/")
         self.assertEqual(r.status_code, 302)
-        self.assertIn("/accounts/login/", r["Location"])
+        self.assertEqual(r["Location"], "/app/sources")
 
 
 class Isolation(TestCase):
@@ -179,46 +175,46 @@ class Isolation(TestCase):
 
     def test_nobody_else_can_toggle_delete_or_see_my_board(self):
         self.client.login(username="bob", password=PW)
-        post = self.client.post
-        self.assertEqual(post(reverse("source_action", args=[self.mine.pk, "delete"])).status_code, 404)
-        self.assertEqual(post(reverse("source_action", args=[self.mine.pk, "toggle"])).status_code, 404)
-        self.assertEqual(post(reverse("source_action", args=[self.shared.pk, "delete"])).status_code, 404)  # site-wide: admin only
+        self.assertEqual(self.client.post(f"/api/v1/sources/{self.mine.pk}/toggle").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/v1/sources/{self.mine.pk}").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/v1/sources/{self.shared.pk}").status_code, 404)  # site-wide: admin only
         self.assertTrue(JobSource.objects.filter(pk=self.mine.pk, enabled=True).exists())
-        self.assertNotContains(self.client.get(reverse("sources")), "AliceCo")
-        self.assertContains(self.client.get(reverse("sources")), "SharedCo")
+        data = self.client.get("/api/v1/sources").json()
+        self.assertEqual(data["mine"], [])
+        self.assertNotIn("AliceCo", json.dumps(data))
+        self.assertIn("SharedCo", data["shared"])
 
     def test_owner_can_pause_and_remove(self):
         self.client.login(username="alice", password=PW)
-        self.client.post(reverse("source_action", args=[self.mine.pk, "toggle"]))
+        self.client.post(f"/api/v1/sources/{self.mine.pk}/toggle")
         self.mine.refresh_from_db()
         self.assertFalse(self.mine.enabled)
-        self.client.post(reverse("source_action", args=[self.mine.pk, "delete"]))
+        self.client.delete(f"/api/v1/sources/{self.mine.pk}")
         self.assertFalse(JobSource.objects.filter(pk=self.mine.pk).exists())
         self.assertEqual(Posting.objects.count(), 0)
 
-    def test_get_and_unknown_actions(self):
+    def test_get_on_actions_is_not_allowed(self):
         self.client.login(username="alice", password=PW)
-        self.assertEqual(self.client.get(reverse("source_action", args=[self.mine.pk, "delete"])).status_code, 405)
-        self.assertEqual(self.client.post(reverse("source_action", args=[self.mine.pk, "explode"])).status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/sources/{self.mine.pk}/toggle").status_code, 405)
 
     def test_all_postings_hides_other_peoples_private_boards(self):
         self.client.login(username="bob", password=PW)
-        self.assertNotContains(self.client.get(reverse("all_postings")), "AliceCo")
-        self.assertEqual(self.client.post(reverse("add_posting", args=[self.posting.pk])).status_code, 404)
+        self.assertNotIn("AliceCo", json.dumps(self.client.get("/api/v1/postings").json()))
+        self.assertEqual(self.client.post(f"/api/v1/postings/{self.posting.pk}/add").status_code, 404)
         self.assertEqual(Application.objects.filter(owner=self.b).count(), 0)
         self.client.login(username="alice", password=PW)
-        self.assertContains(self.client.get(reverse("all_postings")), "AliceCo")
-        self.assertEqual(self.client.post(reverse("add_posting", args=[self.posting.pk])).status_code, 302)
+        self.assertIn("AliceCo", json.dumps(self.client.get("/api/v1/postings").json()))
+        self.assertEqual(self.client.post(f"/api/v1/postings/{self.posting.pk}/add").status_code, 200)
 
     def test_filtering_all_postings_by_someone_elses_source_shows_nothing(self):
         self.client.login(username="bob", password=PW)
-        page = self.client.get(reverse("all_postings"), {"source": self.mine.pk})
-        self.assertNotContains(page, "Backend Engineer")
+        data = self.client.get("/api/v1/postings", {"source": self.mine.pk}).json()
+        self.assertEqual(data["postings"], [])
 
     def test_dashboard_offers_search_when_only_my_own_board_exists(self):
         JobSource.objects.filter(owner__isnull=True).delete()
         UserProfile.objects.filter(user__in=[self.a, self.b]).update(onboarding_done=True)
         self.client.login(username="alice", password=PW)
-        self.assertContains(self.client.get(reverse("dashboard")), 'id="btn-scan"')
+        self.assertTrue(self.client.get("/api/v1/dashboard").json()["can_scan"])
         self.client.login(username="bob", password=PW)
-        self.assertNotContains(self.client.get(reverse("dashboard")), 'id="btn-scan"')
+        self.assertFalse(self.client.get("/api/v1/dashboard").json()["can_scan"])

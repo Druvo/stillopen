@@ -8,7 +8,6 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase, override_settings
-from django.urls import reverse
 
 from tracker import crypto
 from tracker.models import Application, SiteConfig, Status, UserProfile
@@ -432,33 +431,25 @@ class JobTextTests(TestCase):
         self.assertIn("Real job text", posting["description"])
 
 
-class EvaluateViewTests(TestCase):
+class EvaluateApiTests(TestCase):
     def setUp(self):
         self.user = make_user("t", profile_cv=CV)
         self.app = make_app(owner=self.user, description=JD)
 
     def test_requires_login_and_post(self):
-        url = reverse("evaluate", args=[self.app.pk])
-        self.assertEqual(self.client.post(url).status_code, 302)
+        url = f"/api/v1/jobs/{self.app.pk}/evaluate"
+        self.assertEqual(self.client.post(url).status_code, 401)
         self.client.force_login(self.user)
         self.assertEqual(self.client.get(url).status_code, 405)
 
     def test_success_and_failure_json(self):
         self.client.force_login(self.user)
-        r = self.client.post(reverse("evaluate", args=[self.app.pk]))
+        r = self.client.post(f"/api/v1/jobs/{self.app.pk}/evaluate")
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.json()["ok"])
-        r = self.client.post(reverse("evaluate", args=[make_app(owner=self.user, company="B").pk]))
+        r = self.client.post(f"/api/v1/jobs/{make_app(owner=self.user, company='B').pk}/evaluate")
         self.assertEqual(r.status_code, 400)
-        self.assertFalse(r.json()["ok"])
-
-    def test_ai_text_is_escaped_on_the_dashboard(self):
-        self.app.summary = "<script>alert(1)</script>"
-        self.app.save()
-        self.client.force_login(self.user)
-        r = self.client.get(reverse("dashboard"))
-        self.assertNotContains(r, "<script>alert(1)</script>")
-        self.assertContains(r, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertIn("error", r.json())
 
 
 class ReportJdTests(TestCase):

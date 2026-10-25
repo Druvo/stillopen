@@ -109,7 +109,7 @@ class Auth(McpHttpBase):
         SiteConfig.objects.filter(pk=1).update(mcp_remote_enabled=False)
         self.assertEqual(rpc(self.client, self.read, "ping").status_code, 404)
         self.client.force_login(self.ann)
-        self.assertEqual(self.client.get(reverse("assistant")).status_code, 404)
+        self.assertEqual(self.client.get("/api/v1/assistant").status_code, 404)
 
     def test_last_used_is_recorded(self):
         self.assertIsNone(ApiToken.objects.get(pk=self.read_record.pk).last_used_at)
@@ -169,55 +169,8 @@ class Tools(McpHttpBase):
         self.assertNotIn("BobCo", a2)
 
 
-class TokenPage(McpHttpBase):
-    def setUp(self):
-        super().setUp()
-        self.client.force_login(self.ann)
-
-    def test_page_loads_and_is_linked_from_the_profile(self):
-        self.assertContains(self.client.get(reverse("profile")), reverse("assistant"))
-        page = self.client.get(reverse("assistant"))
-        self.assertEqual(page.status_code, 200)
-        self.assertNotContains(page, self.read)  # a token is never shown again
-        self.assertContains(page, self.read_record.hint)
-
-    def test_login_is_required(self):
-        self.client.logout()
-        self.assertEqual(self.client.get(reverse("assistant")).status_code, 302)
-        self.assertEqual(self.client.post(reverse("assistant_create"), {"name": "x"}).status_code, 302)
-
-    def test_making_a_token_shows_it_once_with_ready_commands(self):
-        r = self.client.post(reverse("assistant_create"), {"name": "Laptop", "access": "write", "expires": "30"})
-        self.assertEqual(r.status_code, 200)
-        raw = r.context["new_token"]
-        self.assertContains(r, "claude mcp add --transport http stillopen")
-        self.assertContains(r, raw)
-        record = ApiToken.objects.get(name="Laptop")
-        self.assertTrue(record.can_write)
-        self.assertEqual(record.owner, self.ann)
-        self.assertEqual(ApiToken.lookup(raw), record)
-        self.assertNotContains(self.client.get(reverse("assistant")), raw)
-
-    def test_bad_expiry_and_name_fall_back_safely(self):
-        self.client.post(reverse("assistant_create"), {"name": "", "access": "root", "expires": "99999"})
-        record = ApiToken.objects.order_by("-pk").first()
-        self.assertEqual(record.name, "Assistant")
-        self.assertFalse(record.can_write)  # anything but "write" is read-only
-        self.assertIsNotNone(record.expires_at)
-
-    @override_settings(STILLOPEN_MAX_API_TOKENS=2)
-    def test_the_number_of_active_tokens_is_capped(self):
-        before = ApiToken.objects.filter(owner=self.ann).count()
-        self.client.post(reverse("assistant_create"), {"name": "third"})
-        self.assertEqual(ApiToken.objects.filter(owner=self.ann).count(), before)
-
-    def test_revoking_stops_the_token_and_only_owners_can_revoke(self):
-        self.assertEqual(rpc(self.client, self.read, "ping").status_code, 200)
-        self.client.post(reverse("assistant_revoke", args=[self.read_record.pk]))
-        self.assertEqual(rpc(self.client, self.read, "ping").status_code, 401)
-        self.assertEqual(self.client.post(reverse("assistant_revoke", args=[self.bob_record.pk])).status_code, 404)
-        self.assertIsNone(ApiToken.objects.get(pk=self.bob_record.pk).revoked_at)
-        self.assertEqual(self.client.get(reverse("assistant_revoke", args=[self.read_record.pk])).status_code, 405)
+class TokensAndAccounts(McpHttpBase):
+    """Making, showing and revoking tokens is in the app's API (tests_api_account.AssistantApi); this is what the endpoint itself guarantees."""
 
     def test_tokens_vanish_with_the_account(self):
         self.ann.delete()

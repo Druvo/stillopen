@@ -71,6 +71,7 @@ test("a running search shows its progress, then the first jobs arrive by themsel
   await expect(page.getByText("Sorting out the best matches for you…")).toBeVisible();
   await expect(page.getByText(/looked through 9 openings, 2 new for you/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Search jobs" })).toBeEnabled();
+  await page.unrouteAll({ behavior: "wait" }); // let any request still going through the mocks finish before the test ends
 });
 
 test("every job card shows what the classic card showed", async ({ page }) => {

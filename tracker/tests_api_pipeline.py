@@ -5,7 +5,7 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from tracker.models import Contact, Event, Interview, Offer, Referral, SiteConfig, UserProfile
+from tracker.models import Contact, Event, Interview, Offer, Referral
 from tracker.tests_api import BASE, job, person
 
 
@@ -188,24 +188,3 @@ class InsightsApi(Base):
         self.assertEqual((data["tracked"], data["applied"]), (1, 0))
         Interview.objects.create(owner=self.b, application=self.job_b, scheduled_at=timezone.now())
         self.assertEqual(self.get("/insights")["interviewed"], 0)
-
-
-class ClassicRedirects(Base):
-    def opt_in(self):
-        config = SiteConfig.load()
-        config.new_app_enabled = True
-        config.save()
-        profile = UserProfile.for_user(self.a)
-        profile.use_new_app = True
-        profile.save()
-
-    def test_opted_in_people_land_in_the_new_app_and_classic_flag_bypasses(self):
-        self.opt_in()
-        for name in ("interviews", "contacts", "offers", "insights"):
-            r = self.client.get(f"/{name}/")
-            self.assertEqual((r.status_code, r["Location"]), (302, f"/app/{name}"), name)
-            self.assertEqual(self.client.get(f"/{name}/?classic=1").status_code, 200)
-        self.assertEqual(self.client.get("/interviews/?job=5")["Location"], "/app/interviews?job=5")
-
-    def test_others_stay_on_the_classic_pages(self):
-        self.assertEqual(self.client.get("/offers/").status_code, 200)

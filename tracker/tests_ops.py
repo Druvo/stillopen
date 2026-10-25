@@ -166,26 +166,26 @@ class LegalTexts(TestCase):
         self.assertEqual(SiteConfig.load().privacy_text, legal.PRIVACY)
 
 
-class LegalWarningOnTheDashboard(TestCase):
+class LegalWarningInTheApp(TestCase):
+    """The app tells site admins (and only them) while the privacy and terms texts still have blanks and sign-up is open."""
+
     def setUp(self):
         self.staff = User.objects.create_user("boss", email="boss@example.com", password="correct-horse-battery-staple", is_staff=True)
         self.normal = User.objects.create_user("jo", email="jo@example.com", password="correct-horse-battery-staple")
-        from tracker.models import UserProfile
-        UserProfile.objects.filter(user__in=[self.staff, self.normal]).update(onboarding_done=True, target_roles="x")
 
-    def page(self, name):
+    def warned(self, name):
         self.client.login(username=name, password="correct-horse-battery-staple")
-        return self.client.get("/dashboard/").content.decode()
+        return self.client.get("/api/v1/me").json()["legal_has_blanks"]
 
     def test_staff_are_told_while_sign_up_is_open_and_blanks_remain(self):
         SiteConfig.objects.filter(pk=1).update(signup_mode="open")
-        self.assertIn("bracketed parts", self.page("boss"))
+        self.assertTrue(self.warned("boss"))
 
     def test_ordinary_people_never_see_it(self):
         SiteConfig.objects.filter(pk=1).update(signup_mode="open")
-        self.assertNotIn("bracketed parts", self.page("jo"))
+        self.assertFalse(self.warned("jo"))
 
     def test_no_warning_when_sign_up_is_closed_or_the_text_is_complete(self):
-        self.assertNotIn("bracketed parts", self.page("boss"))  # closed by default
+        self.assertFalse(self.warned("boss"))  # closed by default
         SiteConfig.objects.filter(pk=1).update(signup_mode="open", privacy_text="Acme Ltd, hello@acme.test.", terms_text="Be kind. hello@acme.test.")
-        self.assertNotIn("bracketed parts", self.page("boss"))
+        self.assertFalse(self.warned("boss"))

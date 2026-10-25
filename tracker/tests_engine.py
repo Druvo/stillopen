@@ -7,7 +7,6 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
-from django.urls import reverse
 from django.utils import timezone
 
 from tracker import seed
@@ -197,10 +196,10 @@ class AutoSearch(TestCase):
 
     def start(self):
         with mock.patch("tracker.services.scan.start_run") as start:
-            self.client.get(reverse("dashboard"))
+            self.client.get("/api/v1/dashboard")
         return start
 
-    def test_opening_the_dashboard_starts_a_search_for_a_new_candidate(self):
+    def test_opening_the_app_starts_a_search_for_a_new_candidate(self):
         self.assertEqual(self.start().call_count, 1)
 
     def test_not_again_within_the_interval_even_if_it_found_nothing(self):
@@ -273,7 +272,7 @@ class SeededSources(TestCase):
         seed.ensure_default_sources(JobSource)
         u = person()
         self.client.login(username="rina", password=PW)
-        self.assertContains(self.client.get(reverse("dashboard")), 'id="btn-scan"')
+        self.assertTrue(self.client.get("/api/v1/dashboard").json()["can_scan"])
         self.assertEqual(JobSource.for_user(u, enabled=True).count(), len(DEFAULT_SOURCES))
 
 
@@ -570,9 +569,9 @@ class RegionalSources(TestCase):
         total = JobSource.objects.filter(owner__isnull=True).count()
         jooble = JobSource.objects.filter(connector="jooble").count()
         self.assertEqual(jooble, 8)
-        self.assertContains(self.client.get(reverse("sources")), f"({total - jooble})")
+        self.assertEqual(len(self.client.get("/api/v1/sources").json()["shared"]), total - jooble)
         SiteConfig.objects.filter(pk=1).update(jooble_api_key="k")
-        self.assertContains(self.client.get(reverse("sources")), f"({total})")
+        self.assertEqual(len(self.client.get("/api/v1/sources").json()["shared"]), total)
 
     def test_one_seed_run_gives_every_region_its_sources(self):
         seed.ensure_default_sources(JobSource)

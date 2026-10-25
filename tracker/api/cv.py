@@ -9,7 +9,7 @@ from ninja.errors import HttpError
 from ..models import CVVersion, SiteConfig
 from ..services import cvexport, cvgen, cvversions
 from ..services.cvversions import CVError
-from ..views import throttled
+from ..services.throttle import throttled
 from .common import owned, owned_job
 
 router = Router()

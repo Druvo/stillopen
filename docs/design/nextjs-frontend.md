@@ -1,7 +1,6 @@
 # Design: a staged move to Next.js for the signed-in app
 
-Status: **phases 0 to 4 built, and the content security policy from phase 5** (branch `feature/nextjs-phase2`). Left from phase 5: deleting the classic templates (only after the new app has been live for
-a release with no regressions), and the optional restyle of the sign-in screens (they already share the palette, system font and the remembered light/dark choice with the new app, so nothing was changed).
+Status: **complete: the classic candidate pages are removed and `/app/` is the only interface** (old addresses redirect, see `tracker/legacy.py`). Earlier: phases 0 to 4 built, and the content security policy from phase 5. The optional restyle of the sign-in screens was left alone (they share the palette, system font and light/dark choice with the app).
 Decisions taken by the owner: Django stays the backend; the new front end is a **static export** (no Node server in production); the **dashboard with drag-and-drop** comes first. Open questions in section 12
 were answered with the recommended options (django-ninja, pnpm, a per-person opt-in on top of a site switch, board columns grouped by the admin's tabs, sign-in restyle left alone).
 Written 2026-10-25.
@@ -55,7 +54,7 @@ browser ──► Caddy ──► Django (gunicorn)
 - **Same origin.** The app and the API share the host, so the browser's existing session cookie authenticates API calls and there is no CORS, no token in JavaScript and nothing new to leak.
   State-changing calls send Django's CSRF token in `X-CSRFToken` (the cookie is already readable by script, see `CSRF_COOKIE_HTTPONLY = False`).
 - **Docker**: a multi-stage build. Stage 1 (Node) runs `npm ci && npm run build` and keeps only `out/`; stage 2 is today's Python image with `out/` copied in. The final image has no Node.
-  Self-hosters still run one `docker compose up`. Running Django without the build (plain `pip` development) keeps working: the new UI is off and the old templates serve.
+  Self-hosters still run one `docker compose up`. Running Django without the build (plain `pip` development) needs the build once (`pnpm build`); until then `/app/` shows a plain "not built" page (503).
 - **Development**: `npm run dev` (Turbopack, hot reload) proxies `/api` and `/accounts` to Django on port 8765, so the same session cookie works while developing.
 
 ## 4. The JSON API (`/api/v1/`)

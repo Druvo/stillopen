@@ -42,7 +42,7 @@ def _board_off(config) -> bool:
 def landing(request):
     config = SiteConfig.load()
     if not config.landing_enabled:
-        return redirect("dashboard")
+        return redirect("/app/")
     context = {
         "config": config, "board_on": config.public_board_enabled, "features": landing_content.FEATURES,
         "comparison": landing_content.COMPARISON, "faq": landing_content.FAQ, "credits": [],
@@ -178,7 +178,7 @@ def robots_txt(request):
     lines = [
         "User-agent: *",
         "Allow: /",
-        "Disallow: /dashboard/", "Disallow: /accounts/", "Disallow: /admin/", "Disallow: /api/", "Disallow: /profile/", "Disallow: /jobs/",
+        "Disallow: /app/", "Disallow: /dashboard/", "Disallow: /accounts/", "Disallow: /admin/", "Disallow: /api/", "Disallow: /profile/", "Disallow: /jobs/",
         "Disallow: /cv/", "Disallow: /cover/", "Disallow: /knowledge/", "Disallow: /interviews/", "Disallow: /contacts/", "Disallow: /offers/",
         "Disallow: /insights/", "Disallow: /sources/", "Disallow: /postings/", "Disallow: /welcome/", "Disallow: /referrals/", "Disallow: /documents/",
         "",

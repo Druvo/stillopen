@@ -7,7 +7,7 @@ from ninja.errors import HttpError
 
 from ..models import ApiToken, SiteConfig
 from ..services import assistant as tokens
-from ..views import throttled
+from ..services.throttle import throttled
 from .account import read_payload
 from .common import owned
 
