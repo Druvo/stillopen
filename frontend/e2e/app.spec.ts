@@ -1,14 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-
-const PASSWORD = "e2e-pass-12345"; // the throwaway e2e people made by `manage.py e2e_seed`
-
-async function signIn(page: Page, name: string, next = "/app/") {
-  await page.goto(`/accounts/login/?next=${encodeURIComponent(next)}`);
-  await page.locator("input[name=login]").fill(name);
-  await page.locator("input[name=password]").fill(PASSWORD);
-  await page.locator("form button[type=submit]").first().click();
-  await page.waitForURL(/\/app\//);
-}
+import { expect, test } from "@playwright/test";
+import { PASSWORD, signIn } from "./helpers";
 
 test("signed out, the app sends you to sign in and back", async ({ page }) => {
   await page.goto("/app/");
@@ -20,6 +11,7 @@ test("the board shows only my jobs, and a keyboard move is saved", async ({ page
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
   await expect(page.getByText("Backend Engineer").first()).toBeVisible();
   await expect(page.getByText("SecretCo")).toHaveCount(0);
+  await page.getByRole("button", { name: "Board", exact: true }).click(); // the list is the default; the board is the other way to see the same jobs
 
   const card = page.locator("article", { hasText: "Backend Engineer" }).first();
   const jobId = Number((await card.getAttribute("id"))!.replace("job-", ""));

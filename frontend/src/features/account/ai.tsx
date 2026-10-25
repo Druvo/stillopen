@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { CheckField, FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
@@ -10,6 +10,8 @@ import { accountApi } from "./api";
 import { applyPreset } from "./logic";
 
 const KEY = ["account", "ai"] as const;
+const AI_STUDIO_KEYS = "https://aistudio.google.com/apikey";
+const GOOGLE_HOST = "generativelanguage.googleapis.com";
 
 export function AiSettingsPage() {
   const query = useQuery({ queryKey: KEY, queryFn: accountApi.ai });
@@ -50,6 +52,18 @@ function AiScreen({ data }: { data: AiSettings }) {
   const [clearRag, setClearRag] = useState(false);
   const [saved, setSaved] = useState(false);
   const form = useSubmit();
+  const keyBox = useRef<HTMLDivElement>(null);
+  const usesGoogle = values.ai_base_url.includes(GOOGLE_HOST);
+
+  // The dashboard's "Add my key" button comes here with ?preset=gemini: fill in Google AI Studio and put the cursor in the key box.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("preset");
+    const preset = wanted ? data.presets.find((p) => p.key === wanted) : undefined;
+    if (!preset) return;
+    setValues((v) => ({ ...v, ...applyPreset(preset) }));
+    keyBox.current?.querySelector("input")?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the page opens
+  }, []);
 
   const set = <K extends keyof AiSettingsValues>(key: K, value: AiSettingsValues[K]) => {
     setSaved(false);
@@ -96,6 +110,18 @@ function AiScreen({ data }: { data: AiSettings }) {
             <h2 className="mb-3 font-semibold">
               Connect an AI <span className="text-sm font-normal text-muted">(optional)</span>
             </h2>
+            <div className="mb-4 rounded-xl border border-brand-300 bg-brand-50 p-3 text-theme-sm dark:border-brand-500/40 dark:bg-brand-500/10">
+              <p className="font-medium text-gray-800 dark:text-white/90">Easiest start: a free Google AI Studio key</p>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+                <li>
+                  <a href={AI_STUDIO_KEYS} target="_blank" rel="noopener noreferrer" className="font-medium text-brand underline">
+                    Open Google AI Studio and create a key
+                  </a>{" "}
+                  (a Google account is enough; it opens in a new tab).
+                </li>
+                <li>Choose &ldquo;Google AI Studio (Gemini)&rdquo; below, then paste the key in the box and press Save.</li>
+              </ol>
+            </div>
             <SelectField
               label="1. Choose your AI provider"
               hint="This fills in the technical details for you. Then paste your API key below and press Save."
@@ -114,6 +140,7 @@ function AiScreen({ data }: { data: AiSettings }) {
                 </option>
               ))}
             </SelectField>
+            <div ref={keyBox}>
             <TextField
               label={
                 <>
@@ -127,6 +154,13 @@ function AiScreen({ data }: { data: AiSettings }) {
               onChange={(e) => setAiKey(e.target.value)}
               errors={form.fields.ai_api_key}
             />
+            </div>
+            {usesGoogle && (
+              <Notice>
+                With this key, the job text and the parts of your CV needed for a check are sent to Google, and only when you press Check my fit. On Google&apos;s free tier, Google may use what you send to improve its products, so choose a paid key or another provider if that matters to
+                you. Your key is stored encrypted here and is only used for your own checks.
+              </Notice>
+            )}
           </Card>
 
           <details open={hasAdvancedError || undefined} className="rounded-2xl border border-border bg-surface p-4">

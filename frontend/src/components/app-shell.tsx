@@ -1,29 +1,22 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Sun, UserRound, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { csrfToken, request } from "@/lib/api";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Sun, UserRound, X } from "lucide-react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { csrfToken } from "@/lib/api";
+import { useMe } from "@/lib/me";
+import { applyDisplay } from "@/lib/preferences";
+import { clearPersistedStorage, tabStorage } from "@/lib/persist";
+import { useFlushPreferencesOnLeave, usePreferences } from "@/lib/use-preferences";
+import type { Me } from "@/lib/types";
 import { Link, matchRoute, navigate, useAppPath } from "@/lib/router";
 import { Toasts } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { NAV, ROUTES } from "@/routes";
-import { Loading, PageHeader } from "./ui";
+import { Loading, PageHeader, ScreenSkeleton } from "./ui";
 
 // The layout (fixed sidebar that collapses on wide screens and slides in on small ones, a sticky header with search, theme
 // switch and a user menu) follows TailAdmin free Next.js dashboard, MIT. See frontend/THIRD_PARTY.md.
-
-const SIDEBAR_KEY = "so-sidebar";
-
-function toggleTheme() {
-  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try {
-    localStorage.setItem("so-theme", next);
-  } catch {
-    /* private window: the choice just is not remembered */
-  }
-}
 
 /** The sidebar entry for the current path: the longest entry that is the path or a parent of it (so /profile/ai lights "AI settings", not "Profile"). */
 export function currentEntry(path: string, entries: string[]): string | undefined {
@@ -32,14 +25,13 @@ export function currentEntry(path: string, entries: string[]): string | undefine
     .sort((a, b) => b.length - a.length)[0];
 }
 
-type Me = { id: number; name: string; email: string; is_staff: boolean; site_title?: string; prep_enabled?: boolean; assistant_enabled?: boolean };
-
 function initials(me?: Me) {
   const source = me?.name || me?.email || "?";
   return source.trim().slice(0, 1).toUpperCase();
 }
 
 function UserMenu({ me }: { me?: Me }) {
+  const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -102,6 +94,9 @@ function UserMenu({ me }: { me?: Me }) {
             action="/accounts/logout/"
             className="mt-2 border-t border-gray-200 pt-2 dark:border-gray-800"
             onSubmit={(event) => {
+              // Signing out ends this person's session: nothing of their data stays in this tab's cache.
+              client.clear();
+              clearPersistedStorage(tabStorage());
               const field = event.currentTarget.elements.namedItem("csrfmiddlewaretoken") as HTMLInputElement | null;
               if (field) field.value = csrfToken();
             }}
@@ -155,21 +150,40 @@ function SearchBox() {
   );
 }
 
+/** A quiet "Updating…" while answers are being refreshed behind what is already on the screen. Waits a moment so quick refreshes do not flicker. */
+function UpdatingNote() {
+  const busy = useIsFetching() > 0;
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    if (!busy) {
+      setShow(false);
+      return;
+    }
+    const t = window.setTimeout(() => setShow(true), 400);
+    return () => window.clearTimeout(t);
+  }, [busy]);
+  if (!show) return null;
+  return (
+    <span className="hidden items-center gap-1.5 text-theme-xs text-muted sm:inline-flex" title="Fetching the latest in the background">
+      <Loader2 className="size-3.5 animate-spin" aria-hidden /> Updating…
+    </span>
+  );
+}
+
 export function AppShell() {
   const path = useAppPath();
   const screen = path === null ? null : matchRoute(ROUTES, path);
-  const me = useQuery({ queryKey: ["me"], queryFn: () => request<Me>("GET", "/me"), staleTime: 5 * 60_000 });
-  const [expanded, setExpanded] = useState(true);
+  const me = useMe();
+  const { prefs, update, known } = usePreferences();
   const [hovered, setHovered] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const expanded = prefs.sidebar === "expanded";
+  useFlushPreferencesOnLeave();
 
+  // Colour mode, text size and density go on <html>; the browser's copy is kept so the next first paint is right.
   useEffect(() => {
-    try {
-      if (localStorage.getItem(SIDEBAR_KEY) === "collapsed") setExpanded(false);
-    } catch {
-      /* not remembered */
-    }
-  }, []);
+    if (known) applyDisplay(prefs);
+  }, [known, prefs.theme, prefs.text_size, prefs.density, prefs.sidebar]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setMobileOpen(false), [path]); // a tap on a link closes the drawer
   useEffect(() => {
     if (!mobileOpen) return;
@@ -186,17 +200,8 @@ export function AppShell() {
   const active = path === null ? undefined : currentEntry(path, flat);
 
   const toggleSidebar = () => {
-    if (window.matchMedia("(min-width: 1280px)").matches) {
-      const next = !expanded;
-      setExpanded(next);
-      try {
-        localStorage.setItem(SIDEBAR_KEY, next ? "expanded" : "collapsed");
-      } catch {
-        /* not remembered */
-      }
-    } else {
-      setMobileOpen((v) => !v);
-    }
+    if (window.matchMedia("(min-width: 80rem)").matches) update({ sidebar: expanded ? "collapsed" : "expanded" });
+    else setMobileOpen((v) => !v);
   };
 
   return (
@@ -268,9 +273,10 @@ export function AppShell() {
           </Link>
           <SearchBox />
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <UpdatingNote />
             <button
               type="button"
-              onClick={toggleTheme}
+              onClick={() => update({ theme: prefs.theme === "dark" ? "light" : "dark" })}
               aria-label="Switch between light and dark"
               className="flex size-10 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 xl:size-11 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/5"
             >
@@ -285,14 +291,16 @@ export function AppShell() {
           {path === null ? (
             <Loading />
           ) : (
-            screen ?? (
-              <>
-                <PageHeader title="We could not find that page" />
-                <Link to="/" className="text-brand underline">
-                  Back to your dashboard
-                </Link>
-              </>
-            )
+            <Suspense fallback={<ScreenSkeleton />}>
+              {screen ?? (
+                <>
+                  <PageHeader title="We could not find that page" />
+                  <Link to="/" className="text-brand underline">
+                    Back to your dashboard
+                  </Link>
+                </>
+              )}
+            </Suspense>
           )}
         </main>
       </div>

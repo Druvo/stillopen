@@ -74,6 +74,24 @@ export function CheckField({ label, hint, errors, ...props }: Common & Omit<Inpu
   );
 }
 
+/** A few choices of which exactly one applies, as radio buttons (better than a dropdown for two or three options). */
+export function RadioGroup<T extends string>({ legend, hint, name, value, options, onChange }: { legend: ReactNode; hint?: ReactNode; name: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
+  return (
+    <fieldset className="mb-4">
+      <legend className="mb-1 text-sm font-medium">{legend}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <label key={o.value} className={cn("flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm sm:min-h-9", o.value === value ? "border-brand bg-brand-soft font-medium" : "border-border")}>
+            <input type="radio" name={name} value={o.value} checked={o.value === value} onChange={() => onChange(o.value)} />
+            {o.label}
+          </label>
+        ))}
+      </div>
+      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
+    </fieldset>
+  );
+}
+
 /**
  * Holds the busy flag, the overall error and the per-field messages of a form that posts to the API.
  *

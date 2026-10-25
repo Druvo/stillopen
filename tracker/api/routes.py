@@ -220,7 +220,16 @@ def dashboard(request):
         "can_import": user.is_staff and bool(config.careerops_path),
         "scan": _scan_payload(scan_run) if scan_run else None,
         "search_summary": _search_summary(profile, config, areas),
+        "ai_prompt": {"show": _wants_ai_key(profile, config)},
     }
+
+
+def _wants_ai_key(profile, config) -> bool:
+    """True when nothing but the free keyword check is set up for this person and they have not said "not now": the dashboard then
+    asks, first of all, for a Google AI Studio key (a free key is the easiest way to turn the deeper fit checks on)."""
+    if preferences.read(profile)["ai_prompt_dismissed"]:
+        return False
+    return config.ai_provider == "none" and not profile.ai_key_encrypted
 
 
 def _search_summary(profile, config, areas) -> dict:

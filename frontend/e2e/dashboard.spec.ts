@@ -1,14 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const PASSWORD = "e2e-pass-12345"; // the throwaway e2e people made by `manage.py e2e_seed`
-
-async function signIn(page: Page, name: string, next = "/app/") {
-  await page.goto(`/accounts/login/?next=${encodeURIComponent(next)}`);
-  await page.locator("input[name=login]").fill(name);
-  await page.locator("input[name=password]").fill(PASSWORD);
-  await page.locator("form button[type=submit]").first().click();
-  await page.waitForURL(/\/app\//);
-}
+import { signIn } from "./helpers";
 
 const card = (page: Page, text: string) => page.locator("article", { hasText: text }).first();
 
@@ -17,11 +8,11 @@ test("the header, the next step, the quick-add bar and the four tiles are there"
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
   await expect(page.getByText(/We (last looked at which jobs are still open|have not yet looked)/)).toBeVisible();
   await expect(page.getByRole("link", { name: "Add job", exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Are they still open?" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Search jobs" })).toHaveCount(0); // no job sources in the test install
+  await expect(page.getByRole("button", { name: "Check which are still open" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Search for jobs" })).toHaveCount(0); // no job sources in the test install
   await expect(page.getByRole("button", { name: "Import from career-ops" })).toHaveCount(0); // site admins only
 
-  await expect(page.getByText("YOUR NEXT STEP")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your next step" })).toBeVisible();
   await expect(page.getByText("Found a job you like? Paste its link")).toBeVisible();
 
   await expect(page.getByText("Jobs you are tracking")).toBeVisible();
@@ -50,7 +41,7 @@ test("the last search shows its result and a log of every source", async ({ page
 
 test("a running search shows its progress, then the first jobs arrive by themselves", async ({ page }) => {
   let polls = 0;
-  const run = { running: true, done: 1, total: 4, error: "", found: 5, added: 0, note: "", started_at: new Date().toISOString(), finished_at: null, phase: "reading", entries: [] };
+  const run = { running: true, done: 1, total: 4, error: "", found: 5, added: 0, note: "", started_at: new Date().toISOString(), finished_at: null, phase: "reading", entries_count: 0 };
   await page.route("**/api/v1/scan/status", (route) => {
     polls += 1;
     if (polls === 1) return route.fulfill({ json: run });
@@ -70,53 +61,67 @@ test("a running search shows its progress, then the first jobs arrive by themsel
   await expect(page.getByRole("button", { name: /Reading 1\/4/ })).toBeDisabled();
   await expect(page.getByText("Sorting out the best matches for you…")).toBeVisible();
   await expect(page.getByText(/looked through 9 openings, 2 new for you/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Search jobs" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Search for jobs" })).toBeEnabled();
   await page.unrouteAll({ behavior: "wait" }); // let any request still going through the mocks finish before the test ends
 });
 
-test("every job card shows what the classic card showed", async ({ page }) => {
+test("every job card shows what the classic card showed, with the extra actions under More", async ({ page }) => {
   await signIn(page, "alice");
-  await page.getByRole("button", { name: "List", exact: true }).click();
+  const more = (c: ReturnType<typeof card>) => c.getByRole("button", { name: /More actions/ });
 
   const acme = card(page, "Backend Engineer");
   await expect(acme.getByText("USD 90k")).toBeVisible();
   await expect(acme.getByRole("button", { name: "Check my fit" })).toHaveAttribute("title", /How we judge: /);
-  await expect(acme.getByRole("button", { name: "Tailor my CV" })).toBeVisible();
-  await expect(acme.getByRole("link", { name: "Get ready to apply" })).toHaveAttribute("href", /\/app\/jobs\/\d+\/apply$/);
+  await more(acme).click();
+  await expect(page.getByRole("menuitem", { name: "Tailor my CV" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Get ready to apply" })).toHaveAttribute("href", /\/app\/jobs\/\d+\/apply$/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
 
   const globex = card(page, "Platform Engineer");
   await expect(globex.getByText(/Deadline .* \(in 3 days\)/)).toBeVisible();
   await expect(globex.getByText("Open", { exact: true })).toHaveAttribute("title", "The page still loads.");
-  await expect(globex.getByRole("link", { name: "View the posting" })).toHaveAttribute("href", "https://jobs.example.com/platform");
+  await more(globex).click();
+  await expect(page.getByRole("menuitem", { name: "View the posting" })).toHaveAttribute("href", "https://jobs.example.com/platform");
+  await page.keyboard.press("Escape");
 
   const initech = card(page, "API Developer");
+  await expect(initech.getByText(/via Email/)).toBeHidden(); // the applied line is inside Details, closed at first
+  await initech.getByText("Details", { exact: true }).click();
   await expect(initech.getByText(/via Email/)).toBeVisible();
   await expect(initech.getByRole("button", { name: "Check my fit" })).toHaveCount(0); // nothing to read yet: no description and no link
-  await expect(initech.getByRole("button", { name: "Tailor my CV" })).toHaveCount(0);
+  await more(initech).click();
+  await expect(page.getByRole("menuitem", { name: "Tailor my CV" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Edit details" })).toBeVisible();
+  await page.keyboard.press("Escape");
 });
 
-test("the filters narrow the list, are remembered for this tab, and clear again", async ({ page }) => {
+test("the filters are hidden at first, narrow the list when shown, are remembered on the account, and clear again", async ({ page }) => {
   await signIn(page, "alice");
-  await expect(page.getByText("Showing all 3")).toBeVisible();
-  await expect(page.getByRole("button", { name: "All (3)" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("tab", { name: "All 3" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByLabel("Work", { exact: true })).toBeHidden();
+  await page.getByRole("button", { name: "Filters" }).click();
+  await expect(page.getByText("Showing all 3", { exact: true })).toBeVisible();
 
   await page.getByLabel("Work", { exact: true }).selectOption("remote");
-  await expect(page.getByText("Showing 1 of 3")).toBeVisible();
+  await expect(page.getByText("Showing 1 of 3", { exact: true })).toBeVisible();
   await expect(page.locator("article")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /Filters.*1 on/ })).toBeVisible();
+  await page.waitForResponse((r) => r.url().endsWith("/api/v1/preferences") && r.request().method() === "PUT");
   await page.reload();
-  await expect(page.getByText("Showing 1 of 3")).toBeVisible(); // remembered for this tab
+  await expect(page.getByText("Showing 1 of 3", { exact: true })).toBeVisible(); // remembered: the panel is still open and the filter still set
 
   await page.getByRole("button", { name: "Clear filters" }).click();
-  await expect(page.getByText("Showing all 3")).toBeVisible();
+  await expect(page.getByText("Showing all 3", { exact: true })).toBeVisible();
 
   await page.getByLabel("Search", { exact: true }).fill("nobody at all");
   await expect(page.getByText("No jobs match these filters.")).toBeVisible();
   await page.getByRole("button", { name: "Show everything again" }).click();
-  await expect(page.getByText("Showing all 3")).toBeVisible();
+  await expect(page.getByText("Showing all 3", { exact: true })).toBeVisible();
 
   await page.getByLabel("Sort by").selectOption("oldest");
   await page.getByLabel("Posting").selectOption("expired");
-  await expect(page.getByText("Showing 0 of 3")).toBeVisible();
+  await expect(page.getByText("Showing 0 of 3", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
 });
 
@@ -126,13 +131,15 @@ test("the search box in the header filters the dashboard too", async ({ page }) 
   await box.fill("Acme");
   await box.press("Enter");
   await expect(page).toHaveURL(/\/app\/\?q=Acme/);
-  await expect(page.getByText("Showing 1 of 3")).toBeVisible();
+  await expect(page.locator("article")).toHaveCount(1);
+  await expect(page.getByRole("status").filter({ hasText: "Showing 1 of 3" })).toHaveCount(1); // read out for screen readers
   await expect(page.getByLabel("Search", { exact: true })).toHaveValue("Acme");
 
   // arriving from another screen with ?q= in the address works the same way
   await page.goto("/app/?q=Globex");
-  await expect(page.getByText("Showing 1 of 3")).toBeVisible();
-  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(page.locator("article")).toHaveCount(1);
+  await page.getByLabel("Search", { exact: true }).fill("");
+  await expect(page.locator("article")).toHaveCount(3);
 });
 
 test("a link pasted in the quick-add bar opens Add job with what was read", async ({ page }) => {
@@ -169,7 +176,6 @@ test("a site admin sees the banners, the import button, Paperless and a job's fi
   await page.getByRole("button", { name: "Import from career-ops" }).click();
   await expect(page.getByText("Imported: 2 new, 1 refreshed")).toBeVisible();
 
-  await page.getByRole("button", { name: "List", exact: true }).click();
   const withFile = page.locator("article", { has: page.getByText("evaluation.md") }).first();
   await withFile.getByText("Details", { exact: true }).click();
   await expect(withFile.getByRole("link", { name: "evaluation.md" })).toHaveAttribute("href", "/document/77/");
@@ -185,7 +191,7 @@ test("an ordinary person never sees the admin-only controls, even if the page as
   expect(status).toBe(403);
 });
 
-test("on a phone nothing runs off the side, and the filters fold away", async ({ page }) => {
+test("on a phone nothing runs off the side, the filters fold away and the extra buttons sit under More", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await signIn(page, "alice");
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
@@ -196,16 +202,22 @@ test("on a phone nothing runs off the side, and the filters fold away", async ({
   await page.getByRole("button", { name: "Filters" }).click();
   await expect(page.getByLabel("Fits your places")).toBeVisible();
   await expect(page.getByLabel("Sort by")).toBeVisible();
-
-  // the board scrolls sideways inside itself, not the page
-  const board = page.locator("div.snap-x").first();
-  expect(await board.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
   expect(await overflow()).toBeLessThanOrEqual(0);
+  await page.getByRole("button", { name: "Filters" }).click();
 
-  await page.getByRole("button", { name: "List", exact: true }).click();
+  await page.getByRole("button", { name: "More actions", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Check which are still open" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
   await expect(card(page, "Backend Engineer")).toBeVisible();
   expect(await overflow()).toBeLessThanOrEqual(0);
+
+  // the board scrolls sideways inside itself, not the page
   await page.getByRole("button", { name: "Board", exact: true }).click();
+  const board = page.locator("div.snap-x").first();
+  await expect(board).toBeVisible();
+  expect(await board.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  expect(await overflow()).toBeLessThanOrEqual(0);
 });
 
 test("saving the first questions says so, and the page promises nothing is sent", async ({ page }) => {
@@ -221,12 +233,12 @@ test("saving the first questions says so, and the page promises nothing is sent"
 
 test("a follow-up that is due can be put off, and then it is gone from the list", async ({ page }) => {
   await signIn(page, "alice");
-  await expect(page.getByText("Follow-ups due")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Time to follow up" })).toBeVisible();
   await expect(page.getByText(/Initech — API Developer \(due/)).toBeVisible();
-  await expect(page.getByText("Coming up")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Coming up" })).toBeVisible();
   await expect(page.getByRole("link", { name: "All interviews" })).toHaveAttribute("href", "/app/interviews");
   await expect(page.getByRole("link", { name: "Open", exact: true }).first()).toHaveAttribute("href", /\/app\/jobs\/\d+\/apply$/);
 
   await page.getByRole("button", { name: "In 3 days" }).click();
-  await expect(page.getByText("Follow-ups due")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Time to follow up" })).toHaveCount(0);
 });

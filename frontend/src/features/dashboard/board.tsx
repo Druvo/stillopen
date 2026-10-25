@@ -54,6 +54,7 @@ function DraggableCard({ job, ...common }: { job: Job } & Common) {
         onMove={common.onMove}
         onCheckFit={common.onCheckFit}
         checking={common.checkingId === job.id}
+        variant="compact"
         dragHandle={{ attributes, listeners, setActivatorNodeRef }}
       />
     </div>
@@ -85,7 +86,8 @@ function Column({ bucket, jobs, ...common }: { bucket: Bucket; jobs: Job[] } & C
   );
 }
 
-export function Board({ buckets, jobs, ...common }: { buckets: Bucket[]; jobs: Job[] } & Common) {
+/** The board. Loaded only when the board view is shown (it brings the drag-and-drop library with it). */
+export default function Board({ buckets, jobs, ...common }: { buckets: Bucket[]; jobs: Job[] } & Common) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
@@ -131,7 +133,7 @@ export function Board({ buckets, jobs, ...common }: { buckets: Bucket[]; jobs: J
         ))}
       </div>
       <DragOverlay>
-        {active ? <JobCard job={active} statuses={common.statuses} extras={common.extras} onMove={common.onMove} onCheckFit={common.onCheckFit} checking={false} overlay /> : null}
+        {active ? <JobCard job={active} statuses={common.statuses} extras={common.extras} onMove={common.onMove} onCheckFit={common.onCheckFit} checking={false} variant="compact" overlay /> : null}
       </DragOverlay>
     </DndContext>
   );

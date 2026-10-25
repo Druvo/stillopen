@@ -1,7 +1,8 @@
 "use client";
 
-import { GripVertical } from "lucide-react";
-import { useState, type HTMLAttributes, type ReactNode, type Ref } from "react";
+import { CalendarClock, GripVertical } from "lucide-react";
+import { useMemo, useState, type HTMLAttributes, type ReactNode, type Ref } from "react";
+import { ActionMenu, type MenuItem } from "@/components/menu";
 import { buttonClass } from "@/components/ui";
 import { cvApi } from "@/features/cv/api";
 import { prepApi } from "@/features/prep/api";
@@ -24,8 +25,8 @@ export type CardExtras = {
   refresh: () => Promise<unknown> | void;
 };
 
-const LINK = "rounded-md px-2 py-1 text-theme-xs text-muted hover:bg-surface-2 hover:text-fg";
-const PILL = "inline-flex items-center rounded-md bg-surface-2 px-1.5 py-0.5 text-theme-xs";
+const PILL = "inline-flex items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-theme-xs";
+const TOUCH = "min-h-11 sm:min-h-9";
 
 function Pill({ children, tone = "muted", title }: { children: ReactNode; tone?: "muted" | "good" | "bad" | "warn" | "brand"; title?: string }) {
   const tones = { muted: "text-muted", good: "text-good", bad: "text-bad", warn: "text-warn", brand: "text-brand" };
@@ -36,33 +37,30 @@ function Pill({ children, tone = "muted", title }: { children: ReactNode; tone?:
   );
 }
 
-/** One button that does a slow thing (make a tailored CV, make a prep plan), then opens the result; says why if it could not. */
-function DoButton({ label, busyLabel, title, primary, run }: { label: string; busyLabel: string; title: string; primary?: boolean; run: () => Promise<string> }) {
-  const [state, setState] = useState<"idle" | "busy" | string>("idle");
+/** How well the job matches: a ring filled to the percent, with the number (and, in the list, the band's name) so colour is never the only clue. */
+export function MatchRing({ job, showBand }: { job: Pick<Job, "percent" | "band" | "ai_method">; showBand: boolean }) {
+  if (job.percent === null) {
+    return (
+      <div className="w-16 shrink-0 rounded-lg border border-dashed border-border px-1 py-1.5 text-center text-theme-xs leading-tight text-muted">Not checked yet</div>
+    );
+  }
+  const color = job.band?.color ?? "var(--brand)";
+  const r = 18;
+  const c = 2 * Math.PI * r;
+  const how = job.ai_method === "keywords" ? "Quick keyword check" : job.ai_method ? "Read by AI" : "";
   return (
-    <>
-      <button
-        type="button"
-        disabled={state === "busy"}
-        title={title}
-        onClick={async () => {
-          setState("busy");
-          try {
-            navigate(await run());
-          } catch (e) {
-            setState(errorText(e));
-          }
-        }}
-        className={buttonClass(primary ? "primary" : "outline", true)}
-      >
-        {state === "busy" ? busyLabel : label}
-      </button>
-      {state !== "idle" && state !== "busy" && (
-        <span role="alert" className="basis-full text-theme-xs text-bad">
-          {state}
+    <div className="flex w-14 shrink-0 flex-col items-center" title={how || undefined}>
+      <div className="relative size-12" role="img" aria-label={`${job.percent}% match${job.band ? `, ${job.band.label}` : ""}`}>
+        <svg viewBox="0 0 44 44" className="size-12 -rotate-90" aria-hidden>
+          <circle cx="22" cy="22" r={r} fill="none" strokeWidth="4" className="stroke-gray-200 dark:stroke-gray-700" />
+          <circle cx="22" cy="22" r={r} fill="none" strokeWidth="4" strokeLinecap="round" stroke={color} strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(100, job.percent) / 100)} />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-theme-xs font-semibold text-gray-800 dark:text-white/90" aria-hidden>
+          {job.percent}%
         </span>
-      )}
-    </>
+      </div>
+      {showBand && job.band && <span className="mt-0.5 text-center text-theme-xs leading-tight text-muted">{job.band.label}</span>}
+    </div>
   );
 }
 
@@ -131,119 +129,156 @@ type Props = {
   onMove: (job: Job, statusId: number) => void;
   onCheckFit: (job: Job) => void;
   checking: boolean;
+  /** "row" is the list's full-width row; "compact" is the same card narrowed for a board column. */
+  variant?: "row" | "compact";
   /** Drag wiring from dnd-kit; absent in the list view and the drag overlay. */
   dragHandle?: { attributes: HTMLAttributes<HTMLButtonElement>; listeners: HTMLAttributes<HTMLButtonElement> | undefined; setActivatorNodeRef: Ref<HTMLButtonElement> };
   overlay?: boolean;
 };
 
-export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, dragHandle, overlay }: Props) {
+export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, variant = "row", dragHandle, overlay }: Props) {
+  const compact = variant === "compact";
   const status = statuses.find((s) => s.id === job.status_id);
   const live = livingBadge(job.live_state);
   const deadline = deadlineText(job);
   const applied = appliedParts(job);
   const canJudge = job.has_description || !!job.url;
-  const hasDetails = job.strengths.length > 0 || job.gaps.length > 0 || !!job.notes || job.documents.length > 0;
-  const color = job.band?.color;
+  const needsFit = canJudge && !job.ai_evaluated;
+  const hasDetails = job.strengths.length > 0 || job.gaps.length > 0 || !!job.notes || job.documents.length > 0 || applied.length > 0 || !!job.next_action || !!job.ai_method;
+  const [working, setWorking] = useState<string | null>(null);
+  const [problem, setProblem] = useState("");
+  const name = `${job.role} at ${job.company}`;
+
+  /** A slow thing (make a tailored CV, make a prep plan), then open the result; say why if it could not be done. */
+  const run = async (busyText: string, go: () => Promise<string>) => {
+    setWorking(busyText);
+    setProblem("");
+    try {
+      navigate(await go());
+    } catch (e) {
+      setProblem(errorText(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const unsent = job.documents.filter((d) => !d.paperless_id);
+  const items = useMemo(() => {
+    const list: MenuItem[] = [];
+    if (canJudge && job.ai_evaluated) list.push({ key: "again", label: "Check again", onSelect: () => onCheckFit(job) });
+    if (needsFit) list.push({ key: "apply", label: job.applied_date && job.applied_cv ? "Your application" : "Get ready to apply", to: `/jobs/${job.id}/apply` });
+    if (canJudge) {
+      list.push({ key: "tailor", label: "Tailor my CV", onSelect: () => void run("Tailoring your CV…", () => cvApi.tailor(job.id).then((r) => `/cv/${r.id}`)) });
+    }
+    if (extras.prepEnabled && job.gaps.length > 0 && job.has_description) {
+      list.push({ key: "prep", label: "Prepare for this job", onSelect: () => void run("Preparing your plan…", async () => `/prep/${(await prepApi.create(job.id)).id}`) });
+    }
+    list.push({ key: "edit", label: "Edit details", to: `/jobs/${job.id}/edit` });
+    if (job.url) list.push({ key: "view", label: "View the posting", href: job.url });
+    if (extras.paperlessUrl && unsent.length > 0) {
+      list.push({
+        key: "paperless",
+        label: "Send to Paperless",
+        onSelect: () =>
+          void (async () => {
+            try {
+              for (const d of unsent) {
+                const r = await dashboardApi.sendToPaperless(d.id);
+                if (!r.ok) throw new Error(r.error || "Paperless upload failed");
+              }
+              await extras.refresh();
+            } catch (e) {
+              notify(e instanceof Error && e.message ? e.message : "Paperless upload failed", "error");
+            }
+          })(),
+      });
+    }
+    return list;
+    // `run` only sets state; the card's data is what the list depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job, canJudge, needsFit, extras, unsent.length, onCheckFit]);
+
   return (
     <article
       id={`job-${job.id}`}
-      aria-label={`${job.role} at ${job.company}`}
-      className={cn(
-        "scroll-mt-20 rounded-2xl border bg-surface p-3 text-theme-sm shadow-theme-xs sm:p-4",
-        job.urgent ? "border-warn" : "border-border",
-        overlay && "rotate-1 shadow-lg",
-      )}
+      aria-label={name}
+      className={cn("so-job scroll-mt-20 rounded-2xl border bg-surface p-3 text-theme-sm shadow-theme-xs sm:p-4", job.urgent ? "border-warn" : "border-border", overlay && "rotate-1 shadow-lg")}
     >
-      <div className="flex items-start gap-2">
-        {dragHandle && (
-          <button
-            type="button"
-            ref={dragHandle.setActivatorNodeRef}
-            {...dragHandle.attributes}
-            {...dragHandle.listeners}
-            aria-label={`Drag ${job.role} at ${job.company} to another column. Or use the status menu on the card.`}
-            className="-ml-1 mt-0.5 shrink-0 cursor-grab touch-none rounded p-1 text-muted hover:bg-surface-2 active:cursor-grabbing"
-          >
-            <GripVertical className="size-4" aria-hidden />
-          </button>
-        )}
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-800 dark:text-white/90">
-            {job.company} <span className="font-normal text-muted">— {job.role}</span>
-          </h3>
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-theme-xs text-muted">
-            {job.source && <span>{job.source}</span>}
-            {job.advertised_pay && <span>{job.advertised_pay}</span>}
-            {job.location && <span>{job.location}</span>}
-            {job.applied_date && <span>Applied {shortDate(job.applied_date, true)}</span>}
-            {deadline && <span className={job.overdue ? "text-bad" : job.urgent ? "text-warn" : undefined}>{deadline}</span>}
+      <div className={cn("flex gap-3", compact ? "flex-col" : "flex-col md:flex-row md:items-start md:justify-between")}>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          {dragHandle && (
+            <button
+              type="button"
+              ref={dragHandle.setActivatorNodeRef}
+              {...dragHandle.attributes}
+              {...dragHandle.listeners}
+              aria-label={`Drag ${job.role} at ${job.company} to another column. Or use the status menu on the card.`}
+              className="-ml-1 mt-0.5 shrink-0 cursor-grab touch-none rounded p-1 text-muted hover:bg-surface-2 active:cursor-grabbing"
+            >
+              <GripVertical className="size-4" aria-hidden />
+            </button>
+          )}
+          <MatchRing job={job} showBand={!compact} />
+          <div className="min-w-0 flex-1">
+            <h3 className="break-words font-semibold text-gray-800 dark:text-white/90">{job.role}</h3>
+            <p className="break-words text-muted">
+              {job.company}
+              {job.location && <span> · {job.location}</span>}
+            </p>
+            <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-theme-xs text-muted">
+              {job.source && <span>{job.source}</span>}
+              {job.advertised_pay && <span>{job.advertised_pay}</span>}
+              {job.applied_date && <span>Applied {shortDate(job.applied_date)}</span>}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {live && (
+                <Pill tone={live.tone} title={job.live_detail}>
+                  {live.text}
+                </Pill>
+              )}
+              {deadline && (
+                <Pill tone={job.overdue ? "bad" : job.urgent ? "warn" : "muted"}>
+                  <CalendarClock className="size-3" aria-hidden />
+                  {deadline}
+                </Pill>
+              )}
+              {job.repost && (
+                <Pill tone="warn" title={repostTitle(job.repost)}>
+                  Possible repost
+                </Pill>
+              )}
+              {job.skill_matched && (
+                <Pill tone="brand" title={SKILL_MATCH_TITLE}>
+                  Skill match
+                </Pill>
+              )}
+              {job.fit_badge && (
+                <Link to={`/jobs/${job.id}/edit`} title={job.fit_text} className={cn(PILL, job.fit_badge === "fits" ? "text-good" : job.fit_badge === "check" ? "text-warn" : "text-muted")}>
+                  {FIT_BADGE_TEXT[job.fit_badge]}
+                </Link>
+              )}
+              {job.cv && (
+                <Link to={`/cv/${job.cv.id}`} className={cn(PILL, job.cv.flagged && !job.cv.approved ? "text-warn" : "text-good")}>
+                  {cvBadgeText(job.cv)}
+                </Link>
+              )}
+              {job.decision && <Pill title={job.decision}>{truncate(job.decision, 28)}</Pill>}
+              {job.risk && <Pill>Risk: {job.risk}</Pill>}
+            </div>
+            {!compact && job.summary && <p className="mt-1.5 line-clamp-2">{job.summary}</p>}
           </div>
         </div>
-        <div className="shrink-0 text-right">
-          {job.percent === null ? (
-            <div className="text-theme-xs text-muted">Not checked yet</div>
-          ) : (
-            <>
-              <div className="text-xl font-semibold leading-none" style={color ? { color } : undefined}>
-                {job.percent}%
-              </div>
-              <div className="text-theme-xs text-muted">{job.band ? job.band.label : "fit"}</div>
-            </>
-          )}
-        </div>
-      </div>
 
-      {job.percent !== null && (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
-          <div className="h-full rounded-full bg-brand" style={{ width: `${job.percent}%`, ...(color ? { background: color } : {}) }} />
-        </div>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <span className={cn(PILL, "gap-1.5")}>
-          <span className="size-2 rounded-full" style={{ background: status?.color ?? "currentColor" }} aria-hidden />
-          {status?.name ?? ""}
-        </span>
-        {live && (
-          <Pill tone={live.tone} title={job.live_detail}>
-            {live.text}
-          </Pill>
-        )}
-        {job.decision && <Pill title={job.decision}>{truncate(job.decision, 28)}</Pill>}
-        {job.risk && <Pill>Risk: {job.risk}</Pill>}
-        {job.repost && (
-          <Pill tone="warn" title={repostTitle(job.repost)}>
-            Possible repost
-          </Pill>
-        )}
-        {job.skill_matched && (
-          <Pill tone="brand" title={SKILL_MATCH_TITLE}>
-            Skill match
-          </Pill>
-        )}
-        {job.fit_badge && (
-          <Link to={`/jobs/${job.id}/edit`} title={job.fit_text} className={cn(PILL, job.fit_badge === "fits" ? "text-good" : job.fit_badge === "check" ? "text-warn" : "text-muted")}>
-            {FIT_BADGE_TEXT[job.fit_badge]}
-          </Link>
-        )}
-        {job.cv && (
-          <Link to={`/cv/${job.cv.id}`} className={cn(PILL, job.cv.flagged && !job.cv.approved ? "text-warn" : "text-good")}>
-            {cvBadgeText(job.cv)}
-          </Link>
-        )}
-      </div>
-
-      {!overlay && (
-        <>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+        {!overlay && (
+          <div className={cn("flex flex-wrap items-center gap-2", !compact && "md:shrink-0 md:justify-end")}>
             <label className="sr-only" htmlFor={`status-${job.id}`}>
-              Status of {job.role} at {job.company}
+              Status of {name}
             </label>
             <select
               id={`status-${job.id}`}
               value={job.status_id}
               onChange={(event) => onMove(job, Number(event.target.value))}
-              className="min-w-0 max-w-full rounded-lg border border-border bg-surface px-2 py-1 text-theme-xs"
+              className={cn("min-w-0 max-w-full rounded-lg border border-border bg-surface px-2 py-1 text-theme-sm", TOUCH)}
               style={status ? { borderLeft: `4px solid ${status.color}` } : undefined}
             >
               {statuses.map((s) => (
@@ -252,70 +287,57 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, d
                 </option>
               ))}
             </select>
-            {canJudge && (
-              <button type="button" onClick={() => onCheckFit(job)} disabled={checking} title={`How we judge: ${extras.judgeLabel}`} className={buttonClass(job.ai_evaluated ? "outline" : "primary", true)}>
-                {checking ? "Reading the posting…" : job.ai_evaluated ? "Check again" : "Check my fit"}
+            {needsFit ? (
+              <button type="button" onClick={() => onCheckFit(job)} disabled={checking} title={`How we judge: ${extras.judgeLabel}`} className={cn(buttonClass("primary"), TOUCH)}>
+                {checking ? "Reading the posting…" : "Check my fit"}
               </button>
+            ) : (
+              <Link to={`/jobs/${job.id}/apply`} className={cn(buttonClass("primary"), TOUCH)}>
+                {job.applied_date && job.applied_cv ? "Your application" : "Get ready to apply"}
+              </Link>
             )}
-            {canJudge && (
-              <DoButton
-                label="Tailor my CV"
-                busyLabel="Tailoring…"
-                title="Make a CV tailored to this job from your own CV. Nothing is invented."
-                primary={job.ai_evaluated && !job.cv}
-                run={() => cvApi.tailor(job.id).then((r) => `/cv/${r.id}`)}
-              />
-            )}
-            {extras.prepEnabled && job.gaps.length > 0 && job.has_description && (
-              <DoButton
-                label="Prepare for this job"
-                busyLabel="Preparing…"
-                title="A short study plan that closes the gaps this job showed. It is written by your own AI account."
-                run={async () => `/prep/${(await prepApi.create(job.id)).id}`}
-              />
-            )}
-            <Link to={`/jobs/${job.id}/apply`} className={buttonClass("outline", true)}>
-              {job.applied_date && job.applied_cv ? "Your application" : "Get ready to apply"}
-            </Link>
-            {job.ai_method && <span className="text-theme-xs text-muted">{job.ai_method === "keywords" ? "quick keyword check" : "read by AI"}</span>}
+            <ActionMenu label={`More actions for ${name}`} items={items} busy={working !== null} />
           </div>
-          <div className="-mx-1 mt-2 flex flex-wrap items-center border-t border-border pt-2">
-            {job.url && (
-              <a href={job.url} target="_blank" rel="noopener noreferrer" className={LINK}>
-                View the posting
-              </a>
-            )}
-            <Link to={`/jobs/${job.id}/edit`} className={LINK}>
-              Edit details
-            </Link>
-          </div>
+        )}
+      </div>
 
-          {job.summary && <p className="mt-2">{job.summary}</p>}
-          {job.next_action && <p className="mt-1 text-muted">Suggested next: {job.next_action}</p>}
-
-          {applied.length > 0 && (
-            <p className="mt-2 text-theme-xs text-muted">
-              {applied.map((part, i) => (
-                <span key={i}>
-                  {i > 0 && " · "}
-                  {part.text}
-                  {part.cv && (
-                    <>
-                      {" "}
-                      <Link to={`/cv/${part.cv.id}`} className="text-brand underline">
-                        {part.cv.label}
-                      </Link>
-                    </>
-                  )}
-                </span>
-              ))}
+      {!overlay && (
+        <>
+          {working && (
+            <p role="status" className="mt-2 text-theme-xs text-muted">
+              {working}
             </p>
           )}
-
+          {problem && (
+            <p role="alert" className="mt-2 text-theme-xs text-bad">
+              {problem}
+            </p>
+          )}
           {hasDetails && (
             <details className="mt-2">
               <summary className="cursor-pointer">Details</summary>
               <div className="mt-2">
+                {job.next_action && <p className="mb-2 text-muted">Suggested next: {job.next_action}</p>}
+                {compact && job.summary && <p className="mb-2">{job.summary}</p>}
+                {job.ai_method && <p className="mb-2 text-theme-xs text-muted">{job.ai_method === "keywords" ? "Fit worked out by a quick keyword check." : "Fit read by AI."}</p>}
+                {applied.length > 0 && (
+                  <p className="mb-2 text-theme-xs text-muted">
+                    {applied.map((part, i) => (
+                      <span key={i}>
+                        {i > 0 && " · "}
+                        {part.text}
+                        {part.cv && (
+                          <>
+                            {" "}
+                            <Link to={`/cv/${part.cv.id}`} className="text-brand underline">
+                              {part.cv.label}
+                            </Link>
+                          </>
+                        )}
+                      </span>
+                    ))}
+                  </p>
+                )}
                 {job.strengths.length > 0 && (
                   <>
                     <strong>Strengths</strong>

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { buttonClass, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
+import { YourNumbers } from "@/features/stats/numbers";
 import { pipelineApi } from "./api";
 
 function Stat({ label, value, note }: { label: string; value: number; note?: string }) {
@@ -81,6 +82,7 @@ export function Insights() {
           </p>
         </>
       )}
+      <YourNumbers />
     </>
   );
 }

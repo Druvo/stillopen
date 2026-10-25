@@ -1,4 +1,5 @@
-import type { Dashboard, Progress } from "./types";
+import { clearPersistedStorage, tabStorage } from "./persist";
+import type { Dashboard, PreferencePatch, Preferences, Progress, ScanLog } from "./types";
 
 /** Same-origin calls to Django. The session cookie authenticates; unsafe methods carry Django's CSRF token. */
 export class ApiError extends Error {
@@ -19,7 +20,7 @@ export function csrfToken(): string {
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
-export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: Method, path: string, body?: unknown, options: { keepalive?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   let payload: BodyInit | undefined;
   if (method !== "GET") headers["X-CSRFToken"] = csrfToken();
@@ -29,9 +30,10 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
     headers["Content-Type"] = "application/json";
     payload = JSON.stringify(body);
   }
-  const response = await fetch(`/api/v1${path}`, { method, headers, credentials: "same-origin", body: payload });
+  const response = await fetch(`/api/v1${path}`, { method, headers, credentials: "same-origin", body: payload, keepalive: options.keepalive });
   if (response.status === 401) {
-    // Signed out (session ended): go to the normal sign-in page and come straight back.
+    // Signed out (session ended): forget what this tab kept of their data, go to the normal sign-in page and come straight back.
+    clearPersistedStorage(tabStorage());
     window.location.assign(`/accounts/login/?next=${encodeURIComponent(window.location.pathname)}`);
     throw new ApiError("Please sign in again.", 401);
   }
@@ -54,6 +56,8 @@ export const api = {
   evaluate: (jobId: number) => request<{ ok: true; match_percent: number; method: string }>("POST", `/jobs/${jobId}/evaluate`),
   startScan: () => request<Progress>("POST", "/scan"),
   scanStatus: () => request<Progress>("GET", "/scan/status"),
+  scanLog: () => request<ScanLog>("GET", "/scan/status?log=1"),
+  savePreferences: (patch: PreferencePatch, keepalive = false) => request<Preferences>("PUT", "/preferences", patch, { keepalive }),
   startLiveness: () => request<Progress>("POST", "/liveness"),
   livenessStatus: () => request<Progress>("GET", "/liveness/status"),
 };

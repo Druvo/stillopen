@@ -170,7 +170,7 @@ class SavedPreferences(TestCase):
     def test_every_bad_value_is_refused_with_a_plain_message_and_nothing_is_saved(self):
         bad = (
             {"view": "grid"}, {"sort": "random"}, {"theme": "blue"}, {"text_size": "huge"}, {"density": "tiny"}, {"sidebar": "hidden"},
-            {"filters_open": "yes"}, {"filters": {"nope": "x"}}, {"filters": {"fit": "x" * 61}}, {"filters": ["a"]}, {"tab": "no-such-stage"}, {"colour": "red"},
+            {"filters_open": "yes"}, {"ai_prompt_dismissed": "no"}, {"filters": {"nope": "x"}}, {"filters": {"fit": "x" * 61}}, {"filters": ["a"]}, {"tab": "no-such-stage"}, {"colour": "red"},
         )
         for body in bad:
             r = self.put(body)
@@ -218,3 +218,37 @@ class YourSearchCard(TestCase):
     def test_a_new_person_sees_what_is_missing(self):
         card = self.client.get(f"{BASE}/dashboard").json()["search_summary"]
         self.assertEqual((card["roles"], card["places"], card["has_cv"], card["alerts_on"]), ([], [], False, False))
+
+
+class AskForAKeyFirst(TestCase):
+    """A person with no AI set up is asked, first of all, for a Google AI Studio key; "not now" is remembered on their account."""
+
+    def setUp(self):
+        cache.clear()
+        self.a = person("alice")
+        self.client.force_login(self.a)
+
+    def show(self):
+        return self.client.get(f"{BASE}/dashboard").json()["ai_prompt"]["show"]
+
+    def test_a_new_person_is_asked(self):
+        self.assertTrue(self.show())
+
+    def test_not_now_is_remembered_and_belongs_to_that_person_only(self):
+        r = self.client.put(f"{BASE}/preferences", data=json.dumps({"ai_prompt_dismissed": True}), content_type="application/json")
+        self.assertTrue(r.json()["ai_prompt_dismissed"])
+        self.assertFalse(self.show())
+        self.client.force_login(person("bob"))
+        self.assertTrue(self.show())
+
+    def test_nobody_is_asked_once_an_ai_is_set_up(self):
+        UserProfile.objects.filter(user=self.a).update(ai_provider="openai", ai_model="gemini-2.5-flash")
+        self.assertFalse(self.show())
+        UserProfile.objects.filter(user=self.a).update(ai_provider="none", ai_key_encrypted="x")
+        self.assertFalse(self.show())  # a saved key counts too
+
+    def test_google_ai_studio_is_the_first_choice_on_the_ai_settings_page(self):
+        presets = self.client.get(f"{BASE}/ai-settings").json()["presets"]
+        self.assertEqual(presets[0]["key"], "gemini")
+        self.assertIn("generativelanguage.googleapis.com", presets[0]["base_url"])
+        self.assertIn("Google AI Studio", presets[0]["label"])

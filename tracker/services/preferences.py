@@ -11,6 +11,7 @@ DEFAULTS = {
     "tab": "all",
     "sort": "best",
     "filters_open": False,
+    "ai_prompt_dismissed": False,  # the person said "not now" to the card asking for a Google AI Studio key
     "filters": {"fit": "", "match": "", "work": "", "country": "", "posting": "", "found": ""},
     "sidebar": "expanded",
     "theme": "light",
@@ -26,6 +27,7 @@ CHOICES = {
     "text_size": ("normal", "large", "larger"),
     "density": ("comfortable", "compact"),
 }
+BOOLEANS = ("filters_open", "ai_prompt_dismissed")
 FILTER_KEYS = tuple(DEFAULTS["filters"])
 FILTER_MAX = 60
 
@@ -49,7 +51,8 @@ def normalize(stored) -> dict:
     out = {}
     for key, options in CHOICES.items():
         out[key] = stored.get(key) if stored.get(key) in options else DEFAULTS[key]
-    out["filters_open"] = bool(stored.get("filters_open")) if isinstance(stored.get("filters_open"), bool) else DEFAULTS["filters_open"]
+    for key in BOOLEANS:
+        out[key] = stored[key] if isinstance(stored.get(key), bool) else DEFAULTS[key]
     out["filters"] = _filters(stored.get("filters"))
     tab = stored.get("tab")
     out["tab"] = tab if isinstance(tab, str) and (tab == "all" or Bucket.objects.filter(key=tab).exists()) else "all"
@@ -69,8 +72,9 @@ def update(profile, patch: dict) -> dict:
     for key, options in CHOICES.items():
         if key in patch and patch[key] not in options:
             problems[key] = [f"Choose one of: {', '.join(options)}."]
-    if "filters_open" in patch and not isinstance(patch["filters_open"], bool):
-        problems["filters_open"] = ["This must be true or false."]
+    for key in BOOLEANS:
+        if key in patch and not isinstance(patch[key], bool):
+            problems[key] = ["This must be true or false."]
     if "filters" in patch:
         value = patch["filters"]
         if not isinstance(value, dict) or set(value) - set(FILTER_KEYS) or any(not isinstance(v, str) or len(v) > FILTER_MAX for v in value.values()):

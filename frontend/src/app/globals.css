@@ -59,12 +59,13 @@
   --breakpoint-2xsm: 375px;
   --breakpoint-xsm: 425px;
 
-  --text-theme-xl: 20px;
-  --text-theme-xl--line-height: 30px;
-  --text-theme-sm: 14px;
-  --text-theme-sm--line-height: 20px;
-  --text-theme-xs: 12px;
-  --text-theme-xs--line-height: 18px;
+  /* rem, not px, so the "Text size" choice (a bigger root font size, below) scales every size */
+  --text-theme-xl: 1.25rem;
+  --text-theme-xl--line-height: 1.875rem;
+  --text-theme-sm: 0.875rem;
+  --text-theme-sm--line-height: 1.25rem;
+  --text-theme-xs: 0.75rem;
+  --text-theme-xs--line-height: 1.125rem;
 
   --color-brand-25: #f2f7ff;
   --color-brand-50: #ecf3ff;
@@ -116,6 +117,44 @@ html,
 body {
   background: var(--bg);
   color: var(--text);
+}
+
+/* Display choices, saved on the person's account (Profile > Display). Text size raises the root size; every rem scales with it. */
+html[data-text="large"] {
+  font-size: 112.5%;
+}
+html[data-text="larger"] {
+  font-size: 125%;
+}
+
+/* Density: the comfortable look is the default; "compact" tightens the cards and the gaps between them. */
+:root {
+  --stack-gap: 1rem;
+}
+html[data-density="compact"] {
+  --stack-gap: 0.625rem;
+}
+.so-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-gap);
+}
+html[data-density="compact"] .so-card {
+  padding: 0.75rem;
+}
+html[data-density="compact"] .so-job {
+  padding: 0.625rem 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 button:not(:disabled),

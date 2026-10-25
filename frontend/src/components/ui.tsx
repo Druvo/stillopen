@@ -24,7 +24,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
 });
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-2xl border border-border bg-surface p-4 sm:p-5", className)} {...props} />;
+  return <div className={cn("so-card rounded-2xl border border-border bg-surface p-4 sm:p-5", className)} {...props} />;
 }
 
 export function Badge({ children, tone = "muted", className }: { children: ReactNode; tone?: "muted" | "good" | "warn" | "bad" | "brand"; className?: string }) {
@@ -63,6 +63,22 @@ export function Progress({ value, label }: { value: number; label: string }) {
 
 export function Loading({ what = "this page" }: { what?: string }) {
   return <p className="text-muted">Loading {what}…</p>;
+}
+
+/** A light placeholder while a screen's code or data arrives. */
+export function ScreenSkeleton() {
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading the page" className="animate-pulse space-y-4">
+      <div className="h-8 w-64 max-w-full rounded-lg bg-surface-2" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-16 rounded-2xl bg-surface-2" />
+        ))}
+      </div>
+      <div className="h-40 rounded-2xl bg-surface-2" />
+      <div className="h-24 rounded-2xl bg-surface-2" />
+    </div>
+  );
 }
 
 export function ErrorBox({ message, onRetry }: { message?: string; onRetry?: () => void }) {

@@ -1,15 +1,20 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, Loader2 } from "lucide-react";
+import { useId, useState, type ReactNode } from "react";
 import { Button, buttonClass, Card, Notice, Progress } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
-import type { Dashboard, Followup, Me, NextStep, ScanStatus, UpcomingInterview } from "@/lib/types";
+import type { Dashboard, Followup, Me, NextStep, ScanStatus, SearchSummary, UpcomingInterview } from "@/lib/types";
+import { useIsWide } from "@/lib/use-media";
+import { cn } from "@/lib/utils";
 import { jobsApi } from "@/features/jobs/api";
+import type { Stats } from "@/features/stats/api";
+import { cardTiles } from "@/features/stats/logic";
 import { dashboardApi } from "./api";
-import { entryText, interviewWhen, nextStepTarget, scanPercent, scanTitle, shortDate } from "./logic";
+import { entryText, interviewWhen, nextStepTarget, scanPercent, scanTitle, searchRows, shortDate } from "./logic";
 import { stashPrefill } from "./prefill";
 
 export function Spinner() {
@@ -39,46 +44,117 @@ export function StaffBanners({ me }: { me?: Me }) {
   );
 }
 
-/** "Your next step": the one thing worth doing now. A link into the app uses the router, a `#job-ID` link scrolls to that card. */
-export function NextStepCard({ step, onCard }: { step: NextStep; onCard: (id: string) => void }) {
-  const target = step.url ? nextStepTarget(step.url) : null;
-  const cls = buttonClass("primary");
+// ---- the side column ---------------------------------------------------------------------------------------------------------
+
+/**
+ * A card of the side column. From the xl breakpoint it is a plain card. Below it the cards stack under the tiles and each one folds
+ * into a disclosure (a button with aria-expanded), closed unless `defaultOpen`, so a phone is not a long wall of cards.
+ */
+export function AsideCard({ title, defaultOpen = false, accent = false, hint, children }: { title: string; defaultOpen?: boolean; accent?: boolean; hint?: ReactNode; children: ReactNode }) {
+  const wide = useIsWide();
+  const [open, setOpen] = useState(defaultOpen);
+  const id = useId();
+  const shown = wide || open;
   return (
-    <Card className="border-brand-300 dark:border-brand-500/40">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-bold tracking-wider text-brand">YOUR NEXT STEP</p>
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">{step.headline}</h2>
-          <p className="text-theme-sm text-muted">{step.body}</p>
-        </div>
-        {target && step.label && target.kind === "app" && (
-          <Link to={target.to} className={cls}>
-            {step.label}
-          </Link>
+    <section aria-labelledby={`${id}-h`} className={cn("so-card rounded-2xl border bg-surface", accent ? "border-brand-300 dark:border-brand-500/40" : "border-border")}>
+      <h2 id={`${id}-h`} className="text-theme-sm font-semibold text-gray-800 dark:text-white/90">
+        {wide ? (
+          <span className="flex items-center justify-between gap-2 px-4 pt-4">
+            {title}
+            {hint}
+          </span>
+        ) : (
+          <button type="button" aria-expanded={open} aria-controls={`${id}-body`} onClick={() => setOpen((v) => !v)} className="flex min-h-11 w-full items-center justify-between gap-2 px-4 py-2 text-left font-semibold">
+            <span>
+              {title} {hint}
+            </span>
+            <ChevronDown className={cn("size-4 shrink-0 transition-transform", open && "rotate-180")} aria-hidden />
+          </button>
         )}
-        {target && step.label && target.kind === "card" && (
-          <a
-            href={`#${target.id}`}
-            className={cls}
-            onClick={(e) => {
-              e.preventDefault();
-              onCard(target.id);
-            }}
-          >
-            {step.label}
-          </a>
-        )}
-        {target && step.label && target.kind === "other" && (
-          <a href={target.href} className={cls}>
-            {step.label}
-          </a>
-        )}
+      </h2>
+      <div id={`${id}-body`} hidden={!shown} className="px-4 pb-4 pt-2">
+        {children}
       </div>
-    </Card>
+    </section>
   );
 }
 
-/** "Found a job you like? Paste its link": reads the posting, then opens Add job with what was found, to be checked before saving. */
+/**
+ * The first thing a person with no AI set up is asked: add a Google AI Studio key. The free keyword check works without it, so "Not now"
+ * is a real answer (saved on the account, so it is not asked again on another device).
+ */
+export function AiKeyPrompt({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <section aria-labelledby="ai-prompt-h" className="rounded-2xl border border-brand-300 bg-brand-50 p-4 sm:p-5 dark:border-brand-500/40 dark:bg-brand-500/10">
+      <h2 id="ai-prompt-h" className="text-lg font-semibold text-gray-800 dark:text-white/90">
+        First, add a free Google AI Studio key
+      </h2>
+      <p className="mt-1 text-theme-sm">
+        With your own key, StillOpen can read each job and your CV carefully: a better match score, what you are strong at, and what to learn. Without it you still get the free keyword check, so you can come back to this later.
+      </p>
+      <ol className="mt-3 list-decimal space-y-1 pl-5 text-theme-sm">
+        <li>
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="font-medium text-brand underline">
+            Create a key in Google AI Studio
+          </a>{" "}
+          (a Google account is enough; it opens in a new tab).
+        </li>
+        <li>Press &ldquo;Add my key&rdquo;, paste it and Save. It is stored encrypted and never shown again.</li>
+      </ol>
+      <p className="mt-2 text-theme-xs text-muted">
+        Only when you press Check my fit are the job text and the relevant parts of your CV sent to Google. On Google&apos;s free tier Google may use what you send to improve its products; pick a paid key or another provider if that matters to you.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link to="/profile/ai?preset=gemini" className={buttonClass("primary")}>
+          Add my key
+        </Link>
+        <Button variant="outline" onClick={onDismiss}>
+          Not now
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/** "Your next step": the one thing worth doing now. A link into the app uses the router, a `#job-ID` link scrolls to that card. */
+export function NextStepBody({ step, onCard }: { step: NextStep; onCard: (id: string) => void }) {
+  const target = step.url ? nextStepTarget(step.url) : null;
+  const cls = buttonClass("primary");
+  return (
+    <div>
+      <p className="font-semibold text-gray-800 dark:text-white/90">{step.headline}</p>
+      <p className="mt-0.5 text-theme-sm text-muted">{step.body}</p>
+      {target && step.label && (
+        <div className="mt-3">
+          {target.kind === "app" && (
+            <Link to={target.to} className={cn(cls, "min-h-11 sm:min-h-9")}>
+              {step.label}
+            </Link>
+          )}
+          {target.kind === "card" && (
+            <a
+              href={`#${target.id}`}
+              className={cn(cls, "min-h-11 sm:min-h-9")}
+              onClick={(e) => {
+                e.preventDefault();
+                onCard(target.id);
+              }}
+            >
+              {step.label}
+            </a>
+          )}
+          {target.kind === "other" && (
+            <a href={target.href} className={cn(cls, "min-h-11 sm:min-h-9")}>
+              {step.label}
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Found a job you like? Paste its link": reads the posting, then opens Add job with what was found, to be checked before saving. One line. */
 export function QuickAdd() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -100,46 +176,85 @@ export function QuickAdd() {
     }
   };
   return (
-    <Card>
+    <Card className="p-3 sm:p-3">
       <form
         onSubmit={(e) => {
           e.preventDefault();
           if (!busy) void go();
         }}
+        className="flex flex-wrap items-center gap-x-3 gap-y-2"
       >
-        <label htmlFor="quickadd-url" className="mb-1 block text-theme-sm font-medium">
+        <label htmlFor="quickadd-url" className="text-theme-sm font-medium">
           Found a job you like? Paste its link
         </label>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            id="quickadd-url"
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://..."
-            className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-theme-sm"
-          />
-          <Button type="submit" disabled={busy}>
-            {busy ? "Looking…" : "Look it up"}
-          </Button>
-        </div>
-        <p className="mt-1 text-theme-xs text-muted">We read the title and description from the page and let you check them first. Nothing is saved until you say so.</p>
+        <input
+          id="quickadd-url"
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://..."
+          aria-describedby="quickadd-hint"
+          className="min-h-11 min-w-0 flex-1 basis-48 rounded-lg border border-border bg-surface px-3 py-1.5 text-theme-sm sm:min-h-9"
+        />
+        <Button type="submit" disabled={busy} className="min-h-11 sm:min-h-9">
+          {busy ? "Looking…" : "Look it up"}
+        </Button>
+        <p id="quickadd-hint" className="basis-full text-theme-xs text-muted">
+          We read the title and description from the page and let you check them first. Nothing is saved until you say so.
+        </p>
       </form>
     </Card>
   );
 }
 
-/** The search card: progress while it runs, the last result after, and the per-source log. */
-export function ScanCard({ scan, starting }: { scan: ScanStatus | null; starting: boolean }) {
-  if (!scan && !starting) return null;
+/** The per-source log of the last search. It is fetched only once it is opened (it can be long). */
+function ScanLogList({ scan }: { scan: ScanStatus }) {
+  const log = useQuery({
+    queryKey: ["scan-log", scan.started_at, scan.finished_at, scan.running],
+    queryFn: dashboardApi.scanLog,
+    staleTime: 0,
+    refetchInterval: scan.running ? 3000 : false,
+  });
+  if (log.isPending) return <p className="text-theme-xs text-muted">Loading the log…</p>;
+  if (log.isError)
+    return (
+      <p role="alert" className="text-theme-xs text-bad">
+        We could not load the log.{" "}
+        <button type="button" onClick={() => log.refetch()} className="underline">
+          Try again
+        </button>
+      </p>
+    );
+  const entries = log.data.entries ?? [];
+  if (entries.length === 0) return <p className="text-theme-xs text-muted">No sources checked yet.</p>;
+  return (
+    <div className="space-y-1.5">
+      {entries.map((e, i) => (
+        <div key={`${e.source}-${i}`} className="flex flex-col gap-0.5 text-theme-xs">
+          <span>
+            {e.source} <span className="text-muted">({e.connector})</span>
+          </span>
+          <span className={e.error ? "text-bad" : "text-muted"}>{entryText(e)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The last search: progress while it runs, a one-line result after, and the log of every source on request. */
+export function LastSearchBody({ scan, starting, canScan }: { scan: ScanStatus | null; starting: boolean; canScan: boolean }) {
+  const [logOpen, setLogOpen] = useState(false);
+  if (!scan && !starting) {
+    return <p className="text-theme-sm text-muted">{canScan ? "You have not searched yet. Press Search for jobs and we look through your job sources for roles that fit you." : "No search has run yet."}</p>;
+  }
   const running = starting || !!scan?.running;
-  const view: ScanStatus = scan ?? { running: true, done: 0, total: 0, error: "", found: 0, added: 0, note: "", started_at: null, finished_at: null, phase: "reading", entries: [] };
+  const view: ScanStatus = scan ?? { running: true, done: 0, total: 0, error: "", found: 0, added: 0, note: "", started_at: null, finished_at: null, phase: "reading", entries_count: 0 };
   const percent = starting && !scan?.running ? 3 : scanPercent(view);
   return (
-    <Card>
-      <div className="flex items-center gap-2" aria-live="polite">
+    <div>
+      <div className="flex items-start gap-2" aria-live="polite">
         {running && <Spinner />}
-        <strong className="text-theme-sm">{starting && !scan?.running ? "Starting the search…" : scanTitle(view)}</strong>
+        <strong className="text-theme-sm font-medium">{starting && !scan?.running ? "Starting the search…" : scanTitle(view)}</strong>
       </div>
       {running && (
         <>
@@ -151,48 +266,74 @@ export function ScanCard({ scan, starting }: { scan: ScanStatus | null; starting
       )}
       {view.note && <p className="mt-1 text-theme-sm text-muted">{view.note}</p>}
       {view.error && <p className="mt-1 text-theme-sm text-bad">{view.error}</p>}
-      <details className="mt-2">
+      <details className="mt-2" onToggle={(e) => setLogOpen((e.currentTarget as HTMLDetailsElement).open)}>
         <summary className="cursor-pointer text-theme-sm">Scan log -- where it searched and what it found</summary>
-        <div className="mt-2 space-y-1">
-          {view.entries.length === 0 && <p className="text-theme-xs text-muted">No sources checked yet.</p>}
-          {view.entries.map((e, i) => (
-            <div key={`${e.source}-${i}`} className="flex flex-col justify-between gap-0.5 text-theme-xs sm:flex-row sm:gap-3">
-              <span>
-                {e.source} <span className="text-muted">({e.connector})</span>
-              </span>
-              <span className={e.error ? "text-bad" : "text-muted"}>{entryText(e)}</span>
-            </div>
-          ))}
-        </div>
+        <div className="mt-2">{logOpen && <ScanLogList scan={view} />}</div>
       </details>
-    </Card>
+    </div>
   );
 }
 
-export function ComingUp({ items }: { items: UpcomingInterview[] }) {
-  if (items.length === 0) return null;
+/** What drives the matches, with where to change each thing. Read-only: the changing happens in Profile. */
+export function YourSearchBody({ summary }: { summary: SearchSummary }) {
   return (
-    <Card>
-      <div className="flex flex-wrap items-baseline gap-x-3">
-        <strong className="text-theme-sm">Coming up</strong>
-        <Link to="/interviews" className="text-theme-sm text-brand underline">
-          All interviews
-        </Link>
-      </div>
-      <ul className="mt-2 space-y-1 text-theme-sm">
+    <div>
+      <dl className="space-y-2">
+        {searchRows(summary).map((row) => (
+          <div key={row.key} className="flex items-start justify-between gap-3 text-theme-sm">
+            <div className="min-w-0">
+              <dt className="text-theme-xs text-muted">{row.label}</dt>
+              <dd className={cn("break-words", row.empty && "text-muted")}>{row.value}</dd>
+            </div>
+            <Link to={row.to} aria-label={`${row.empty ? "Add" : "Change"} ${row.action}`} className="shrink-0 rounded px-1 py-0.5 text-theme-xs text-brand underline">
+              {row.empty ? "Add" : "Change"}
+            </Link>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/** A compact "This week": found, checked, applied and waiting, with a way into the full numbers. */
+export function ThisWeekBody({ stats }: { stats: Pick<Stats, "week" | "waiting"> }) {
+  return (
+    <div>
+      <dl className="grid grid-cols-2 gap-2">
+        {cardTiles(stats).map((t) => (
+          <div key={t.label} className="rounded-xl bg-surface-2 px-3 py-2">
+            <dd className="text-lg font-semibold tabular-nums leading-tight">{t.value}</dd>
+            <dt className="text-theme-xs text-muted">{t.label}</dt>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-1 text-theme-xs text-muted">The last 7 days.</p>
+      <Link to="/insights" className="mt-2 inline-block text-theme-sm text-brand underline">
+        See all your numbers
+      </Link>
+    </div>
+  );
+}
+
+export function ComingUpBody({ items }: { items: UpcomingInterview[] }) {
+  return (
+    <div>
+      <ul className="space-y-1.5 text-theme-sm">
         {items.map((i) => (
           <li key={i.id}>
             {interviewWhen(i.when)} · {i.kind} — {i.company}, {i.role}
           </li>
         ))}
       </ul>
-    </Card>
+      <Link to="/interviews" className="mt-2 inline-block text-theme-sm text-brand underline">
+        All interviews
+      </Link>
+    </div>
   );
 }
 
-export function FollowupsDue({ items, onChanged }: { items: Followup[]; onChanged: () => Promise<unknown> | void }) {
+export function FollowupsBody({ items, onChanged }: { items: Followup[]; onChanged: () => Promise<unknown> | void }) {
   const [busy, setBusy] = useState<number | null>(null);
-  if (items.length === 0) return null;
   const act = async (f: Followup, what: "done" | "snooze") => {
     setBusy(f.id);
     try {
@@ -207,42 +348,41 @@ export function FollowupsDue({ items, onChanged }: { items: Followup[]; onChange
     }
   };
   return (
-    <Card>
-      <strong className="text-theme-sm">Follow-ups due</strong>
-      <ul className="mt-2 space-y-2">
-        {items.map((f) => (
-          <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 text-theme-sm">
-            <span className="min-w-0">
-              {f.company} — {f.role}{" "}
-              <span className="text-muted">
-                (due {shortDate(f.follow_up_date)}
-                {f.applied_date ? `, applied ${shortDate(f.applied_date)}` : ""})
-              </span>{" "}
-              <Link to={`/jobs/${f.id}/apply`} className="text-brand underline">
-                Open
-              </Link>
-            </span>
-            <span className="flex gap-2">
-              <Button variant="outline" small disabled={busy === f.id} onClick={() => act(f, "done")}>
-                Done
-              </Button>
-              <Button variant="outline" small disabled={busy === f.id} onClick={() => act(f, "snooze")}>
-                In 3 days
-              </Button>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <ul className="space-y-3">
+      {items.map((f) => (
+        <li key={f.id} className="text-theme-sm">
+          <p className="min-w-0">
+            {f.company} — {f.role}{" "}
+            <span className="text-muted">
+              (due {shortDate(f.follow_up_date)}
+              {f.applied_date ? `, applied ${shortDate(f.applied_date)}` : ""})
+            </span>{" "}
+            <Link to={`/jobs/${f.id}/apply`} className="text-brand underline">
+              Open
+            </Link>
+          </p>
+          <span className="mt-1.5 flex gap-2">
+            <Button variant="outline" small disabled={busy === f.id} onClick={() => act(f, "done")} className="min-h-11 sm:min-h-0">
+              Done
+            </Button>
+            <Button variant="outline" small disabled={busy === f.id} onClick={() => act(f, "snooze")} className="min-h-11 sm:min-h-0">
+              In 3 days
+            </Button>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
+// ---- the tiles ---------------------------------------------------------------------------------------------------------------
+
 function Tile({ value, label }: { value: ReactNode; label: string }) {
   return (
-    <Card className="p-4">
-      <div className="text-2xl font-semibold text-gray-800 dark:text-white/90">{value}</div>
-      <div className="text-theme-sm text-muted">{label}</div>
-    </Card>
+    <div className="so-card rounded-2xl border border-border bg-surface px-3 py-2.5">
+      <div className="text-xl font-semibold leading-tight text-gray-800 dark:text-white/90">{value}</div>
+      <div className="text-theme-xs text-muted">{label}</div>
+    </div>
   );
 }
 
@@ -250,7 +390,7 @@ export function StatTiles({ data }: { data: Pick<Dashboard, "stats" | "urgent_da
   const { stats } = data;
   if (!stats.total) return null;
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
       <Tile value={stats.total} label="Jobs you are tracking" />
       <Tile value={stats.submitted} label="Applications sent" />
       <Tile value={stats.average_match === null ? "–" : `${stats.average_match}%`} label={stats.average_match === null ? "Average fit (check a job first)" : "Average fit"} />

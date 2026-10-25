@@ -3,9 +3,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
-import { CheckField, FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
+import { CheckField, FormError, RadioGroup, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
+import { usePreferences } from "@/lib/use-preferences";
+import type { Density, TextSize, Theme } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { accountApi, type Area, type AreaValues, type ProfileData, type ProfileValues } from "./api";
 import { areaPayload, areaToValues, BLANK_AREA, canConfirmDelete, toFormData, toggleValue } from "./logic";
@@ -62,6 +64,7 @@ function ProfileScreen({ data }: { data: ProfileData }) {
             Manage documents
           </Link>
         </Card>
+        <DisplayCard />
         <AccountCard data={current} />
         <DataCard data={current} />
       </div>
@@ -288,6 +291,52 @@ function AreaRow({ area, salaryPeriods, onSaved, onRemoved }: { area: Area | nul
         </Button>
       </div>
     </div>
+  );
+}
+
+// --- display ------------------------------------------------------------------------------------
+
+/** Colour mode, text size and density. Saved on the account, so they apply on every device you sign in on. They take effect as you pick them. */
+function DisplayCard() {
+  const { prefs, update } = usePreferences();
+  return (
+    <Card id="display" className="scroll-mt-20">
+      <h2 className="font-semibold">Display</h2>
+      <p className="my-2 text-sm text-muted">How StillOpen looks for you. This is saved to your account, so it is the same on your phone and your computer.</p>
+      <RadioGroup<Theme>
+        legend="Colours"
+        name="display-theme"
+        value={prefs.theme}
+        onChange={(theme) => update({ theme })}
+        options={[
+          { value: "light", label: "Light" },
+          { value: "dark", label: "Dark" },
+        ]}
+      />
+      <RadioGroup<TextSize>
+        legend="Text size"
+        name="display-text"
+        value={prefs.text_size}
+        onChange={(text_size) => update({ text_size })}
+        options={[
+          { value: "normal", label: "Normal" },
+          { value: "large", label: "Large" },
+          { value: "larger", label: "Larger" },
+        ]}
+        hint="Makes everything bigger, not only the letters."
+      />
+      <RadioGroup<Density>
+        legend="Spacing"
+        name="display-density"
+        value={prefs.density}
+        onChange={(density) => update({ density })}
+        options={[
+          { value: "comfortable", label: "Comfortable" },
+          { value: "compact", label: "Compact" },
+        ]}
+        hint="Compact fits more jobs on the screen."
+      />
+    </Card>
   );
 }
 

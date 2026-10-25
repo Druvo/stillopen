@@ -1,13 +1,18 @@
 "use client";
 
 import { Dashboard } from "@/features/dashboard/dashboard";
-import { PrepList, PrepPlan, PrepToday } from "@/features/prep/screens";
 import { BadgeDollarSign, BarChart3, Bot, CalendarClock, FileText, FolderOpen, GraduationCap, LayoutDashboard, Search, PlusCircle, Radar, Sparkles, UserRound, Users, type LucideIcon } from "lucide-react";
+import { lazy } from "react";
 import type { Route } from "@/lib/router";
 import * as account from "@/features/account/routes";
 import * as cv from "@/features/cv/routes";
 import * as jobs from "@/features/jobs/routes";
 import * as pipeline from "@/features/pipeline/routes";
+
+// The dashboard is what /app/ opens, so it comes with the first load. Every other screen is its own chunk, fetched when it is opened.
+const PrepList = lazy(() => import("@/features/prep/screens").then((m) => ({ default: m.PrepList })));
+const PrepPlan = lazy(() => import("@/features/prep/screens").then((m) => ({ default: m.PrepPlan })));
+const PrepToday = lazy(() => import("@/features/prep/screens").then((m) => ({ default: m.PrepToday })));
 
 /** Every screen of the app, matched against the path inside it (no /app prefix). */
 export const ROUTES: Route[] = [

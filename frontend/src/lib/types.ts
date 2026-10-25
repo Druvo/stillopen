@@ -64,7 +64,10 @@ export type ScanEntry = { source: string; connector: string; found: number; matc
 
 export type Progress = { running: boolean; done: number; total: number; error: string; found?: number; added?: number };
 
-/** A search run: progress plus the plain note and what each source gave. `phase` is "reading" while sources are read, "sorting" at the end, then "done". */
+/**
+ * A search run: progress plus the plain note. `phase` is "reading" while sources are read, "sorting" at the end, then "done".
+ * The per-source log is not part of it (it can be long): `entries_count` says how many sources there were, and `ScanLog` is fetched on demand.
+ */
 export type ScanStatus = Progress & {
   found: number;
   added: number;
@@ -72,12 +75,29 @@ export type ScanStatus = Progress & {
   started_at: string | null;
   finished_at: string | null;
   phase: "reading" | "sorting" | "done";
-  entries: ScanEntry[];
+  entries_count: number;
 };
+
+/** `GET /scan/status?log=1`: the run plus what each source gave. */
+export type ScanLog = ScanStatus & { entries: ScanEntry[] };
 
 export type Followup = { id: number; company: string; role: string; follow_up_date: string; applied_date: string | null };
 
 export type UpcomingInterview = { id: number; when: string; kind: string; company: string; role: string; job_id: number };
+
+/** What drives the matches, for the dashboard's "Your search" card. */
+export type SearchSummary = {
+  roles: string[];
+  places: { place: string; mode: string }[];
+  remote: string;
+  /** The person's own words ("100,000 BDT/month"), or "" when not set. */
+  salary_floor: string;
+  alerts_on: boolean;
+  alerts_available: boolean;
+  has_cv: boolean;
+  /** "keyword" or a readable provider name. */
+  ai: string;
+};
 
 export type Dashboard = {
   greeting: string;
@@ -99,7 +119,39 @@ export type Dashboard = {
   paperless_url: string;
   can_import: boolean;
   scan: ScanStatus | null;
+  search_summary: SearchSummary;
+  /** Show the card asking, first of all, for a Google AI Studio key (nothing but the free keyword check is set up, and not dismissed). */
+  ai_prompt: { show: boolean };
 };
+
+// ---- per-person preferences, saved on the server (GET/PUT /preferences, also inside /me) ----------------------------------
+
+export type ViewMode = "list" | "board";
+export type SortKey = "best" | "newest" | "oldest" | "company" | "deadline";
+export type TextSize = "normal" | "large" | "larger";
+export type Density = "comfortable" | "compact";
+export type Theme = "light" | "dark";
+
+/** The six saved filters; "" is "any". */
+export type PrefFilters = { fit: string; match: string; work: string; country: string; posting: string; found: string };
+
+export type Preferences = {
+  view: ViewMode;
+  /** "all" or a stage (bucket) key. */
+  tab: string;
+  sort: SortKey;
+  filters_open: boolean;
+  /** The person said "not now" to the card asking for a Google AI Studio key. */
+  ai_prompt_dismissed: boolean;
+  filters: PrefFilters;
+  sidebar: "expanded" | "collapsed";
+  theme: Theme;
+  text_size: TextSize;
+  density: Density;
+};
+
+/** Any subset; `filters` is replaced as a whole. */
+export type PreferencePatch = Partial<Preferences>;
 
 /** The signed-in person, from /me. The staff flags are false for everyone else. */
 export type Me = {
@@ -113,4 +165,5 @@ export type Me = {
   assistant_enabled: boolean;
   email_unverified_signups: boolean;
   legal_has_blanks: boolean;
+  preferences: Preferences;
 };

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { Dashboard, Job, ScanStatus, StatusInfo } from "@/lib/types";
+import { DEFAULT_PREFERENCES } from "@/lib/preferences";
+import type { Dashboard, Job, Preferences, PrefFilters, ScanStatus, StatusInfo } from "@/lib/types";
 import {
-  applyMove, appliedParts, checkButtonText, countryOptions, cvBadgeText, DEFAULT_FILTERS, deadlineText, emptyKind, entryText, fitValue, importMessage, initialFilters,
+  applyMove, appliedParts, checkButtonText, countryOptions, cvBadgeText, activeFilterCount, DEFAULT_FILTERS, deadlineText, emptyKind, entryText, filtersFromPrefs, fitValue, headerLine, importMessage, nextTabIndex, patchFromFilters, resultsText, searchRows,
   interviewWhen, isFiltered, jobsByBucket, localDay, nextStepTarget, paperlessDocumentUrl, repostTitle, scanButtonText, scanPercent, scanTitle, shortDate, stageChips,
   statusForColumn, subtitle, timeAgo, truncate, visibleJobs, type Filters,
 } from "./logic";
@@ -134,7 +135,15 @@ describe("filters", () => {
     expect(isFiltered(filters())).toBe(false);
     expect(isFiltered(filters({ sort: "oldest" }))).toBe(false);
     expect(isFiltered(filters({ q: "x" }))).toBe(true);
-    expect(isFiltered(filters({ stage: "new" }))).toBe(true);
+    expect(isFiltered(filters({ fit: "fits" }))).toBe(true);
+    expect(isFiltered(filters({ stage: "new" }))).toBe(false); // the stage tab is shown by the tabs, not a filter
+  });
+
+  it("counts the panel filters for the badge, not the tab, the search box or the sort", () => {
+    expect(activeFilterCount(filters())).toBe(0);
+    expect(activeFilterCount(filters({ stage: "new", q: "x", sort: "oldest" }))).toBe(0);
+    expect(activeFilterCount(filters({ fit: "fits", band: "Strong", work: "remote", country: "MY", live: "active", found: "week" }))).toBe(6);
+    expect(activeFilterCount(filters({ work: "remote" }))).toBe(1);
   });
 
   it("counts jobs per stage chip, with All first", () => {
@@ -153,28 +162,92 @@ describe("filters", () => {
   });
 });
 
-describe("remembered filters", () => {
+describe("saved filters", () => {
+  const prefs = (over: Partial<Preferences> = {}, filters: Partial<PrefFilters> = {}): Preferences => ({
+    ...DEFAULT_PREFERENCES, ...over, filters: { ...DEFAULT_PREFERENCES.filters, ...filters },
+  });
+
   it("starts from the defaults", () => {
-    expect(initialFilters(null, "")).toEqual(DEFAULT_FILTERS);
+    expect(filtersFromPrefs(DEFAULT_PREFERENCES)).toEqual(DEFAULT_FILTERS);
   });
 
-  it("restores what this tab remembered, and ignores junk", () => {
-    expect(initialFilters(JSON.stringify({ q: "go", sort: "oldest", fit: "fits", bogus: "x" }), "")).toMatchObject({ q: "go", sort: "oldest", fit: "fits" });
-    expect(initialFilters("{not json", "")).toEqual(DEFAULT_FILTERS);
-    expect(initialFilters(JSON.stringify({ q: 5 }), "").q).toBe("");
-    expect(initialFilters(JSON.stringify({ sort: "sideways" }), "").sort).toBe("best");
+  it("reads the saved tab, sort and the six filters (match is the band, posting is live)", () => {
+    expect(filtersFromPrefs(prefs({ tab: "active", sort: "oldest" }, { fit: "fits", match: "Strong", work: "remote", country: "MY", posting: "active", found: "week" }))).toEqual({
+      stage: "active", q: "", fit: "fits", band: "Strong", work: "remote", country: "MY", live: "active", found: "week", sort: "oldest",
+    });
+    expect(filtersFromPrefs(prefs({ tab: "all" })).stage).toBe("");
   });
 
-  it("takes the search text from the address over what was remembered", () => {
-    expect(initialFilters(JSON.stringify({ q: "old", live: "active" }), "?q=new+text")).toMatchObject({ q: "new text", live: "active" });
-    expect(initialFilters(JSON.stringify({ q: "old" }), "?q=").q).toBe("");
-    expect(initialFilters(JSON.stringify({ q: "old" }), "?other=1").q).toBe("old");
+  it("takes the search text as given and ignores junk values", () => {
+    expect(filtersFromPrefs(DEFAULT_PREFERENCES, "go lang").q).toBe("go lang");
+    expect(filtersFromPrefs(prefs({}, { fit: "bogus", found: "yesterday" }))).toMatchObject({ fit: "", found: "" });
+    expect(filtersFromPrefs(prefs({ sort: "sideways" as never })).sort).toBe("best");
   });
 
-  it("drops a country or band that no longer exists", () => {
-    expect(initialFilters(JSON.stringify({ country: "FR", band: "Gone" }), "", ["MY"], ["Strong"])).toMatchObject({ country: "", band: "" });
-    expect(initialFilters(JSON.stringify({ country: "MY", band: "Strong" }), "", ["MY"], ["Strong"])).toMatchObject({ country: "MY", band: "Strong" });
-    expect(initialFilters(JSON.stringify({ country: "?", band: "__none" }), "", ["MY"], ["Strong"])).toMatchObject({ country: "?", band: "__none" });
+  it("drops a stage, country or band that no longer exists", () => {
+    const saved = prefs({ tab: "gone" }, { country: "FR", match: "Gone" });
+    expect(filtersFromPrefs(saved, "", ["MY"], ["Strong"], ["new"])).toMatchObject({ stage: "", country: "", band: "" });
+    const ok = prefs({ tab: "new" }, { country: "MY", match: "Strong" });
+    expect(filtersFromPrefs(ok, "", ["MY"], ["Strong"], ["new"])).toMatchObject({ stage: "new", country: "MY", band: "Strong" });
+    expect(filtersFromPrefs(prefs({}, { country: "?", match: "__none" }), "", ["MY"], ["Strong"])).toMatchObject({ country: "?", band: "__none" });
+  });
+
+  it("turns a change of filters into the patch to save, whole filters object included, and never saves the search text", () => {
+    const now = filters({ fit: "fits" });
+    expect(patchFromFilters({ q: "x" }, now)).toEqual({});
+    expect(patchFromFilters({ stage: "new" }, now)).toEqual({ tab: "new" });
+    expect(patchFromFilters({ stage: "" }, now)).toEqual({ tab: "all" });
+    expect(patchFromFilters({ sort: "company" }, now)).toEqual({ sort: "company" });
+    expect(patchFromFilters({ work: "remote", live: "active" }, now)).toEqual({ filters: { fit: "fits", match: "", work: "remote", country: "", posting: "active", found: "" } });
+  });
+});
+
+describe("announcements and tabs", () => {
+  it("says what is shown after the list changes", () => {
+    expect(resultsText(5, 45, "All", "list", true)).toBe("All, list view. Showing 5 of 45.");
+    expect(resultsText(45, 45, "Applied", "board", false)).toBe("Applied, board view. Showing all 45.");
+  });
+
+  it("moves between tabs with the arrow keys, wrapping, and Home and End", () => {
+    expect(nextTabIndex("ArrowRight", 0, 3)).toBe(1);
+    expect(nextTabIndex("ArrowRight", 2, 3)).toBe(0);
+    expect(nextTabIndex("ArrowLeft", 0, 3)).toBe(2);
+    expect(nextTabIndex("Home", 2, 3)).toBe(0);
+    expect(nextTabIndex("End", 0, 3)).toBe(2);
+    expect(nextTabIndex("a", 0, 3)).toBeNull();
+    expect(nextTabIndex("ArrowRight", 0, 0)).toBeNull();
+  });
+
+  it("writes the header line of counts", () => {
+    expect(headerLine({ total: 0, submitted: 0, average_match: null, urgent: 0 }, 5, null)).toBe("Your job search, in one calm place.");
+    expect(headerLine({ total: 12, submitted: 3, average_match: 70, urgent: 2 }, 5, null)).toBe("12 jobs · 3 applied · 2 closing within 5 days. We have not yet looked at which of your jobs are still open.");
+    expect(headerLine({ total: 1, submitted: 0, average_match: null, urgent: 0 }, 5, null)).toMatch(/^1 job · 0 applied\. /);
+  });
+});
+
+describe("the Your search rows", () => {
+  const summary = { roles: ["A", "B", "C", "D"], places: [{ place: "Malaysia", mode: "on-site, hybrid" }], remote: "Open to remote", salary_floor: "100,000 BDT/month", alerts_on: true, alerts_available: false, has_cv: true, ai: "keyword" };
+  const byKey = (s: typeof summary) => Object.fromEntries(searchRows(s).map((r) => [r.key, r]));
+
+  it("summarises what drives the matches, with where to change each", () => {
+    const rows = byKey(summary);
+    expect(rows.roles).toMatchObject({ value: "A, B, C and 1 more", to: "/profile", empty: false });
+    expect(rows.places).toMatchObject({ value: "Malaysia (on-site, hybrid)", to: "/profile#areas" });
+    expect(rows.pay.value).toBe("100,000 BDT/month");
+    expect(rows.alerts.value).toMatch(/^On, but nothing is sent yet/);
+    expect(rows.cv.value).toBe("Added");
+    expect(rows.ai).toMatchObject({ value: "Quick keyword check", to: "/profile/ai" });
+  });
+
+  it("says what to add for anything missing", () => {
+    const rows = byKey({ ...summary, roles: [], places: [], remote: "", salary_floor: "", alerts_on: false, has_cv: false, ai: "Claude" });
+    expect(rows.roles).toMatchObject({ value: "None yet", empty: true });
+    expect(rows.places.empty).toBe(true);
+    expect(rows.pay).toMatchObject({ value: "Not set", empty: true });
+    expect(rows.alerts.value).toBe("Off");
+    expect(rows.cv).toMatchObject({ empty: true });
+    expect(rows.cv.value).toMatch(/^Missing/);
+    expect(rows.ai.value).toBe("Claude");
   });
 });
 
@@ -247,7 +320,7 @@ describe("the classic wording", () => {
 
 describe("the search card", () => {
   const scan = (over: Partial<ScanStatus>): ScanStatus => ({
-    running: false, done: 0, total: 0, error: "", found: 0, added: 0, note: "", started_at: null, finished_at: null, phase: "done", entries: [], ...over,
+    running: false, done: 0, total: 0, error: "", found: 0, added: 0, note: "", started_at: null, finished_at: null, phase: "done", entries_count: 0, ...over,
   });
 
   it("names the phases", () => {
@@ -265,12 +338,12 @@ describe("the search card", () => {
   });
 
   it("words the button while a run goes", () => {
-    expect(scanButtonText(null, false)).toBe("Search jobs");
+    expect(scanButtonText(null, false)).toBe("Search for jobs");
     expect(scanButtonText(null, true)).toBe("Starting…");
     expect(scanButtonText(scan({ running: true, done: 3, total: 9 }), false)).toBe("Reading 3/9");
     expect(scanButtonText(scan({ running: true, phase: "sorting", done: 9, total: 9 }), false)).toBe("Sorting…");
-    expect(scanButtonText(scan({}), false)).toBe("Search jobs");
-    expect(checkButtonText(false, false, 0, 0)).toBe("Are they still open?");
+    expect(scanButtonText(scan({}), false)).toBe("Search for jobs");
+    expect(checkButtonText(false, false, 0, 0)).toBe("Check which are still open");
     expect(checkButtonText(false, true, 0, 0)).toBe("Starting…");
     expect(checkButtonText(true, false, 2, 7)).toBe("Checking 2/7…");
   });
@@ -291,6 +364,8 @@ describe("empty states and links", () => {
     expect(emptyKind(0, 0, { running: false, added: 0 })).toBe("nothing-matched");
     expect(emptyKind(0, 0, { running: false, added: 4 })).toBe("no-jobs");
     expect(emptyKind(0, 0, null)).toBe("no-jobs");
+    expect(emptyKind(3, 0, null, 0)).toBe("stage-empty"); // the chosen stage holds nothing: not a filter that is too strict
+    expect(emptyKind(3, 0, null, 2)).toBe("no-matches");
   });
 
   it("sends a next-step button to the right place", () => {

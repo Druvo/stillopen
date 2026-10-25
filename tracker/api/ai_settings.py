@@ -14,9 +14,9 @@ router = Router()
 # Known OpenAI-compatible endpoints (the same list the classic page fills in with JavaScript). Model names on fast-moving providers drift, so
 # these are safe starting picks, and the model field stays editable. `staff_only` ones point at this server's own machine.
 PRESETS = [
+    {"key": "gemini", "label": "Google AI Studio (Gemini): free key, easiest start", "provider": "openai", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.5-flash", "staff_only": False},
     {"key": "anthropic", "label": "Anthropic (Claude), direct", "provider": "anthropic", "base_url": "", "model": "", "staff_only": False},
     {"key": "openai", "label": "OpenAI", "provider": "openai", "base_url": "", "model": "gpt-4o-mini", "staff_only": False},
-    {"key": "gemini", "label": "Google Gemini", "provider": "openai", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.5-flash", "staff_only": False},
     {"key": "groq", "label": "Groq", "provider": "openai", "base_url": "https://api.groq.com/openai/v1", "model": "openai/gpt-oss-120b", "staff_only": False},
     {"key": "mistral", "label": "Mistral", "provider": "openai", "base_url": "https://api.mistral.ai/v1", "model": "mistral-small-latest", "staff_only": False},
     {"key": "deepseek", "label": "DeepSeek", "provider": "openai", "base_url": "https://api.deepseek.com", "model": "deepseek-v4-flash", "staff_only": False},

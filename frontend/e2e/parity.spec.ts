@@ -1,14 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const PASSWORD = "e2e-pass-12345"; // the throwaway e2e people made by `manage.py e2e_seed`
-
-async function signIn(page: Page, name: string, next = "/app/") {
-  await page.goto(`/accounts/login/?next=${encodeURIComponent(next)}`);
-  await page.locator("input[name=login]").fill(name);
-  await page.locator("input[name=password]").fill(PASSWORD);
-  await page.locator("form button[type=submit]").first().click();
-  await page.waitForURL(/\/app\//);
-}
+import { signIn } from "./helpers";
 
 /** A call to the app's own API from inside the signed-in page (same cookie and CSRF token as the screens use). */
 async function api<T = unknown>(page: Page, method: string, path: string, body?: unknown): Promise<T> {

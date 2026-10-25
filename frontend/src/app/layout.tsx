@@ -5,9 +5,9 @@ import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = { title: "StillOpen", description: "Your job search, in one place." };
 
-// Applies the remembered colour mode before first paint so there is no flash. Same key and same rule as the classic pages and the sign-in
-// screens (light unless the person chose dark), so the choice follows them everywhere.
-const themeScript = `try{if(localStorage.getItem("so-theme")==="dark")document.documentElement.dataset.theme="dark"}catch(e){}`;
+// Applies the remembered display choices before first paint so there is no flash: colour mode (same key and rule as the classic pages and the
+// sign-in screens, light unless the person chose dark), text size and density. The server's copy (preferences) takes over once /me has answered.
+const themeScript = `try{var d=document.documentElement,s=localStorage;if(s.getItem("so-theme")==="dark")d.dataset.theme="dark";var t=s.getItem("so-text");if(t==="large"||t==="larger")d.dataset.text=t;if(s.getItem("so-density")==="compact")d.dataset.density="compact"}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

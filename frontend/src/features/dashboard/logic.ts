@@ -1,4 +1,4 @@
-import type { Bucket, Dashboard, Job, Repost, ScanEntry, ScanStatus, StatusInfo } from "@/lib/types";
+import type { Bucket, Dashboard, Job, PreferencePatch, Preferences, PrefFilters, Repost, ScanEntry, ScanStatus, SearchSummary, SortKey, StatusInfo } from "@/lib/types";
 
 /** The status a card gets when it is dropped on a column: the column's first status, in the order the admin set. */
 export function statusForColumn(statuses: StatusInfo[], bucketKey: string): StatusInfo | undefined {
@@ -21,7 +21,7 @@ export function jobsByBucket(jobs: Job[], buckets: Bucket[]): Record<string, Job
 
 // ---- filters and sorting (the classic dashboard's rules, in one place) ----------------------------------------------
 
-export type Sort = "best" | "newest" | "oldest" | "company" | "deadline";
+export type Sort = SortKey;
 
 export type Filters = {
   stage: string;
@@ -48,9 +48,17 @@ export const SORT_OPTIONS: { value: Sort; label: string }[] = [
   { value: "deadline", label: "Closing soonest" },
 ];
 
-/** Whether anything but the sort order narrows the list (the "Clear filters" button and the "Showing N of M" wording). */
+/** The six saved filters (the filter panel's dropdowns). */
+const PANEL_FILTERS = ["fit", "band", "work", "country", "live", "found"] as const;
+
+/** How many of the six panel filters are set: the badge on the Filters button. The stage tab, the search box and the sort order are not counted. */
+export function activeFilterCount(filters: Filters): number {
+  return PANEL_FILTERS.filter((k) => filters[k] !== "").length;
+}
+
+/** Whether the search box or any panel filter narrows the list (the "Clear filters" button and the "Showing N of M" wording). */
 export function isFiltered(filters: Filters): boolean {
-  return (Object.keys(DEFAULT_FILTERS) as (keyof Filters)[]).some((k) => k !== "sort" && filters[k] !== DEFAULT_FILTERS[k]);
+  return filters.q.trim() !== "" || activeFilterCount(filters) > 0;
 }
 
 /** "Fits your places" for filtering: every job has one, even when the person has named no places (the badge itself is hidden then). */
@@ -114,27 +122,73 @@ export function countryOptions(jobs: Job[]): { code: string; name: string }[] {
   return [...seen].map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export const FILTERS_KEY = "jobfilters"; // the classic dashboard's key, remembered for this browser tab only
-
-/** What the filters start as: the tab's remembered state, then a search text from the address (`?q=`), then fixes for options that no longer exist. */
-export function initialFilters(stored: string | null, search: string, countries: string[] = [], bands: string[] = []): Filters {
-  let state: Filters = { ...DEFAULT_FILTERS };
-  try {
-    const parsed = stored ? JSON.parse(stored) : {};
-    if (parsed && typeof parsed === "object") {
-      for (const key of Object.keys(DEFAULT_FILTERS) as (keyof Filters)[]) {
-        if (typeof parsed[key] === "string") state = { ...state, [key]: parsed[key] };
-      }
-    }
-  } catch {
-    /* a broken value is the same as none */
-  }
-  const q = new URLSearchParams(search).get("q");
-  if (q !== null) state = { ...state, q };
-  if (!SORT_OPTIONS.some((o) => o.value === state.sort)) state = { ...state, sort: "best" };
+/** The saved preferences as the dashboard's filters. `q` is the search text (never saved: it comes from the header search box or the address). */
+export function filtersFromPrefs(prefs: Preferences, q = "", countries: string[] = [], bands: string[] = [], stages: string[] = []): Filters {
+  const f = prefs.filters;
+  let state: Filters = {
+    stage: prefs.tab === "all" ? "" : prefs.tab,
+    q,
+    fit: f.fit === "fits" || f.fit === "check" || f.fit === "unknown" ? f.fit : "",
+    band: f.match,
+    work: f.work,
+    country: f.country,
+    live: f.posting,
+    found: f.found === "today" || f.found === "week" ? f.found : "",
+    sort: SORT_OPTIONS.some((o) => o.value === prefs.sort) ? prefs.sort : "best",
+  };
+  if (state.stage && stages.length && !stages.includes(state.stage)) state = { ...state, stage: "" };
   if (state.country && state.country !== COUNTRY_NOT_STATED && countries.length && !countries.includes(state.country)) state = { ...state, country: "" };
   if (state.band && state.band !== NOT_STATED && bands.length && !bands.includes(state.band)) state = { ...state, band: "" };
   return state;
+}
+
+/** The change to save for a change of filters (`q` is not saved, so it makes no patch). */
+export function patchFromFilters(patch: Partial<Filters>, current: Filters): PreferencePatch {
+  const next = { ...current, ...patch };
+  const out: PreferencePatch = {};
+  if ("stage" in patch) out.tab = next.stage === "" ? "all" : next.stage;
+  if ("sort" in patch) out.sort = next.sort;
+  if (PANEL_FILTERS.some((k) => k in patch)) {
+    const filters: PrefFilters = { fit: next.fit, match: next.band, work: next.work, country: next.country, posting: next.live, found: next.found };
+    out.filters = filters;
+  }
+  return out;
+}
+
+/** The sentence a screen reader hears after the list changes (a filter, a stage tab, the layout). */
+export function resultsText(shown: number, inStage: number, stageLabel: string, view: "list" | "board", filtered: boolean): string {
+  const count = filtered ? `Showing ${shown} of ${inStage}` : `Showing all ${inStage}`;
+  return `${stageLabel}, ${view} view. ${count}.`;
+}
+
+/** The tab that arrow keys, Home and End move to (the tabs wrap around). */
+export function nextTabIndex(key: string, index: number, length: number): number | null {
+  if (length === 0) return null;
+  if (key === "ArrowRight") return (index + 1) % length;
+  if (key === "ArrowLeft") return (index - 1 + length) % length;
+  if (key === "Home") return 0;
+  if (key === "End") return length - 1;
+  return null;
+}
+
+// ---- the "Your search" card -------------------------------------------------------------------------------------------------
+
+export type SummaryRow = { key: string; label: string; value: string; empty: boolean; to: string; action: string };
+
+/** One row per thing that drives the matches, each with where to change it. An empty row says what to add. */
+export function searchRows(s: SearchSummary): SummaryRow[] {
+  const roles = s.roles.length > 3 ? `${s.roles.slice(0, 3).join(", ")} and ${s.roles.length - 3} more` : s.roles.join(", ");
+  const places = s.places.map((p) => (p.mode ? `${p.place} (${p.mode})` : p.place)).join(", ");
+  const alerts = s.alerts_on ? (s.alerts_available ? "On" : "On, but nothing is sent yet: the site owner has not switched emails on") : "Off";
+  return [
+    { key: "roles", label: "Roles you want", value: roles || "None yet", empty: !roles, to: "/profile", action: "roles" },
+    { key: "places", label: "Where you would work", value: places || "None yet", empty: !places, to: "/profile#areas", action: "places" },
+    { key: "remote", label: "Remote work", value: s.remote || "Not set", empty: !s.remote, to: "/profile#areas", action: "remote preference" },
+    { key: "pay", label: "Minimum pay", value: s.salary_floor || "Not set", empty: !s.salary_floor, to: "/profile", action: "minimum pay" },
+    { key: "alerts", label: "Job alerts by email", value: alerts, empty: !s.alerts_on, to: "/profile", action: "job alerts" },
+    { key: "cv", label: "Your CV", value: s.has_cv ? "Added" : "Missing. Add it so we can judge fit", empty: !s.has_cv, to: "/profile", action: "CV" },
+    { key: "ai", label: "How fit is judged", value: s.ai === "keyword" ? "Quick keyword check" : s.ai, empty: false, to: "/profile/ai", action: "how fit is judged" },
+  ];
 }
 
 // ---- words and dates, the classic wording ----------------------------------------------------------------------------
@@ -177,6 +231,15 @@ export function timeAgo(iso: string, now: Date = new Date()): string {
 export function subtitle(total: number, checkedAt: string | null, now: Date = new Date()): string {
   if (!total) return "Your job search, in one calm place.";
   return checkedAt ? `We last looked at which jobs are still open ${timeAgo(checkedAt, now)} ago.` : "We have not yet looked at which of your jobs are still open.";
+}
+
+/** The one line of counts under the greeting, then when the open/closed check last ran. */
+export function headerLine(stats: Dashboard["stats"], urgentDays: number, checkedAt: string | null, now: Date = new Date()): string {
+  if (!stats.total) return subtitle(0, checkedAt, now);
+  const jobs = `${stats.total} ${stats.total === 1 ? "job" : "jobs"}`;
+  const parts = [jobs, `${stats.submitted} applied`];
+  if (stats.urgent > 0) parts.push(`${stats.urgent} closing within ${urgentDays} days`);
+  return `${parts.join(" · ")}. ${subtitle(stats.total, checkedAt, now)}`;
 }
 
 /** "Deadline 5 Nov 2026 (in 3 days)", with the words the classic card used. */
@@ -238,7 +301,7 @@ export function scanTitle(s: ScanStatus, now: Date = new Date()): string {
 /** The words on the "Search jobs" button while a run is going. */
 export function scanButtonText(s: ScanStatus | null, starting: boolean): string {
   if (starting && !s?.running) return "Starting…";
-  if (!s?.running) return "Search jobs";
+  if (!s?.running) return "Search for jobs";
   if (s.phase === "sorting") return "Sorting…";
   return s.total ? `Reading ${s.done}/${s.total}` : "Starting…";
 }
@@ -250,17 +313,18 @@ export function entryText(e: ScanEntry): string {
 
 export function checkButtonText(running: boolean, starting: boolean, done: number, total: number): string {
   if (running) return `Checking ${done}/${total}…`;
-  return starting ? "Starting…" : "Are they still open?";
+  return starting ? "Starting…" : "Check which are still open";
 }
 
 // ---- empty states, the next-step link, and the import result -----------------------------------------------------------
 
-export type EmptyKind = "searching" | "nothing-matched" | "no-jobs" | "nothing-here" | "no-matches";
+export type EmptyKind = "searching" | "nothing-matched" | "no-jobs" | "nothing-here" | "no-matches" | "stage-empty";
 
 /** Which empty message the list shows (the classic page's variants); null when there is something to show. */
-export function emptyKind(total: number, shown: number, scan: Pick<ScanStatus, "running" | "added"> | null): EmptyKind | null {
+/** `inStage` is how many jobs the chosen stage tab holds (default all): an empty stage is not a failed filter. */
+export function emptyKind(total: number, shown: number, scan: Pick<ScanStatus, "running" | "added"> | null, inStage: number = total): EmptyKind | null {
   if (shown > 0) return null;
-  if (total > 0) return "no-matches";
+  if (total > 0) return inStage === 0 ? "stage-empty" : "no-matches";
   if (scan?.running) return "searching";
   if (scan && !scan.added) return "nothing-matched";
   return "no-jobs";
