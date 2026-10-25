@@ -5,8 +5,6 @@ from allauth.account.forms import SignupForm as AllauthSignupForm
 from django import forms
 from django.conf import settings
 from django.core import signing
-from django.contrib.auth import get_user_model
-from django.forms import inlineformset_factory
 
 from .models import (
     Application, Contact, Interview, JobSource, KnowledgeSource, Offer, PersonalSettings, Referral, SearchArea, UserProfile,
@@ -165,7 +163,7 @@ class ProfileForm(forms.ModelForm):
         model = UserProfile
         fields = [
             "target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages",
-            "notice_period", "salary_floor", "deal_breakers", "about", "profile_cv", "scan_digest_enabled", "use_new_app",
+            "notice_period", "salary_floor", "deal_breakers", "about", "profile_cv", "scan_digest_enabled",
         ]
         widgets = {
             "target_roles": forms.Textarea(attrs={"rows": 3, "placeholder": "Senior Backend Engineer\nSolutions Architect"}),
@@ -310,36 +308,6 @@ class SearchAreaForm(forms.ModelForm):
         if cleaned.get("salary_currency") and not re.fullmatch(r"[A-Z]{3}", cleaned["salary_currency"]):
             self.add_error("salary_currency", "Use a 3-letter code such as USD or BDT.")
         return cleaned
-
-
-class BaseAreaFormSet(forms.BaseInlineFormSet):
-    def clean(self):
-        super().clean()
-        live = [f for f in self.forms if f.cleaned_data and not f.cleaned_data.get("DELETE") and f.cleaned_data.get("place")]
-        if len(live) > MAX_AREAS:
-            raise forms.ValidationError(f"You can have at most {MAX_AREAS} search areas.")
-
-    @property
-    def unrecognised_places(self) -> list[str]:
-        return [f.cleaned_data["place"] for f in self.forms if getattr(f, "unrecognised", False) and f.cleaned_data.get("place")]
-
-
-SearchAreaFormSet = inlineformset_factory(
-    get_user_model(), SearchArea, form=SearchAreaForm, formset=BaseAreaFormSet, fk_name="owner",
-    extra=2, can_delete=True, max_num=MAX_AREAS + 5,
-)
-
-
-def save_areas(formset, user) -> None:
-    """Save the rows in the order they appear on the page."""
-    formset.save(commit=False)
-    for obj in formset.deleted_objects:
-        obj.delete()
-    kept = [f.instance for f in formset.forms if f.cleaned_data and not f.cleaned_data.get("DELETE") and f.cleaned_data.get("place")]
-    for position, obj in enumerate(kept):
-        obj.owner = user
-        obj.order = position
-        obj.save()
 
 
 class JobForm(forms.ModelForm):

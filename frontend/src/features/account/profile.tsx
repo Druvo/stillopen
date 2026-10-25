@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { CheckField, FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
@@ -58,9 +58,9 @@ function ProfileScreen({ data }: { data: ProfileData }) {
           <p className="my-2 text-sm text-muted">
             Projects, work history details, certificates and cover letters help the AI judge fit. You have {plural(current.account.counts.documents, "extra document")}.
           </p>
-          <a className={buttonClass("outline")} href={current.account.classic.documents}>
+          <Link to="/knowledge" className={buttonClass("outline")}>
             Manage documents
-          </a>
+          </Link>
         </Card>
         <AccountCard data={current} />
         <DataCard data={current} />
@@ -87,7 +87,7 @@ function ProfileForm({ data, onSaved, saved, onEdit }: { data: ProfileData; onSa
     <form onSubmit={save} className="space-y-4">
       <Card>
         <h2 className="mb-3 font-semibold">What you are looking for</h2>
-        <TextAreaField label="The roles you want" hint="One role per line, for example Senior Backend Engineer." rows={3} {...text("target_roles")} />
+        <TextAreaField label="The roles you want" hint="One role per line, for example Senior Backend Engineer." rows={3} placeholder={"Senior Backend Engineer\nSolutions Architect"} {...text("target_roles")} />
         <TextField label="The country you live in" hint="A name like Bangladesh or a code like BD. Remote jobs limited to one country only fit you if it is this one." {...text("home_country")} />
         <fieldset className="mb-3">
           <legend className="mb-1 text-sm font-medium">Kinds of employment you want</legend>
@@ -107,8 +107,8 @@ function ProfileForm({ data, onSaved, saved, onEdit }: { data: ProfileData; onSa
           </div>
           <p className="text-xs text-muted">Leave all unticked for no preference.</p>
         </fieldset>
-        <TextAreaField label="Industries you want" hint="One per line, or leave blank for any." rows={2} {...text("industries")} />
-        <TextAreaField label="Languages you can work in" hint="One per line." rows={2} {...text("languages")} />
+        <TextAreaField label="Industries you want" hint="One per line, or leave blank for any." rows={2} placeholder={"Fintech\nE-commerce"} {...text("industries")} />
+        <TextAreaField label="Languages you can work in" hint="One per line." rows={2} placeholder={"English\nBangla"} {...text("languages")} />
         <TextField label="Notice period" hint="For example 30 days, or available now." {...text("notice_period")} />
         <TextField label="Your minimum pay" hint="With currency and period, for example 100,000 BDT/month." {...text("salary_floor")} />
         <TextAreaField label="Things you will not accept" hint="One per line." rows={2} {...text("deal_breakers")} />
@@ -124,21 +124,6 @@ function ProfileForm({ data, onSaved, saved, onEdit }: { data: ProfileData; onSa
           onChange={(e) => set("scan_digest_enabled", e.target.checked)}
         />
       </Card>
-
-      {data.site.new_app_enabled && (
-        <Card>
-          <h2 className="mb-2 font-semibold">New app (beta)</h2>
-          <CheckField
-            label="Try the new app (beta)"
-            hint="Opens your dashboard in the new interface, with a board you can drag jobs across. Your data is the same; you can switch back any time."
-            checked={values.use_new_app}
-            onChange={(e) => set("use_new_app", e.target.checked)}
-          />
-          <p className="text-xs text-muted">
-            Switching it off takes effect once you leave this page; the classic version of this page is at <a className="underline" href="/profile/?classic=1">/profile/</a>.
-          </p>
-        </Card>
-      )}
 
       <Card>
         <h2 className="mb-3 font-semibold">Your CV</h2>
@@ -168,12 +153,25 @@ function ProfileForm({ data, onSaved, saved, onEdit }: { data: ProfileData; onSa
 
 // --- search areas -------------------------------------------------------------------------------
 
+/** `/profile#areas` (also from a link inside the app) scrolls to that card once it is on the screen. */
+function useScrollToHash(id: string) {
+  useEffect(() => {
+    const go = () => {
+      if (window.location.hash === `#${id}`) document.getElementById(id)?.scrollIntoView({ block: "start" });
+    };
+    go();
+    window.addEventListener("hashchange", go);
+    return () => window.removeEventListener("hashchange", go);
+  }, [id]);
+}
+
 function AreasEditor({ data }: { data: ProfileData }) {
   const [areas, setAreas] = useState<Area[]>(data.areas);
+  useScrollToHash("areas");
   const [drafts, setDrafts] = useState<number[]>([]); // keys of unsaved new rows
   const [next, setNext] = useState(1);
   return (
-    <Card>
+    <Card id="areas" className="scroll-mt-20">
       <h2 className="font-semibold">Where you would work</h2>
       <p className="my-2 text-sm text-muted">
         One row per place. Say which kinds of work you accept there and what you need from the employer. Jobs are checked against these rows; a job outside them is flagged, never hidden.

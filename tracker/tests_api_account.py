@@ -83,12 +83,6 @@ class ProfileApi(Base):
         self.put("/profile", {"target_roles": "Mine"})
         self.assertEqual(UserProfile.for_user(self.b).target_roles, "")
 
-    def test_the_new_app_switch_is_saved(self):
-        self.put("/profile", {"use_new_app": True})
-        self.assertTrue(UserProfile.objects.get(user=self.a).use_new_app)
-        self.put("/profile", {"use_new_app": False})
-        self.assertFalse(UserProfile.objects.get(user=self.a).use_new_app)
-
     def test_the_document_count_leaves_out_the_cv(self):
         self.put("/profile", {"profile_cv": CV})
         self.assertEqual(self.get("/profile").json()["account"]["counts"]["documents"], 0)
@@ -277,8 +271,12 @@ class SourcesApi(Base):
         JobSource.objects.create(name="Shared", connector="lever", board_token="shared")
         with mock.patch(self.FETCH, return_value=[]), mock.patch("tracker.services.scan.fetch_lever", return_value=[]):
             self.assertEqual(self.add().status_code, 200)
-            self.assertIn("already added", self.add().json()["error"])
-            self.assertIn("already part of every search", self.add(token="shared", connector="lever").json()["error"])
+            first = self.add()
+            self.assertEqual(first.status_code, 200)
+            self.assertIn("already added", first.json()["info"])  # plain information, not an error
+            second = self.add(token="shared", connector="lever")
+            self.assertEqual(second.status_code, 200)
+            self.assertIn("already part of every search", second.json()["info"])
         self.assertEqual(JobSource.objects.filter(owner=self.a).count(), 1)
 
     def test_pause_resume_and_remove(self):
@@ -428,39 +426,3 @@ class DeleteAccountApi(Base):
         self.assertEqual(r.status_code, 400)
         self.assertTrue(User.objects.filter(pk=staff.pk).exists())
         self.assertFalse(self.get("/profile").json()["account"]["can_delete"])
-
-
-class ClassicRedirects(Base):
-    def setUp(self):
-        super().setUp()
-        SiteConfig.objects.update(new_app_enabled=True, mcp_remote_enabled=True)
-        UserProfile.objects.filter(user=self.a).update(use_new_app=True)
-
-    PAGES = {"profile": "/app/profile", "profile_ai": "/app/profile/ai", "assistant": "/app/profile/assistant", "sources": "/app/sources", "welcome": "/app/welcome"}
-
-    def test_opted_in_people_land_on_the_new_screens(self):
-        from django.urls import reverse
-
-        for name, target in self.PAGES.items():
-            r = self.client.get(reverse(name))
-            self.assertRedirects(r, target, fetch_redirect_response=False, msg_prefix=name)
-
-    def test_classic_one_bypasses(self):
-        from django.urls import reverse
-
-        for name in self.PAGES:
-            self.assertEqual(self.client.get(reverse(name) + "?classic=1").status_code, 200, name)
-
-    def test_everyone_else_keeps_the_classic_pages(self):
-        from django.urls import reverse
-
-        UserProfile.objects.filter(user=self.a).update(use_new_app=False)
-        for name in self.PAGES:
-            self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)
-
-    def test_classic_posts_still_work_for_opted_in_people(self):
-        from django.urls import reverse
-
-        r = self.client.post(reverse("profile"), {"about": "hello"})
-        self.assertEqual(r.status_code, 302)
-        self.assertEqual(UserProfile.objects.get(user=self.a).about, "hello")

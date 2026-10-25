@@ -197,3 +197,10 @@ def comparison(offers):
             "rows": [{"offer": o, "behind": best - o.yearly_total if best > o.yearly_total else Decimal(0), "best": o is rows[0] and len(rows) > 1} for o in rows],
         })
     return out
+
+
+def upcoming_interviews(user, limit: int = 5):
+    return list(
+        Interview.objects.filter(owner=user, outcome="pending", scheduled_at__gte=timezone.now())
+        .select_related("application").order_by("scheduled_at")[:limit]
+    )

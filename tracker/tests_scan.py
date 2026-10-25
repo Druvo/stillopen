@@ -1,10 +1,10 @@
 """Job-board scanning: connectors, matching, dedup, multi-user isolation, rate limiting."""
+import json
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase, override_settings
-from django.urls import reverse
 
 from tracker.models import Application, JobSource, Posting, ScanLogEntry, ScanRun, Status, UserProfile
 from tracker.services import scan
@@ -295,9 +295,8 @@ class ScanRunTests(TestCase):
 
 
 class ScanViewTests(TestCase):
-    """Background completion is exercised directly against the service (ScanRunTests, background=False) --
-    same split as LivenessTests/tests_multiuser.py use for liveness_start. These views are tested for auth,
-    isolation, throttling and response shape only, never by waiting on a daemon thread's real network call."""
+    """Background completion is exercised directly against the service (ScanRunTests, background=False).
+    The API calls are tested for auth, isolation, throttling and response shape only, never by waiting on a daemon thread's real network call."""
 
     def setUp(self):
         cache.clear()
@@ -309,7 +308,7 @@ class ScanViewTests(TestCase):
         with mock.patch("tracker.services.scan.fetch_greenhouse") as fetch:
             fetch.return_value = [{"title": "Senior Backend Engineer", "url": "https://x.test/1", "location": ""}]
             scan.start_run(self.u, background=False)
-        r = self.client.get(reverse("scan_status"))
+        r = self.client.get("/api/v1/scan/status")
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertFalse(data["running"])
@@ -318,36 +317,38 @@ class ScanViewTests(TestCase):
         self.assertEqual(data["entries"][0]["source"], "Acme")
 
     def test_status_with_no_run_yet(self):
-        r = self.client.get(reverse("scan_status"))
-        self.assertEqual(r.json(), {"running": False, "done": 0, "total": 0, "found": 0, "added": 0, "error": "", "entries": []})
+        data = self.client.get("/api/v1/scan/status").json()
+        self.assertEqual({k: data[k] for k in ("running", "done", "total", "found", "added", "error", "entries")},
+                         {"running": False, "done": 0, "total": 0, "found": 0, "added": 0, "error": "", "entries": []})
 
     def test_scan_runs_are_per_person(self):
         other = user("other")
         ScanRun.objects.create(owner=other, total=9, done=4, running=True)
-        data = self.client.get(reverse("scan_status")).json()
+        data = self.client.get("/api/v1/scan/status").json()
         self.assertEqual(data["total"], 0)  # the other person's run is not this one's
 
     @mock.patch("tracker.services.scan.start_run")
     def test_start_calls_the_service_and_returns_its_state(self, start_run):
-        start_run.return_value = ScanRun(owner=self.u, running=False, done=0, total=0)
-        r = self.client.post(reverse("scan_start"))
+        start_run.return_value = ScanRun.objects.create(owner=self.u, running=False, done=0, total=0)
+        r = self.client.post("/api/v1/scan")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"running": False, "done": 0, "total": 0})
+        data = r.json()
+        self.assertEqual((data["running"], data["done"], data["total"]), (False, 0, 0))
         start_run.assert_called_once_with(self.u)
 
     @mock.patch("tracker.services.scan.start_run")
     def test_throttled_after_the_hourly_limit(self, start_run):
-        start_run.return_value = ScanRun(owner=self.u, running=False, done=0, total=0)
+        start_run.return_value = ScanRun.objects.create(owner=self.u, running=False, done=0, total=0)
         with override_settings(STILLOPEN_SCANS_PER_HOUR=1):
-            r1 = self.client.post(reverse("scan_start"))
-            r2 = self.client.post(reverse("scan_start"))
+            r1 = self.client.post("/api/v1/scan")
+            r2 = self.client.post("/api/v1/scan")
         self.assertEqual(r1.status_code, 200)
         self.assertEqual(r2.status_code, 429)
 
     def test_anonymous_cannot_start_a_scan(self):
         self.client.logout()
-        r = self.client.post(reverse("scan_start"))
-        self.assertEqual(r.status_code, 302)  # redirected to login
+        r = self.client.post("/api/v1/scan")
+        self.assertEqual(r.status_code, 401)
 
 
 class RepostDetectionTests(TestCase):
@@ -449,8 +450,8 @@ class RepostDetectionTests(TestCase):
         fetch.return_value = [{"title": "Backend Engineer", "url": "https://x.test/new", "location": ""}]
         with mock.patch("django.utils.timezone.localdate", return_value=datetime.date(2026, 1, 15)):
             scan.start_run(user, background=False)
-        r = self.client.get(reverse("dashboard"))
-        self.assertContains(r, "Possible repost")
+        job_row = self.client.get("/api/v1/dashboard").json()["jobs"][0]
+        self.assertEqual(job_row["repost"]["distinct_urls"], 2)
 
 
 class AllPostingsViewTests(TestCase):
@@ -463,59 +464,62 @@ class AllPostingsViewTests(TestCase):
         self.p1 = scan.record_sighting(self.source, "Backend Engineer", "https://x.test/1", "Remote", company="Acme")
         self.p2 = scan.record_sighting(self.source, "Marketing Manager", "https://x.test/2", "NYC", company="Acme")
 
+    def listing(self, **params):
+        return self.client.get("/api/v1/postings", params).json()
+
+    def add(self, posting):
+        return self.client.post(f"/api/v1/postings/{posting.pk}/add")
+
     def test_lists_every_posting_regardless_of_match(self):
-        r = self.client.get(reverse("all_postings"))
-        self.assertContains(r, "Backend Engineer")
-        self.assertContains(r, "Marketing Manager")
-        self.assertEqual(r.context["page"].paginator.count, 2)
+        data = self.listing()
+        self.assertEqual({p["title"] for p in data["postings"]}, {"Backend Engineer", "Marketing Manager"})
+        self.assertEqual(data["total"], 2)
 
     def test_search_filters_by_title_or_company(self):
-        r = self.client.get(reverse("all_postings"), {"q": "backend"})
-        self.assertContains(r, "Backend Engineer")
-        self.assertNotContains(r, "Marketing Manager")
+        titles = {p["title"] for p in self.listing(q="backend")["postings"]}
+        self.assertEqual(titles, {"Backend Engineer"})
 
     def test_source_filter(self):
         other = JobSource.objects.create(name="Other", connector="lever", board_token="other", enabled=True)
         scan.record_sighting(other, "Platform Engineer", "https://x.test/3", "", company="Other")
-        r = self.client.get(reverse("all_postings"), {"source": other.pk})
-        self.assertContains(r, "Platform Engineer")
-        self.assertNotContains(r, "Backend Engineer")
+        titles = {p["title"] for p in self.listing(source=other.pk)["postings"]}
+        self.assertEqual(titles, {"Platform Engineer"})
 
     def test_add_to_tracker_creates_an_application_linked_to_the_posting(self):
-        r = self.client.post(reverse("add_posting", args=[self.p1.pk]), follow=True)
-        self.assertContains(r, "Added Acme - Backend Engineer")
+        r = self.add(self.p1)
+        self.assertEqual((r.status_code, r.json()["created"]), (200, True))
         app = Application.objects.get(owner=self.u, url="https://x.test/1")
         self.assertEqual(app.posting_id, self.p1.pk)
         self.assertEqual(app.company, "Acme")
 
     def test_adding_the_same_posting_twice_does_not_duplicate(self):
-        self.client.post(reverse("add_posting", args=[self.p1.pk]))
-        self.client.post(reverse("add_posting", args=[self.p1.pk]))
+        self.add(self.p1)
+        self.assertFalse(self.add(self.p1).json()["created"])
         self.assertEqual(Application.objects.filter(owner=self.u, url="https://x.test/1").count(), 1)
 
     def test_already_tracked_posting_shows_as_tracked_not_addable(self):
-        self.client.post(reverse("add_posting", args=[self.p1.pk]))
-        r = self.client.get(reverse("all_postings"))
-        self.assertContains(r, "Tracked")
+        self.add(self.p1)
+        row = next(p for p in self.listing()["postings"] if p["id"] == self.p1.pk)
+        self.assertTrue(row["tracked"])
 
     @override_settings(STILLOPEN_MAX_APPLICATIONS=1)
     def test_respects_the_application_limit(self):
-        self.client.post(reverse("add_posting", args=[self.p1.pk]))
-        r = self.client.post(reverse("add_posting", args=[self.p2.pk]), follow=True)
-        self.assertContains(r, "reached the limit")
+        self.add(self.p1)
+        r = self.add(self.p2)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("reached the limit", r.json()["error"])
         self.assertEqual(Application.objects.filter(owner=self.u).count(), 1)
 
     def test_another_persons_tracked_status_never_leaks(self):
         other = user("other")
         Application.objects.create(owner=other, company="Acme", role="Backend Engineer", url="https://x.test/1", status=Status.objects.first())
-        r = self.client.get(reverse("all_postings"))
-        self.assertContains(r, "Add to tracker")  # this viewer hasn't tracked it themselves
-        self.assertNotContains(r, "Tracked")
+        row = next(p for p in self.listing()["postings"] if p["id"] == self.p1.pk)
+        self.assertFalse(row["tracked"])  # this viewer hasn't tracked it themselves
 
     def test_anonymous_cannot_view_or_add(self):
         self.client.logout()
-        self.assertEqual(self.client.get(reverse("all_postings")).status_code, 302)
-        self.assertEqual(self.client.post(reverse("add_posting", args=[self.p1.pk])).status_code, 302)
+        self.assertEqual(self.client.get("/api/v1/postings").status_code, 401)
+        self.assertEqual(self.add(self.p1).status_code, 401)
 
 
 class ScheduledScanTests(TestCase):
@@ -576,11 +580,11 @@ class ScheduledScanTests(TestCase):
         self.assertEqual(self.run_cmd(), [])
         self.assertEqual(Application.objects.filter(owner=ann).count(), 1)
 
-    def test_alert_checkbox_saved_from_profile_form(self):
+    def test_the_alert_choice_is_saved_from_the_profile(self):
         u = self.person("ann", alerts=False)
         UserProfile.objects.filter(user=u).update(onboarding_done=True)
         self.client.login(username="ann", password=PW)
-        page = self.client.get(reverse("profile"))
-        self.assertContains(page, "Job alerts")
-        self.client.post(reverse("profile"), {"target_roles": "Backend Engineer", "scan_digest_enabled": "on", "areas-TOTAL_FORMS": "0", "areas-INITIAL_FORMS": "0", "areas-MIN_NUM_FORMS": "0", "areas-MAX_NUM_FORMS": "1000"})
+        self.assertFalse(self.client.get("/api/v1/profile").json()["profile"]["scan_digest_enabled"])
+        r = self.client.put("/api/v1/profile", data=json.dumps({"target_roles": "Backend Engineer", "scan_digest_enabled": True}), content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content)
         self.assertTrue(UserProfile.objects.get(user=u).scan_digest_enabled)

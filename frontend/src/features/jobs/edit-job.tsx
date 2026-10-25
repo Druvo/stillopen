@@ -93,7 +93,7 @@ export function EditJob({ id }: { id: number }) {
         <h2 className="mb-2 font-semibold">Fit with what you want</h2>
         <FitList checks={data.fit} empty="Nothing to check yet." />
         <p className="mt-2 text-xs text-muted">
-          Checked against your search areas in <a href="/profile/" className="text-brand underline">Profile</a>. This only flags a job; it never hides one.
+          Checked against your search areas in <Link to="/profile#areas" className="text-brand underline">Profile</Link>. This only flags a job; it never hides one.
         </p>
       </Card>
 

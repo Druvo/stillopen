@@ -50,13 +50,12 @@ python manage.py runserver 127.0.0.1:8000
 `runserver` is for trying it out. To keep it running, use gunicorn the way the `Dockerfile` does (one worker with 16 threads: per-person rate limits
 live in process memory) behind a reverse proxy, with `DJANGO_DEBUG=0` and `DJANGO_SECRET_KEY` set.
 
-## The new app (beta)
+## The app
 
-StillOpen has a newer interface at `/app/` (a board you can drag jobs across, and the same screens redone). It is off until you switch it on:
+Everything a signed-in person does is in the app at `/app/` (a board you can drag jobs across, and every other screen). Everyone gets it; there is no switch. The old page addresses (such as `/dashboard/`) redirect to it.
 
 1. Docker: nothing to install. The image build compiles it, and the running image has no Node.
-2. Python directly: build it once with Node 22 or later and pnpm (`cd frontend && pnpm install && pnpm build`), which writes `frontend/out/`. Without that folder `/app/` answers "not built" and the classic pages are used.
-3. In `/admin/`, Site configuration, tab **New app (beta)**, tick it. Each person then opts in from their own profile; `?classic=1` on any classic page is the way back.
+2. Python directly: build it once with Node 22 or later and pnpm (`cd frontend && pnpm install && pnpm build`), which writes `frontend/out/`. Without that folder `/app/` shows a plain "not built" page (status 503) and nobody can use the app, so do this step before you let people in.
 
 The app's page is served with a strict content security policy (scripts only from your own server). `STILLOPEN_APP_CSP=0` turns it off if a proxy in front of it rewrites the page.
 

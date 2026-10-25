@@ -3,8 +3,6 @@
 Plain language, no scores or jargon. Nothing here changes data."""
 import re
 
-from django.urls import reverse
-
 
 def first_name(user) -> str:
     name = (user.first_name or "").strip()
@@ -28,7 +26,7 @@ def next_step(profile, cards, has_areas: bool = True, searching: bool = False, p
         return {
             "headline": "Finish your profile so matches mean something",
             "body": f"We still need {missing}. It takes a minute, and every job you add is judged against it.",
-            "label": "Tell us about you", "url": reverse("profile") + "?welcome=1",
+            "label": "Tell us about you", "url": "/app/profile?welcome=1",
         }
     if searching and not cards:
         return {
@@ -40,14 +38,14 @@ def next_step(profile, cards, has_areas: bool = True, searching: bool = False, p
         return {
             "headline": "Tell us where you would work",
             "body": "Until we know, you will see jobs from everywhere, including places you would not move to. A minute in your profile fixes that.",
-            "label": "Add places", "url": reverse("profile") + "#areas",
+            "label": "Add places", "url": "/app/profile#areas",
         }
     live = [c for c in cards if not c["app"].status.is_terminal and c["app"].live_state != "expired"]
     if not cards:
         return {
             "headline": "Add the first job you are curious about",
             "body": "Paste a link below, or press Add job. We will tell you how well it fits you, and whether it is still open.",
-            "label": "Add a job", "url": reverse("add_job"),
+            "label": "Add a job", "url": "/app/jobs/add",
         }
     unchecked = [c for c in live if c["percent"] is None and (c["app"].description or c["app"].url)]
     if unchecked:
@@ -73,6 +71,6 @@ def next_step(profile, cards, has_areas: bool = True, searching: bool = False, p
         return {
             "headline": "Today's practice is ready",
             "body": f"A few questions for your plan \"{plan.title}\". It takes about five minutes, and the answers come with the reading behind them.",
-            "label": "Start", "url": reverse("prep_today", args=[plan.pk]),
+            "label": "Start", "url": f"/app/prep/{plan.pk}/today",
         }
     return None

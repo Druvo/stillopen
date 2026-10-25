@@ -82,7 +82,7 @@
             <li class="mb-1"><span class="so-yes">&#10003;</span> A tailored CV and cover letter per job</li>
             <li class="mb-1"><span class="so-yes">&#10003;</span> Your applications tracked in one place</li>
           </ul>
-          {% if user.is_authenticated %}<a class="btn btn-primary w-100" href="{% url 'dashboard' %}">Open your dashboard</a>
+          {% if user.is_authenticated %}<a class="btn btn-primary w-100" href="/app/">Open your dashboard</a>
           {% elif config.signup_open %}<a class="btn btn-primary w-100 mb-2" href="{% url 'account_signup' %}">Create a free account</a><a class="btn btn-outline-secondary w-100" href="{% url 'account_login' %}">Sign in</a>
           {% else %}<a class="btn btn-primary w-100" href="{% url 'account_login' %}">Sign in</a>{% endif %}
         </div></div>

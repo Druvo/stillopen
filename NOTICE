@@ -6,6 +6,8 @@ This product is licensed under the Apache License, Version 2.0 (see the LICENSE 
 It includes third-party software under its own licences:
 
   * Tabler 1.7.0 (MIT), served from static/vendor/tabler/. See static/vendor/tabler/NOTICE.md.
+  * TailAdmin free Next.js dashboard (MIT): the look of the new app, adapted. See frontend/THIRD_PARTY.md.
+  * Geist font (SIL Open Font License), npm package `geist`, bundled with the new app.
   * Python packages listed in requirements*.txt, each under its own licence
     (Django, django-allauth, django-jazzmin, requests, cryptography, pypdf, python-docx,
     gunicorn, whitenoise, and, optionally, mcp, claude-agent-sdk, psycopg, dj-database-url).

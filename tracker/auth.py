@@ -7,7 +7,6 @@ from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import redirect
-from django.urls import reverse
 
 from .models import SiteConfig, UserProfile
 from .services import integrations
@@ -27,12 +26,12 @@ class AccountAdapter(DefaultAccountAdapter):
         return user
 
     def _home(self, request):
-        """A person who has not yet seen the welcome questions starts there; everyone else goes to the dashboard."""
+        """A person who has not yet seen the welcome questions starts there; everyone else goes to the app."""
         user = getattr(request, "user", None)
         if user is not None and user.is_authenticated:
             profile = UserProfile.objects.filter(user=user).first()
             if profile is not None and not profile.onboarding_done:
-                return reverse("welcome")
+                return "/app/welcome"
         return None
 
     def get_login_redirect_url(self, request):

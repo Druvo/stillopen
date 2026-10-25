@@ -9,7 +9,8 @@ from ninja.errors import HttpError
 from ..models import CVVersion, SiteConfig
 from ..services import cvexport, cvgen, cvversions
 from ..services.cvversions import CVError
-from .common import owned, owned_job, throttle
+from ..services.throttle import throttled
+from .common import owned, owned_job
 
 router = Router()
 
@@ -134,7 +135,8 @@ class TailorIn(Schema):
 @router.post("/jobs/{job_id}/tailor", summary="Tailor the CV for a job")
 def tailor(request, job_id: int, payload: TailorIn):
     app = owned_job(request, job_id)
-    throttle(request, "cvgen", settings.STILLOPEN_CVGEN_PER_HOUR)
+    if throttled(request.user, "cvgen", settings.STILLOPEN_CVGEN_PER_HOUR):
+        raise HttpError(429, "Too many CV requests this hour. Try again later.")  # the classic page's own words
     mode = payload.mode if payload.mode in ("auto", "ai", "keywords") else "auto"
     try:
         version = cvgen.tailor(app, SiteConfig.for_user(request.user), mode)

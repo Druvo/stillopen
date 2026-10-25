@@ -16,5 +16,3 @@ export const ROUTES: Route[] = [
   { pattern: /^\/knowledge$/, render: () => <Knowledge /> },
 ];
 
-/** Classic page path (as in the sidebar) -> path of its replacement in this app. A migrated screen switches its sidebar entry to the new app. */
-export const NAV_OVERRIDES: Record<string, string> = { "/jobs/add/": "/jobs/add", "/postings/": "/postings", "/knowledge/": "/knowledge" };

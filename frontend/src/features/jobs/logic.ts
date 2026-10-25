@@ -30,3 +30,22 @@ export function mergePrefill(current: Record<string, string>, prefill: { url: st
   }
   return next;
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-10-25" as "25 Oct 2026", the way the classic pages wrote a date in a message. Anything else comes back unchanged. */
+export function longDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  return `${m[3]} ${MONTHS[Number(m[2]) - 1] ?? m[2]} ${m[1]}`;
+}
+
+/** The message after recording an application, in the classic page's words. */
+export function appliedMessage(followUpDate: string): string {
+  return `Good luck! We have noted it, and will remind you to follow up on ${longDate(followUpDate)}.`;
+}
+
+/** What a "possible repost" badge means, for its tooltip and for people who cannot hover. */
+export function repostHint(r: { distinct_urls: number; distinct_dates: number }): string {
+  return `Seen as ${r.distinct_urls} different postings on ${r.distinct_dates} separate days at this company, same title -- an observation, not a verdict.`;
+}

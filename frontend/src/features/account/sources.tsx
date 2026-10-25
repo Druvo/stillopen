@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge, Button, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { FormError, SelectField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
+import { notify } from "@/lib/toast";
 import { accountApi } from "./api";
 
 const KEY = ["account", "sources"] as const;
@@ -16,6 +17,7 @@ export function SourcesPage() {
   const [token, setToken] = useState("");
   const [name, setName] = useState("");
   const [done, setDone] = useState("");
+  const [info, setInfo] = useState("");
   const [rowError, setRowError] = useState("");
   const form = useSubmit();
   const act = useMutation({
@@ -31,7 +33,12 @@ export function SourcesPage() {
 
   const add = form.handle(async () => {
     setDone("");
+    setInfo("");
     const result = await accountApi.addSource({ connector: chosen, board_token: token, name });
+    if (result.info) {
+      setInfo(result.info); // "already added" is not a problem: nothing changed, and the form stays as it is
+      return;
+    }
     setDone(result.message);
     setToken("");
     setName("");
@@ -66,7 +73,8 @@ export function SourcesPage() {
             />
             <TextField label="Company name (optional)" hint="Shown in your search log. Defaults to the name from the address." value={name} onChange={(e) => setName(e.target.value)} errors={form.fields.name} />
             <FormError message={form.error} />
-            {done && !form.error && <div className="mb-3"><Notice tone="success">{done}</Notice></div>}
+            {info && !form.error && <div className="mb-3"><Notice tone="info">{info}</Notice></div>}
+            {done && !form.error && !info && <div className="mb-3"><Notice tone="success">{done}</Notice></div>}
             <Button type="submit" disabled={form.busy}>
               {form.busy ? "Checking…" : "Check and add"}
             </Button>
@@ -109,7 +117,10 @@ export function SourcesPage() {
                         onClick={() => {
                           if (!window.confirm("Remove this company from your searches?")) return;
                           setRowError("");
-                          act.mutate(() => accountApi.removeSource(s.id));
+                          act.mutate(async () => {
+                            await accountApi.removeSource(s.id);
+                            notify("Removed.");
+                          });
                         }}
                       >
                         Remove

@@ -6,6 +6,7 @@ import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader
 import { FormError, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
+import { notify } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { coverApi, cvApi, type CvSummary } from "./api";
 import { diffSummary, findingText, parseBlocks, parseInline, type Finding } from "./logic";
@@ -106,6 +107,7 @@ export function CvList() {
     mutationFn: (id: number) => cvApi.restore(id),
     onSuccess: (made) => {
       client.invalidateQueries({ queryKey: ["cv"] });
+      notify("Restored as your current CV. The history is kept.");
       navigate(`/cv/${made.id}`);
     },
     onError: (e) => setMessage(errorText(e)),
@@ -138,7 +140,7 @@ export function CvList() {
       <Card>
         {masters.length === 0 ? (
           <p className="text-sm text-muted">
-            Add your CV in your <a href="/profile/" className="text-brand underline">profile</a> and it appears here.
+            Add your CV in your <Link to="/profile" className="text-brand underline">profile</Link> and it appears here.
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -228,7 +230,11 @@ export function CvDetail({ id }: { id: number }) {
             onClick={() => {
               if (!window.confirm("Make this your current CV? Your history is kept.")) return;
               setMessage("");
-              act.mutate(async () => navigate(`/cv/${(await cvApi.restore(id)).id}`));
+              act.mutate(async () => {
+                const made = await cvApi.restore(id);
+                notify("Restored as your current CV. The history is kept.");
+                navigate(`/cv/${made.id}`);
+              });
             }}
           >
             Restore as current
@@ -242,6 +248,7 @@ export function CvDetail({ id }: { id: number }) {
               setMessage("");
               act.mutate(async () => {
                 await cvApi.remove(id);
+                notify("Deleted.");
                 navigate("/cv");
               });
             }}
@@ -283,7 +290,10 @@ function EditForm({ id, initial, form, onNoChange }: { id: number; initial: stri
       onSubmit={form.handle(async () => {
         const made = await cvApi.edit(id, content, label);
         client.invalidateQueries({ queryKey: ["cv"] });
-        if (made.changed) navigate(`/cv/${made.id}`);
+        if (made.changed) {
+          notify("Saved as a new version.");
+          navigate(`/cv/${made.id}`);
+        }
         else onNoChange();
       })}
     >
@@ -382,7 +392,7 @@ export function CoverDetail({ id }: { id: number }) {
     <>
       <PageHeader
         title={`Cover letter for ${letter.job.company}`}
-        subtitle={<a href={letter.apply_url} className="text-brand underline">Back to applying for {letter.job.role}</a>}
+        subtitle={<Link to={`/jobs/${letter.job.id}/apply`} className="text-brand underline">Back to applying for {letter.job.role}</Link>}
       />
       <p className="mb-3 text-sm text-muted">
         {letter.source_label}
@@ -420,7 +430,8 @@ export function CoverDetail({ id }: { id: number }) {
             setMessage("");
             act.mutate(async () => {
               await coverApi.remove(id);
-              window.location.assign(letter.apply_url);
+              notify("Deleted.");
+              navigate(`/jobs/${letter.job.id}/apply`);
             });
           }}
         >

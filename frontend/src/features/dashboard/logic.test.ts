@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Dashboard, Job, StatusInfo } from "@/lib/types";
-import { applyMove, jobsByBucket, statusForColumn, visibleJobs } from "./logic";
+import type { Dashboard, Job, ScanStatus, StatusInfo } from "@/lib/types";
+import {
+  applyMove, appliedParts, checkButtonText, countryOptions, cvBadgeText, DEFAULT_FILTERS, deadlineText, emptyKind, entryText, fitValue, importMessage, initialFilters,
+  interviewWhen, isFiltered, jobsByBucket, localDay, nextStepTarget, paperlessDocumentUrl, repostTitle, scanButtonText, scanPercent, scanTitle, shortDate, stageChips,
+  statusForColumn, subtitle, timeAgo, truncate, visibleJobs, type Filters,
+} from "./logic";
 
 const statuses: StatusInfo[] = [
   { id: 1, name: "Saved", bucket_key: "new", color: "#000", counts_as_applied: false },
@@ -10,13 +14,17 @@ const statuses: StatusInfo[] = [
 
 function job(over: Partial<Job>): Job {
   return {
-    id: 1, company: "Acme", role: "Dev", url: "", status_id: 1, bucket_key: "new", percent: null, band: null, decision: "", summary: "",
-    location: "", country: "", country_name: "", arrangement: "", found_date: "2026-10-01", applied_date: null, deadline: null,
-    days_left: null, urgent: false, overdue: false, live_state: "unknown", live_detail: "", strengths: [], gaps: [], fit_level: "",
-    fit_text: "", has_cv: false, repost: false, skill_matched: false, evaluated: false, edit_url: "", apply_url: "", tailor_url: "",
-    cover_url: "", prep_url: "", ...over,
+    id: 1, company: "Acme", role: "Dev", url: "", status_id: 1, bucket_key: "new", percent: null, band: null, decision: "", risk: "", summary: "", next_action: "",
+    notes: "", source: "", advertised_pay: "", location: "", country: "", country_name: "", arrangement: "", found_date: "2026-10-01", applied_date: null,
+    applied_channel: "", applied_cv: null, follow_up_date: null, counts_as_applied: false, deadline: null, days_left: null, urgent: false, overdue: false,
+    live_state: "unknown", live_detail: "", strengths: [], gaps: [], fit_level: "", fit_text: "", fit_badge: null, has_cv: false, cv: null, repost: null,
+    skill_matched: false, evaluated: false, ai_evaluated: false, ai_method: "", has_description: false, documents: [], ...over,
   };
 }
+
+const filters = (over: Partial<Filters> = {}): Filters => ({ ...DEFAULT_FILTERS, ...over });
+const ids = (jobs: Job[]) => jobs.map((j) => j.id);
+const NOW = new Date(2026, 9, 25, 12, 0, 0); // 25 Oct 2026, local time
 
 describe("board logic", () => {
   it("drops a card on the first status of the column", () => {
@@ -35,17 +43,6 @@ describe("board logic", () => {
     expect(data.jobs[1].bucket_key).toBe("new");
   });
 
-  it("searches every word across company, role and place", () => {
-    const jobs = [job({ id: 1, company: "Acme", role: "Backend Engineer", country_name: "Malaysia" }), job({ id: 2, company: "Zed", role: "Designer" })];
-    expect(visibleJobs(jobs, { text: "engineer malaysia", sort: "best" }).map((j) => j.id)).toEqual([1]);
-    expect(visibleJobs(jobs, { text: "", sort: "company" }).map((j) => j.id)).toEqual([1, 2]);
-  });
-
-  it("sorts urgent first, then best match", () => {
-    const jobs = [job({ id: 1, percent: 90 }), job({ id: 2, percent: 40, urgent: true }), job({ id: 3, percent: 60 })];
-    expect(visibleJobs(jobs, { text: "", sort: "best" }).map((j) => j.id)).toEqual([2, 1, 3]);
-  });
-
   it("groups by column and keeps empty columns", () => {
     const grouped = jobsByBucket([job({ id: 1, bucket_key: "new" })], [
       { key: "new", label: "New", description: "", is_closed: false },
@@ -53,5 +50,256 @@ describe("board logic", () => {
     ]);
     expect(grouped.new).toHaveLength(1);
     expect(grouped.active).toEqual([]);
+  });
+});
+
+describe("filters", () => {
+  const band = (label: string) => ({ label, color: "#000" });
+  const jobs = [
+    job({ id: 1, company: "Acme", role: "Backend Engineer", country: "MY", country_name: "Malaysia", percent: 90, band: band("Strong"), fit_level: "ok", arrangement: "remote", live_state: "active", found_date: "2026-10-25" }),
+    job({ id: 2, company: "Zed", role: "Designer", percent: 40, band: band("A stretch"), fit_level: "warn", arrangement: "onsite", live_state: "expired", found_date: "2026-10-20", bucket_key: "active", deadline: "2026-11-01" }),
+    job({ id: 3, company: "beta", role: "Analyst", percent: null, fit_level: "", arrangement: "", country: "", live_state: "unknown", found_date: "2026-09-01", deadline: "2026-10-30" }),
+  ];
+  const run = (f: Partial<Filters>) => ids(visibleJobs(jobs, filters(f), NOW));
+
+  it("shows everything first, in the server's best-first order", () => {
+    expect(run({})).toEqual([1, 2, 3]);
+  });
+
+  it("searches every word across company, role and place", () => {
+    expect(run({ q: "engineer malaysia" })).toEqual([1]);
+    expect(run({ q: "ZED" })).toEqual([2]);
+    expect(run({ q: "nobody" })).toEqual([]);
+  });
+
+  it("filters by stage", () => {
+    expect(run({ stage: "active" })).toEqual([2]);
+  });
+
+  it("filters by how the job fits the person's places, treating a blank as unknown", () => {
+    expect(fitValue(jobs[2])).toBe("unknown");
+    expect(run({ fit: "fits" })).toEqual([1]);
+    expect(run({ fit: "check" })).toEqual([2]);
+    expect(run({ fit: "unknown" })).toEqual([3]);
+  });
+
+  it("filters by match band, including 'not checked yet'", () => {
+    expect(run({ band: "Strong" })).toEqual([1]);
+    expect(run({ band: "__none" })).toEqual([3]);
+  });
+
+  it("filters by work arrangement, including 'not stated'", () => {
+    expect(run({ work: "remote" })).toEqual([1]);
+    expect(run({ work: "__none" })).toEqual([3]);
+  });
+
+  it("filters by country, including 'not stated'", () => {
+    expect(run({ country: "MY" })).toEqual([1]);
+    expect(run({ country: "?" })).toEqual([2, 3]);
+  });
+
+  it("filters by whether the posting is open, closed or not checked", () => {
+    expect(run({ live: "active" })).toEqual([1]);
+    expect(run({ live: "expired" })).toEqual([2]);
+    expect(run({ live: "unknown" })).toEqual([3]);
+  });
+
+  it("filters by when it was found, in the person's own calendar days", () => {
+    expect(run({ found: "today" })).toEqual([1]);
+    expect(run({ found: "week" })).toEqual([1, 2]);
+    expect(localDay(NOW)).toBe("2026-10-25");
+    expect(localDay(NOW, 7)).toBe("2026-10-18");
+    expect(ids(visibleJobs(jobs, filters({ found: "week" }), new Date(2026, 9, 30)))).toEqual([1]);
+  });
+
+  it("combines filters", () => {
+    expect(run({ work: "remote", live: "expired" })).toEqual([]);
+    expect(run({ work: "remote", live: "active", fit: "fits" })).toEqual([1]);
+  });
+
+  it("sorts: newest, oldest, company A to Z, closing soonest", () => {
+    expect(run({ sort: "newest" })).toEqual([1, 2, 3]);
+    expect(run({ sort: "oldest" })).toEqual([3, 2, 1]);
+    expect(run({ sort: "company" })).toEqual([1, 3, 2]);
+    expect(run({ sort: "deadline" })).toEqual([3, 2, 1]);
+  });
+
+  it("does not change the list it was given", () => {
+    const copy = ids(jobs);
+    run({ sort: "oldest" });
+    expect(ids(jobs)).toEqual(copy);
+  });
+
+  it("knows when anything but the sort order narrows the list", () => {
+    expect(isFiltered(filters())).toBe(false);
+    expect(isFiltered(filters({ sort: "oldest" }))).toBe(false);
+    expect(isFiltered(filters({ q: "x" }))).toBe(true);
+    expect(isFiltered(filters({ stage: "new" }))).toBe(true);
+  });
+
+  it("counts jobs per stage chip, with All first", () => {
+    const chips = stageChips(jobs, [
+      { key: "new", label: "New", description: "d", is_closed: false },
+      { key: "active", label: "Active", description: "", is_closed: false },
+    ]);
+    expect(chips.map((c) => [c.key, c.label, c.count])).toEqual([["", "All", 3], ["new", "New", 2], ["active", "Active", 1]]);
+  });
+
+  it("lists the countries of the person's own jobs by name", () => {
+    expect(countryOptions([...jobs, job({ id: 9, country: "AE", country_name: "United Arab Emirates" })])).toEqual([
+      { code: "MY", name: "Malaysia" },
+      { code: "AE", name: "United Arab Emirates" },
+    ].sort((a, b) => a.name.localeCompare(b.name)));
+  });
+});
+
+describe("remembered filters", () => {
+  it("starts from the defaults", () => {
+    expect(initialFilters(null, "")).toEqual(DEFAULT_FILTERS);
+  });
+
+  it("restores what this tab remembered, and ignores junk", () => {
+    expect(initialFilters(JSON.stringify({ q: "go", sort: "oldest", fit: "fits", bogus: "x" }), "")).toMatchObject({ q: "go", sort: "oldest", fit: "fits" });
+    expect(initialFilters("{not json", "")).toEqual(DEFAULT_FILTERS);
+    expect(initialFilters(JSON.stringify({ q: 5 }), "").q).toBe("");
+    expect(initialFilters(JSON.stringify({ sort: "sideways" }), "").sort).toBe("best");
+  });
+
+  it("takes the search text from the address over what was remembered", () => {
+    expect(initialFilters(JSON.stringify({ q: "old", live: "active" }), "?q=new+text")).toMatchObject({ q: "new text", live: "active" });
+    expect(initialFilters(JSON.stringify({ q: "old" }), "?q=").q).toBe("");
+    expect(initialFilters(JSON.stringify({ q: "old" }), "?other=1").q).toBe("old");
+  });
+
+  it("drops a country or band that no longer exists", () => {
+    expect(initialFilters(JSON.stringify({ country: "FR", band: "Gone" }), "", ["MY"], ["Strong"])).toMatchObject({ country: "", band: "" });
+    expect(initialFilters(JSON.stringify({ country: "MY", band: "Strong" }), "", ["MY"], ["Strong"])).toMatchObject({ country: "MY", band: "Strong" });
+    expect(initialFilters(JSON.stringify({ country: "?", band: "__none" }), "", ["MY"], ["Strong"])).toMatchObject({ country: "?", band: "__none" });
+  });
+});
+
+describe("the classic wording", () => {
+  it("writes dates short and long", () => {
+    expect(shortDate("2026-10-05")).toBe("5 Oct");
+    expect(shortDate("2026-10-05", true)).toBe("5 Oct 2026");
+    expect(shortDate("soon")).toBe("soon");
+  });
+
+  it("says how long ago, in the biggest whole unit", () => {
+    const at = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
+    expect(timeAgo(at(30_000), NOW)).toBe("a moment");
+    expect(timeAgo(at(61_000), NOW)).toBe("1 minute");
+    expect(timeAgo(at(3 * 3600_000 + 5000), NOW)).toBe("3 hours");
+    expect(timeAgo(at(2 * 86400_000), NOW)).toBe("2 days");
+  });
+
+  it("writes the line under the greeting", () => {
+    expect(subtitle(0, null)).toBe("Your job search, in one calm place.");
+    expect(subtitle(3, null)).toBe("We have not yet looked at which of your jobs are still open.");
+    expect(subtitle(3, new Date(NOW.getTime() - 3 * 3600_000).toISOString(), NOW)).toBe("We last looked at which jobs are still open 3 hours ago.");
+  });
+
+  it("words the deadline", () => {
+    expect(deadlineText({ deadline: null, overdue: false, days_left: null })).toBe("");
+    expect(deadlineText({ deadline: "2026-10-20", overdue: true, days_left: -5 })).toBe("Deadline 20 Oct 2026 (it has passed)");
+    expect(deadlineText({ deadline: "2026-10-25", overdue: false, days_left: 0 })).toBe("Deadline 25 Oct 2026 (today)");
+    expect(deadlineText({ deadline: "2026-10-26", overdue: false, days_left: 1 })).toBe("Deadline 26 Oct 2026 (tomorrow)");
+    expect(deadlineText({ deadline: "2026-10-30", overdue: false, days_left: 5 })).toBe("Deadline 30 Oct 2026 (in 5 days)");
+  });
+
+  it("shortens like Django's truncatechars", () => {
+    expect(truncate("short", 28)).toBe("short");
+    expect(truncate("a".repeat(40), 28)).toHaveLength(28);
+    expect(truncate("a".repeat(40), 28).endsWith("…")).toBe(true);
+  });
+
+  it("explains a repost with the evidence", () => {
+    expect(repostTitle({ distinct_urls: 3, distinct_dates: 2, first_seen: "2026-10-01", last_seen: "2026-10-12" })).toBe(
+      "Seen as 3 different postings on 2 separate days at this company, same title -- an observation, not a verdict. First seen 1 Oct, last 12 Oct.",
+    );
+  });
+
+  it("marks a flagged CV that is not approved for review", () => {
+    expect(cvBadgeText({ label: "CV v4", flagged: false, approved: false })).toBe("CV v4");
+    expect(cvBadgeText({ label: "CV v4", flagged: true, approved: false })).toBe("CV v4 · review");
+    expect(cvBadgeText({ label: "CV v4", flagged: true, approved: true })).toBe("CV v4");
+  });
+
+  it("writes the applied line only for a job that counts as applied", () => {
+    expect(appliedParts(job({ applied_date: "2026-10-05" }))).toEqual([]);
+    const parts = appliedParts(job({ applied_date: "2026-10-05", counts_as_applied: true, applied_channel: "Email", applied_cv: { id: 3, label: "CV v3" }, follow_up_date: "2026-10-12" }));
+    expect(parts).toEqual([{ text: "Applied 5 Oct 2026 via Email" }, { text: "sent", cv: { id: 3, label: "CV v3" } }, { text: "follow up 12 Oct" }]);
+  });
+
+  it("formats an interview time in the person's own time zone", () => {
+    expect(interviewWhen(new Date(2026, 9, 5, 14, 30).toISOString())).toBe("Mon 5 Oct, 14:30");
+  });
+
+  it("words the import result", () => {
+    expect(importMessage({ created: 3, updated: 2 })).toBe("Imported: 3 new, 2 refreshed");
+    expect(importMessage({ message: "Imported: 1 new, 0 refreshed" })).toBe("Imported: 1 new, 0 refreshed");
+  });
+
+  it("links to a document inside Paperless", () => {
+    expect(paperlessDocumentUrl("https://paper.example.com/", 12)).toBe("https://paper.example.com/documents/12/details");
+  });
+});
+
+describe("the search card", () => {
+  const scan = (over: Partial<ScanStatus>): ScanStatus => ({
+    running: false, done: 0, total: 0, error: "", found: 0, added: 0, note: "", started_at: null, finished_at: null, phase: "done", entries: [], ...over,
+  });
+
+  it("names the phases", () => {
+    expect(scanTitle(scan({ running: true, phase: "reading", done: 4, total: 10 }))).toBe("Reading job sources… 4/10");
+    expect(scanTitle(scan({ running: true, phase: "reading" }))).toBe("Starting the search…");
+    expect(scanTitle(scan({ running: true, phase: "sorting", done: 10, total: 10 }))).toBe("Sorting out the best matches for you…");
+    const done = scan({ found: 586, added: 11, started_at: new Date(NOW.getTime() - 2 * 3600_000).toISOString() });
+    expect(scanTitle(done, NOW)).toBe("Last search: 2 hours ago — looked through 586 openings, 11 new for you");
+  });
+
+  it("fills the bar from the sources read, and completely while sorting", () => {
+    expect(scanPercent(scan({ running: true, phase: "reading", done: 5, total: 10 }))).toBe(50);
+    expect(scanPercent(scan({ running: true, phase: "reading", done: 0, total: 0 }))).toBe(0);
+    expect(scanPercent(scan({ running: true, phase: "sorting", done: 10, total: 10 }))).toBe(100);
+  });
+
+  it("words the button while a run goes", () => {
+    expect(scanButtonText(null, false)).toBe("Search jobs");
+    expect(scanButtonText(null, true)).toBe("Starting…");
+    expect(scanButtonText(scan({ running: true, done: 3, total: 9 }), false)).toBe("Reading 3/9");
+    expect(scanButtonText(scan({ running: true, phase: "sorting", done: 9, total: 9 }), false)).toBe("Sorting…");
+    expect(scanButtonText(scan({}), false)).toBe("Search jobs");
+    expect(checkButtonText(false, false, 0, 0)).toBe("Are they still open?");
+    expect(checkButtonText(false, true, 0, 0)).toBe("Starting…");
+    expect(checkButtonText(true, false, 2, 7)).toBe("Checking 2/7…");
+  });
+
+  it("writes one line per source", () => {
+    const base = { source: "Acme", connector: "Greenhouse", found: 5, matched: 3, added: 2, duplicates: 1, outside: 0, error: "" };
+    expect(entryText(base)).toBe("5 found, 3 matched, 2 new, 1 already tracked");
+    expect(entryText({ ...base, outside: 4 })).toBe("5 found, 3 matched, 2 new, 1 already tracked, 4 outside your areas");
+    expect(entryText({ ...base, error: "HTTP 500" })).toBe("HTTP 500");
+  });
+});
+
+describe("empty states and links", () => {
+  it("picks the classic message", () => {
+    expect(emptyKind(3, 2, null)).toBeNull();
+    expect(emptyKind(3, 0, null)).toBe("no-matches");
+    expect(emptyKind(0, 0, { running: true, added: 0 })).toBe("searching");
+    expect(emptyKind(0, 0, { running: false, added: 0 })).toBe("nothing-matched");
+    expect(emptyKind(0, 0, { running: false, added: 4 })).toBe("no-jobs");
+    expect(emptyKind(0, 0, null)).toBe("no-jobs");
+  });
+
+  it("sends a next-step button to the right place", () => {
+    expect(nextStepTarget("#job-12")).toEqual({ kind: "card", id: "job-12" });
+    expect(nextStepTarget("/app/profile?welcome=1")).toEqual({ kind: "app", to: "/profile?welcome=1" });
+    expect(nextStepTarget("/app/profile#areas")).toEqual({ kind: "app", to: "/profile#areas" });
+    expect(nextStepTarget("/app/jobs/add")).toEqual({ kind: "app", to: "/jobs/add" });
+    expect(nextStepTarget("/app/prep/3/today")).toEqual({ kind: "app", to: "/prep/3/today" });
+    expect(nextStepTarget("/admin/")).toEqual({ kind: "other", href: "/admin/" });
+    expect(nextStepTarget("/application/")).toEqual({ kind: "other", href: "/application/" });
   });
 });

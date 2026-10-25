@@ -21,7 +21,7 @@ def too_many() -> HttpError:
 
 def throttle(request, action: str, limit: int, window: int = 3600) -> None:
     """Raise 429 when this person has already done `action` `limit` times within `window` seconds (per server process, like the classic pages)."""
-    from ..views import throttled
+    from ..services.throttle import throttled
 
     if throttled(request.user, action, limit, window):
         raise too_many()

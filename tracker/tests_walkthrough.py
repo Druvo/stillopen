@@ -1,5 +1,5 @@
 """Regression tests for what a real first-time walk through the app turned up."""
-import re
+import json
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -24,9 +24,9 @@ class WelcomeAsksWhereYouWouldWork(TestCase):
         self.client.login(username="rina", password=PW)
 
     def post(self, **extra):
-        data = {"target_roles": "Backend Engineer", "home_country": "Bangladesh", "profile_cv": CV, "open_remote": "on", "other_places": ""}
+        data = {"target_roles": "Backend Engineer", "home_country": "Bangladesh", "profile_cv": CV, "open_remote": True, "other_places": ""}
         data.update(extra)
-        return self.client.post(reverse("welcome"), data)
+        return self.client.post("/api/v1/welcome", data=json.dumps(data), content_type="application/json")
 
     def places(self):
         return [(a.place, a.allow_remote, a.allow_hybrid, a.allow_onsite) for a in self.u.search_areas.all()]
@@ -36,11 +36,11 @@ class WelcomeAsksWhereYouWouldWork(TestCase):
         self.assertEqual(self.places(), [("Bangladesh", True, True, True), ("Anywhere", True, False, False)])
 
     def test_other_places_are_added_and_remote_can_be_declined(self):
-        self.post(open_remote="", other_places="Malaysia\nGulf")
+        self.post(open_remote=False, other_places="Malaysia\nGulf")
         self.assertEqual([p[0] for p in self.places()], ["Bangladesh", "Malaysia", "Gulf"])
 
     def test_nothing_given_makes_no_areas(self):
-        self.post(home_country="", open_remote="")
+        self.post(home_country="", open_remote=False)
         self.assertEqual(self.places(), [])
 
     def test_a_careful_existing_setup_is_never_replaced(self):
@@ -54,15 +54,13 @@ class WelcomeAsksWhereYouWouldWork(TestCase):
 
     def test_too_many_places_is_refused_politely(self):
         r = self.post(other_places="\n".join(f"Place {i}" for i in range(9)))
-        self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "a lot of places")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("a lot of places", r.json()["error"])
         self.assertFalse(self.u.search_areas.exists())
 
-    def test_the_page_says_what_it_does_now(self):
-        page = self.client.get(reverse("welcome"))
-        self.assertContains(page, "Find jobs for me")
-        self.assertContains(page, "work remotely, from anywhere")
-        self.assertNotContains(page, "add my first job")
+    def test_the_screen_is_told_what_is_already_answered(self):
+        data = self.client.get("/api/v1/welcome").json()
+        self.assertFalse(data["done"])
 
 
 class NextStepMatchesWhatIsHappening(TestCase):
@@ -79,18 +77,18 @@ class NextStepMatchesWhatIsHappening(TestCase):
         self.assertIn("where you would work", step["headline"])
         self.assertTrue(step["url"].endswith("#areas"))
 
-    def test_dashboard_shows_searching_without_a_button_and_without_the_old_prompt(self):
+    def test_the_app_shows_searching_without_the_old_prompt(self):
         ScanRun.objects.create(owner=self.u, running=True, total=118, done=40)
         self.client.login(username="rina", password=PW)
-        page = self.client.get(reverse("dashboard"))
-        self.assertContains(page, "We are searching for jobs that fit you")
-        self.assertNotContains(page, "Add the first job you are curious about")
-        self.assertContains(page, "Reading job sources... 40/118")
+        data = self.client.get("/api/v1/dashboard").json()
+        self.assertIn("searching", data["next_step"]["headline"].lower())
+        self.assertNotIn("Add the first job you are curious about", json.dumps(data["next_step"]))
+        self.assertEqual((data["scan"]["running"], data["scan"]["done"], data["scan"]["total"], data["scan"]["phase"]), (True, 40, 118, "reading"))
 
-    def test_when_every_source_is_read_the_label_says_it_is_sorting(self):
+    def test_when_every_source_is_read_the_phase_says_it_is_sorting(self):
         ScanRun.objects.create(owner=self.u, running=True, total=118, done=118)
         self.client.login(username="rina", password=PW)
-        self.assertContains(self.client.get(reverse("dashboard")), "Sorting out the best matches")
+        self.assertEqual(self.client.get("/api/v1/dashboard").json()["scan"]["phase"], "sorting")
 
 
 class SignUpWorksWithoutEmail(TestCase):
@@ -105,14 +103,13 @@ class SignUpWorksWithoutEmail(TestCase):
     def test_without_smtp_a_new_person_is_signed_straight_in(self):
         r = self.signup()
         self.assertEqual(r.status_code, 302)
-        self.assertIn("/welcome/", r["Location"])
-        self.assertEqual(self.client.get(reverse("welcome")).status_code, 200)  # signed in: the welcome page opens for them
-        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
+        self.assertIn("/app/welcome", r["Location"])
+        self.assertEqual(self.client.get("/api/v1/me").status_code, 200)  # signed in straight away
 
     @override_settings(STILLOPEN_REQUIRE_EMAIL_CONFIRMATION=True, STILLOPEN_SIGNUP_MIN_SECONDS=0)
     def test_with_smtp_confirmation_is_still_required(self):
         self.signup()
-        self.assertEqual(self.client.get(reverse("welcome")).status_code, 302)
+        self.assertEqual(self.client.get("/api/v1/me").status_code, 401)
         self.assertTrue(any("confirm" in m.subject.lower() for m in mail.outbox))
 
     def test_the_setting_follows_whether_email_is_configured(self):
@@ -126,9 +123,9 @@ class SignUpWorksWithoutEmail(TestCase):
         normal = User.objects.create_user("jo", email="jo@example.com", password=PW)
         UserProfile.objects.filter(user=normal).update(onboarding_done=True, target_roles="x")
         self.client.login(username="boss", password=PW)
-        self.assertContains(self.client.get(reverse("dashboard")), "no email set up")
+        self.assertTrue(self.client.get("/api/v1/me").json()["email_unverified_signups"])
         self.client.login(username="jo", password=PW)
-        self.assertNotContains(self.client.get(reverse("dashboard")), "no email set up")
+        self.assertFalse(self.client.get("/api/v1/me").json()["email_unverified_signups"])
 
     @override_settings(STILLOPEN_REQUIRE_EMAIL_CONFIRMATION=False)
     def test_no_warning_when_sign_up_is_closed(self):
@@ -136,7 +133,7 @@ class SignUpWorksWithoutEmail(TestCase):
         staff = User.objects.create_user("boss", email="boss@example.com", password=PW, is_staff=True)
         UserProfile.objects.filter(user=staff).update(onboarding_done=True, target_roles="x")
         self.client.login(username="boss", password=PW)
-        self.assertNotContains(self.client.get(reverse("dashboard")), "no email set up")
+        self.assertFalse(self.client.get("/api/v1/me").json()["email_unverified_signups"])
 
 
 class SearchQuality(TestCase):
@@ -177,9 +174,9 @@ class SearchQuality(TestCase):
         self.assertIn("best new matches", run.note)
         self.assertEqual(run.error, "")
         self.client.login(username="rina", password=PW)
-        page = self.client.get(reverse("dashboard")).content.decode()
-        self.assertIn("best new matches", page)
-        self.assertNotRegex(page, r'text-danger[^>]*>[^<]*best new matches')
+        data = self.client.get("/api/v1/scan/status").json()
+        self.assertIn("best new matches", data["note"])
+        self.assertEqual(data["error"], "")
 
     def test_progress_counts_up_while_sources_are_read(self):
         seen = []
@@ -487,63 +484,39 @@ class SearchStartsWithTheFastMajority(TestCase):
 
 
 class LoadingIndicator(TestCase):
+    """What the search progress bar reads (the screen itself is drawn by the app)."""
+
     def setUp(self):
         self.u = person()
         self.client.login(username="rina", password=PW)
 
-    def page(self):
-        return self.client.get(reverse("dashboard")).content.decode()
+    def status(self):
+        return self.client.get("/api/v1/scan/status").json()
 
-    def test_the_progress_area_exists_even_before_the_first_search_so_pressing_search_shows_something(self):
-        page = self.page()
-        self.assertIn('id="scan-log-card"', page)
-        self.assertRegex(page, r'id="scan-log-card"[^>]*\shidden(?:\s|>)')
-        self.assertIn('id="scan-progress-bar"', page)
-        self.assertIn("showProgress('Starting the search...'", page)  # pressing the button reveals it at once
+    def test_before_the_first_search_there_is_nothing_running(self):
+        data = self.status()
+        self.assertEqual((data["running"], data["total"], data["phase"]), (False, 0, "done"))
 
-    def test_while_running_it_shows_spinner_animated_bar_and_how_long_it_takes(self):
-        ScanRun.objects.create(owner=self.u, running=True, total=100, done=40)
-        page = self.page()
-        self.assertNotRegex(page, r'id="scan-log-card"[^>]*\shidden(?:\s|>)')
-        self.assertIn("progress-bar-striped progress-bar-animated", page)
-        self.assertIn('style="width:40%"', page)
-        self.assertIn('aria-valuenow="40"', page)
-        self.assertNotRegex(page, r'id="scan-spinner"[^>]*\shidden(?:\s|>)')
-        self.assertIn("Usually about a minute", page)
-        self.assertNotRegex(page, r'id="scan-hint"[^>]*\shidden(?:\s|>)')
+    def test_while_running_it_reports_what_the_bar_needs(self):
+        ScanRun.objects.create(owner=self.u, running=True, total=100, done=40, added=0)
+        data = self.status()
+        self.assertEqual((data["running"], data["done"], data["total"], data["phase"]), (True, 40, 100, "reading"))
 
-    def test_when_finished_the_bar_and_spinner_are_hidden_and_the_summary_stays(self):
+    def test_when_finished_the_summary_stays(self):
         ScanRun.objects.create(owner=self.u, running=False, total=100, done=100, found=500, added=7)
-        page = self.page()
-        self.assertRegex(page, r'id="scan-spinner"[^>]*\shidden(?:\s|>)')
-        self.assertRegex(page, r'id="scan-progress"[^>]*\shidden(?:\s|>)')
-        self.assertIn("7 new for you", page)
+        data = self.status()
+        self.assertEqual((data["running"], data["found"], data["added"], data["phase"]), (False, 500, 7, "done"))
 
     def test_when_every_source_is_read_the_bar_is_full(self):
         ScanRun.objects.create(owner=self.u, running=True, total=118, done=118)
-        self.assertIn('style="width:100%"', self.page())
+        data = self.status()
+        self.assertEqual((data["done"], data["total"], data["phase"]), (118, 118, "sorting"))
 
-    def test_the_page_reloads_itself_when_the_first_jobs_arrive_and_never_in_a_loop(self):
+    def test_the_added_number_counts_up_so_the_app_can_refresh_the_list_once(self):
         run = ScanRun.objects.create(owner=self.u, running=True, total=10, done=3, added=0)
-        self.assertIn("const renderedAdded = 0;", self.page())
+        self.assertEqual(self.status()["added"], 0)
         ScanRun.objects.filter(pk=run.pk).update(added=25)
-        self.assertIn("const renderedAdded = 25;", self.page())  # the reload renders the new number, so it settles
-
-    def test_the_status_api_reports_what_the_bar_needs(self):
-        ScanRun.objects.create(owner=self.u, running=True, total=118, done=57, added=25)
-        data = self.client.get(reverse("scan_status")).json()
-        self.assertEqual((data["running"], data["done"], data["total"], data["added"]), (True, 57, 118, 25))
-
-    def test_empty_state_has_a_spinner_while_searching(self):
-        ScanRun.objects.create(owner=self.u, running=True, total=118, done=5)
-        self.assertIn("spinner-border", self.page().split("We are searching 118 job sources")[0][-300:])
-
-    def test_the_welcome_button_shows_progress_and_cannot_be_pressed_twice(self):
-        self.u = User.objects.create_user("new", email="new@example.com", password=PW)
-        self.client.login(username="new", password=PW)
-        page = self.client.get(reverse("welcome")).content.decode()
-        self.assertIn("Finding jobs for you...", page)
-        self.assertIn("button.disabled = true", page)
+        self.assertEqual(self.status()["added"], 25)
 
 
 class FullTextWhenItIsNeeded(TestCase):
@@ -649,7 +622,9 @@ class BestAreaIsNamed(TestCase):
         self.assertIn("fits your search area: Anywhere", self.text(arrangement="remote", location_text="Anywhere in the World"))
 
 
-class DashboardShowsEverythingThenFilters(TestCase):
+class DashboardShowsEverything(TestCase):
+    """Every job comes in one list, best first, for the app to filter and sort in the browser."""
+
     def setUp(self):
         from datetime import date, timedelta
         from tracker.models import Status
@@ -666,72 +641,36 @@ class DashboardShowsEverythingThenFilters(TestCase):
         self.d = make("Delta", status=rejected, score=3.0, arrangement="remote", location_text="Remote")
         UserProfile.objects.filter(user=self.u).update(onboarding_done=True)
 
-    def page(self):
-        return self.client.get(reverse("dashboard")).content.decode()
+    def data(self):
+        return self.client.get("/api/v1/dashboard").json()
 
-    def test_every_job_is_in_one_list_before_any_filter_is_applied(self):
-        page = self.page()
-        self.assertEqual(page.count("<article id=\"job-"), 4)
-        self.assertEqual(page.count('id="job-list"'), 1)
-        self.assertNotIn("data-panel", page)  # no more hiding jobs behind tabs
-        self.assertNotIn('role="tablist"', page)
-        self.assertIn("Showing all 4", page)
-        for name in ("Alpha", "Bravo", "Charlie", "Delta"):
-            self.assertIn(name, page)
+    def test_every_job_is_in_one_list(self):
+        data = self.data()
+        self.assertEqual(sorted(j["company"] for j in data["jobs"]), ["Alpha", "Bravo", "Charlie", "Delta"])
+        self.assertEqual(data["stats"]["total"], 4)
 
-    def test_all_comes_first_and_stage_chips_carry_counts(self):
-        page = self.page()
-        self.assertRegex(page, r'data-stage=""[^>]*>All \(4\)')
-        self.assertRegex(page, r'data-stage="apply"[^>]*>To apply \(2\)')
-        self.assertRegex(page, r'data-stage="pending"[^>]*>Applied &amp; pending \(1\)')
-        self.assertRegex(page, r'data-stage="closed"[^>]*>Closed &amp; skipped \(1\)')
-        self.assertLess(page.index('data-stage=""'), page.index('data-stage="apply"'))
+    def test_the_stages_carry_the_jobs_of_the_admins_tabs(self):
+        data = self.data()
+        keys = {b["key"] for b in data["buckets"]}
+        counts = {k: sum(1 for j in data["jobs"] if j["bucket_key"] == k) for k in keys}
+        self.assertEqual((counts["apply"], counts["pending"], counts["closed"]), (2, 1, 1))
 
     def test_best_match_is_the_default_order(self):
-        page = self.page()
-        self.assertLess(page.index("Alpha"), page.index("Delta"))
-        self.assertLess(page.index("Delta"), page.index("Bravo"))
+        order = [j["company"] for j in self.data()["jobs"]]
+        self.assertLess(order.index("Alpha"), order.index("Delta"))
+        self.assertLess(order.index("Delta"), order.index("Bravo"))
 
-    def test_each_card_carries_what_the_filters_read(self):
-        page = self.page()
-        card = re.search(r'<article id="job-%d".*?>' % self.a.pk, page, re.S).group(0)
-        for attr in ('data-bucket="apply"', 'data-work="onsite"', 'data-country="MY"', 'data-percent="90"', 'data-found="'):
-            self.assertIn(attr, card)
-        self.assertIn("alpha backend engineer kuala lumpur", card)
-        unchecked = re.search(r'<article id="job-%d".*?>' % self.c.pk, page, re.S).group(0)
-        self.assertIn('data-percent=""', unchecked)
+    def test_each_job_carries_what_the_filters_read(self):
+        jobs = {j["company"]: j for j in self.data()["jobs"]}
+        a = jobs["Alpha"]
+        self.assertEqual((a["bucket_key"], a["arrangement"], a["country"], a["percent"]), ("apply", "onsite", "MY", 90))
+        self.assertIsNone(jobs["Charlie"]["percent"])
 
-    def test_the_filter_controls_exist_and_use_the_real_bands_and_countries(self):
-        page = self.page()
-        for control in ("f-q", "f-fit", "f-band", "f-work", "f-country", "f-live", "f-found", "f-sort"):
-            self.assertIn(f'id="{control}"', page)
-        for label in ("Strong", "Fair", "A stretch"):
-            self.assertIn(f'<option value="{label}">', page)
-        self.assertIn('<option value="MY">Malaysia</option>', page)
-        self.assertIn('<option value="BD">Bangladesh</option>', page)
-        self.assertNotIn('<option value="DE">', page)  # only countries that appear among the jobs
-        self.assertIn("Clear filters", page)
-
-    def test_the_sort_choices_include_newest_company_and_deadline(self):
-        page = self.page()
-        for value in ("best", "newest", "oldest", "company", "deadline"):
-            self.assertIn(f'<option value="{value}">', page)
-
-    def test_user_text_in_the_filter_data_is_escaped(self):
-        from tracker.models import Status
-        Application.objects.create(owner=self.u, company='"><script>alert(1)</script>', role="x", status=Status.objects.first())
-        page = self.page()
-        self.assertNotIn("<script>alert(1)</script>", page)
-
-    def test_a_person_with_no_jobs_sees_the_helpful_empty_state_not_filters_over_nothing(self):
-        Application.objects.all().delete()
-        page = self.page()
-        self.assertIn('id="job-list-empty"', page)
-        self.assertIn("No jobs yet", page)
-
-    def test_only_my_jobs_are_in_the_list_or_the_filter_options(self):
+    def test_only_my_jobs_are_in_the_list(self):
         other = person("sam")
         Application.objects.create(owner=other, company="Secretco", role="x", country="DE", status=Application.objects.first().status)
-        page = self.page()
-        self.assertNotIn("Secretco", page)
-        self.assertNotIn('<option value="DE">', page)
+        self.assertNotIn("Secretco", json.dumps(self.data()))
+
+    def test_a_person_with_no_jobs_gets_an_empty_list(self):
+        Application.objects.all().delete()
+        self.assertEqual(self.data()["jobs"], [])

@@ -18,7 +18,7 @@ import {
 import { useMemo, useState } from "react";
 import type { Bucket, Job, StatusInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { JobCard } from "./job-card";
+import { JobCard, type CardExtras } from "./job-card";
 import { jobsByBucket } from "./logic";
 
 /** Arrow keys hop a held card to the neighbouring column (the default would nudge it 25px at a time). */
@@ -37,6 +37,7 @@ const columnKeyboard: KeyboardCoordinateGetter = (event, { context: { droppableR
 
 type Common = {
   statuses: StatusInfo[];
+  extras: CardExtras;
   onMove: (job: Job, statusId: number) => void;
   onCheckFit: (job: Job) => void;
   checkingId: number | null;
@@ -49,6 +50,7 @@ function DraggableCard({ job, ...common }: { job: Job } & Common) {
       <JobCard
         job={job}
         statuses={common.statuses}
+        extras={common.extras}
         onMove={common.onMove}
         onCheckFit={common.onCheckFit}
         checking={common.checkingId === job.id}
@@ -64,7 +66,7 @@ function Column({ bucket, jobs, ...common }: { bucket: Bucket; jobs: Job[] } & C
     <section
       ref={setNodeRef}
       aria-labelledby={`col-${bucket.key}`}
-      className={cn("flex w-72 shrink-0 flex-col rounded-xl border border-border bg-surface-2 p-2 transition-colors", isOver && "border-brand bg-surface")}
+      className={cn("flex w-[85vw] max-w-80 shrink-0 snap-start flex-col rounded-2xl border border-border bg-surface-2 p-2 transition-colors", isOver && "border-brand bg-surface")}
     >
       <header className="px-2 pb-2 pt-1">
         <h2 id={`col-${bucket.key}`} className="flex items-baseline justify-between text-sm font-semibold">
@@ -77,7 +79,7 @@ function Column({ bucket, jobs, ...common }: { bucket: Bucket; jobs: Job[] } & C
         {jobs.map((job) => (
           <DraggableCard key={job.id} job={job} {...common} />
         ))}
-        {jobs.length === 0 && <p className="px-2 py-6 text-center text-xs text-muted">Nothing here yet. Drag a job in.</p>}
+        {jobs.length === 0 && <p className="px-2 py-6 text-center text-xs text-muted">Nothing here right now. That is fine.</p>}
       </div>
     </section>
   );
@@ -123,13 +125,13 @@ export function Board({ buckets, jobs, ...common }: { buckets: Bucket[]; jobs: J
         },
       }}
     >
-      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-4 lg:mx-0 lg:px-0">
+      <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-4 lg:mx-0 lg:px-0">
         {buckets.map((bucket) => (
           <Column key={bucket.key} bucket={bucket} jobs={grouped[bucket.key] ?? []} {...common} />
         ))}
       </div>
       <DragOverlay>
-        {active ? <JobCard job={active} statuses={common.statuses} onMove={common.onMove} onCheckFit={common.onCheckFit} checking={false} overlay /> : null}
+        {active ? <JobCard job={active} statuses={common.statuses} extras={common.extras} onMove={common.onMove} onCheckFit={common.onCheckFit} checking={false} overlay /> : null}
       </DragOverlay>
     </DndContext>
   );

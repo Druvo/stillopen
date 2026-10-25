@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader, Progress, SourceLinks } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
+import { notify } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { prepApi, type Lesson, type Plan, type Question } from "./api";
 
@@ -148,9 +149,27 @@ export function PrepPlan({ id }: { id: number }) {
   if (query.isError) return <ErrorBox message="We could not find that plan." />;
   const plan = query.data;
   const started = plan.status === "active" || plan.status === "done";
+  // The new plan is made first and the failed one is only discarded after, so a refused request leaves the old plan (and its reason) on screen.
+  const tryAgain = async (jobId: number) => {
+    const made = await prepApi.create(jobId);
+    if (made.id !== id) {
+      try {
+        await prepApi.discard(id);
+      } catch {
+        /* the old plan staying in the list is harmless; the new one is what matters */
+      }
+    }
+    client.invalidateQueries({ queryKey: LIST });
+    navigate(`/prep/${made.id}`);
+  };
   const discard = () => {
     if (started && !window.confirm("Delete this plan and your progress?")) return;
-    act.mutate(() => prepApi.discard(id), { onSuccess: () => navigate("/prep") });
+    act.mutate(() => prepApi.discard(id), {
+      onSuccess: () => {
+        notify("Prep plan discarded.");
+        navigate("/prep");
+      },
+    });
   };
 
   return (
@@ -172,7 +191,7 @@ export function PrepPlan({ id }: { id: number }) {
           <p className="my-2 text-sm">{plan.error || "Something went wrong."}</p>
           <div className="flex gap-2">
             {plan.job && (
-              <Button onClick={() => run(async () => { await prepApi.discard(id); const made = await prepApi.create(plan.job!.id); navigate(`/prep/${made.id}`); })}>Try again</Button>
+              <Button onClick={() => run(() => tryAgain(plan.job!.id))}>Try again</Button>
             )}
             <Button variant="outline" onClick={discard}>Discard</Button>
           </div>
@@ -190,7 +209,7 @@ export function PrepPlan({ id }: { id: number }) {
                 {plan.unchecked_links > 0 && ` ${plan.unchecked_links} question${plan.unchecked_links === 1 ? "" : "s"} cite a link we could not open from here. They are marked below; the site may just block automatic visits.`}
               </Notice>
               <div className="flex gap-2">
-                <Button onClick={() => run(async () => { await prepApi.start(id); })} disabled={act.isPending}>Start this plan</Button>
+                <Button onClick={() => run(async () => { await prepApi.start(id); notify("Your prep plan has started. Tick lessons off as you finish them."); })} disabled={act.isPending}>Start this plan</Button>
                 <Button variant="outline" onClick={discard}>Discard</Button>
               </div>
             </>

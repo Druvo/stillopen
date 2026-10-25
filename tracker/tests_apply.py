@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
@@ -36,7 +37,13 @@ def tailored(owner, app, flagged=False, approved=False, **kw):
 
 
 def post_record(client, app, **data):
-    return client.post(reverse("mark_applied", args=[app.pk]), data)
+    """Record that the person applied, through the app's API. `cv="none"` means "I am sending a different CV"; `confirm_closed="on"` ticks the box."""
+    body = dict(data)
+    if "cv" in body:
+        body["cv"] = None if body["cv"] == "none" else body["cv"]
+    if "confirm_closed" in body:
+        body["confirm_closed"] = body["confirm_closed"] in ("on", True)
+    return client.post(f"/api/v1/jobs/{app.pk}/applied", data=json.dumps(body), content_type="application/json")
 
 
 class Checklist(TestCase):
@@ -76,16 +83,20 @@ class Checklist(TestCase):
 
 
 class AssistantPage(TestCase):
+    """What the apply screen is given (the API answer behind it); tests_api_jobs.Apply covers the rest."""
+
     def setUp(self):
         self.u = person()
         self.app = job(self.u, company="Globex")
         self.client.force_login(self.u)
 
-    def test_page_explains_it_does_not_submit_and_links_the_posting_safely(self):
-        page = self.client.get(reverse("apply_page", args=[self.app.pk])).content.decode()
-        self.assertTrue("does not submit applications" in page)
-        self.assertTrue('href="https://jobs.example.com/globex" target="_blank" rel="noopener noreferrer"' in page)
-        self.assertTrue("I submitted it" in page)
+    def screen(self, app=None):
+        return self.client.get(f"/api/v1/jobs/{(app or self.app).pk}/apply")
+
+    def test_the_posting_link_is_given_as_is_and_nothing_is_submitted_for_the_person(self):
+        data = self.screen().json()
+        self.assertEqual(data["job"]["url"], "https://jobs.example.com/globex")
+        self.assertFalse(data["job"]["applied"])
 
     def test_only_sendable_versions_are_offered(self):
         clean = tailored(self.u, self.app, label="Clean one")
@@ -94,34 +105,31 @@ class AssistantPage(TestCase):
         other_job = job(self.u, company="Elsewhere")
         wrong_job = tailored(self.u, other_job, label="Wrong job")
         master = CVVersion.objects.create(owner=self.u, kind="master", content=MASTER, label="My master", approved=True)
-        page = self.client.get(reverse("apply_page", args=[self.app.pk])).content.decode()
-        self.assertTrue("Clean one" in page and "Approved one" in page and "My master" in page)
-        self.assertFalse("Locked one" in page)
-        self.assertFalse("Wrong job" in page)
+        ids = {v["id"] for v in self.screen().json()["versions"]}
+        self.assertEqual(ids, {clean.pk, approved.pk, master.pk})
+        self.assertNotIn(locked.pk, ids)
+        self.assertNotIn(wrong_job.pk, ids)
 
-    def test_email_draft_uses_only_what_is_known_and_is_escaped(self):
+    def test_email_draft_uses_only_what_is_known(self):
         evil = job(self.u, company="<script>alert(1)</script>", role="Dev")
         draft = apply_service.email_draft(evil)
         self.assertEqual(draft["subject"], "Application: Dev")
         self.assertIn("[Your name]", draft["body"])
-        page = self.client.get(reverse("apply_page", args=[evil.pk])).content.decode()
-        self.assertFalse("<script>alert(1)</script>" in page)
+        self.assertEqual(self.screen(evil).json()["draft"]["subject"], "Application: Dev")
 
     def test_default_follow_up_days_come_from_the_admin_setting(self):
         SiteConfig.objects.filter(pk=1).update(apply_followup_days=3)
-        page = self.client.get(reverse("apply_page", args=[self.app.pk])).content.decode()
-        self.assertTrue('name="days" min="1" max="90" value="3"' in page)
+        self.assertEqual(self.screen().json()["followup_days"], 3)
 
-    def test_closed_posting_asks_for_confirmation(self):
+    def test_closed_posting_is_marked_so_the_screen_asks_for_confirmation(self):
         Application.objects.filter(pk=self.app.pk).update(live_state="expired")
-        page = self.client.get(reverse("apply_page", args=[self.app.pk])).content.decode()
-        self.assertTrue("confirm_closed" in page)
+        self.assertTrue(self.screen().json()["job"]["closed"])
 
     def test_other_peoples_jobs_and_anonymous_visitors(self):
         theirs = job(person("bob"))
-        self.assertEqual(self.client.get(reverse("apply_page", args=[theirs.pk])).status_code, 404)
+        self.assertEqual(self.screen(theirs).status_code, 404)
         self.client.logout()
-        self.assertEqual(self.client.get(reverse("apply_page", args=[self.app.pk])).status_code, 302)
+        self.assertEqual(self.screen().status_code, 401)
 
 
 class Recording(TestCase):
@@ -133,7 +141,7 @@ class Recording(TestCase):
 
     def test_recording_sets_everything_and_logs_it(self):
         r = post_record(self.client, self.app, cv=self.cv.pk, channel="linkedin", note="Spoke to Sam", days=5)
-        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)
+        self.assertEqual(r.status_code, 200)
         self.app.refresh_from_db()
         today = timezone.localdate()
         self.assertEqual(self.app.status.name, "Applied")
@@ -179,7 +187,7 @@ class Recording(TestCase):
 
     def test_bad_input_changes_nothing(self):
         for data in [{"days": 0}, {"days": 91}, {"days": "abc"}, {"days": 7, "channel": "carrier-pigeon"}, {"days": 7, "applied_on": "not-a-date"}]:
-            post_record(self.client, self.app, cv=self.cv.pk, **data)
+            self.assertEqual(post_record(self.client, self.app, cv=self.cv.pk, **data).status_code // 100, 4, data)
         self.app.refresh_from_db()
         self.assertEqual(self.app.status.name, "Evaluated")
         self.assertIsNone(self.app.applied_cv)
@@ -221,16 +229,16 @@ class Recording(TestCase):
         self.assertIsNone(self.app.applied_date)
 
     def test_post_only_and_owner_only(self):
-        self.assertEqual(self.client.get(reverse("mark_applied", args=[self.app.pk])).status_code, 405)
+        self.assertEqual(self.client.get(f"/api/v1/jobs/{self.app.pk}/applied").status_code, 405)
         theirs = job(person("bob"))
         self.assertEqual(post_record(self.client, theirs, cv="none", days=7).status_code, 404)
 
-    def test_dashboard_shows_what_was_sent(self):
+    def test_the_dashboard_shows_what_was_sent(self):
         post_record(self.client, self.app, cv=self.cv.pk, channel="email", days=4)
-        page = self.client.get(reverse("dashboard")).content.decode()
-        self.assertTrue(f"sent <a" in page and f"CV v{self.cv.pk}" in page)
-        self.assertTrue("via Email" in page)
-        self.assertTrue("follow up" in page)
+        j = next(x for x in self.client.get("/api/v1/dashboard").json()["jobs"] if x["id"] == self.app.pk)
+        self.assertEqual(j["applied_cv"], {"id": self.cv.pk, "label": f"CV v{self.cv.pk}"})
+        self.assertEqual(j["applied_channel"], "Email")
+        self.assertTrue(j["follow_up_date"])
 
 
 class FollowUps(TestCase):
@@ -247,35 +255,37 @@ class FollowUps(TestCase):
         job(person("bob"), company="BobsDue", follow_up_date=self.today)
         names = [a.company for a in apply_service.due_followups(self.u)]
         self.assertEqual(names, ["Overdue", "Due"])
-        page = self.client.get(reverse("dashboard")).content.decode()
-        self.assertTrue("Follow-ups due" in page and "Overdue" in page)
-        self.assertFalse("BobsDue" in page)
+        shown = [f["company"] for f in self.client.get("/api/v1/dashboard").json()["followups"]]
+        self.assertEqual(shown, ["Overdue", "Due"])
 
-    def test_no_banner_when_nothing_is_due(self):
+    def test_nothing_is_listed_when_nothing_is_due(self):
         job(self.u, follow_up_date=self.today + timedelta(days=5))
-        self.assertFalse("Follow-ups due" in self.client.get(reverse("dashboard")).content.decode())
+        self.assertEqual(self.client.get("/api/v1/dashboard").json()["followups"], [])
+
+    def act(self, app, action, **body):
+        return self.client.post(f"/api/v1/jobs/{app.pk}/followup/{action}", data=json.dumps(body), content_type="application/json")
 
     def test_done_and_snooze(self):
         a = job(self.u, follow_up_date=self.today)
-        self.client.post(reverse("followup_action", args=[a.pk, "snooze"]), {"days": 3})
+        self.act(a, "snooze", days=3)
         a.refresh_from_db()
         self.assertEqual(a.follow_up_date, self.today + timedelta(days=3))
-        self.client.post(reverse("followup_action", args=[a.pk, "done"]))
+        self.act(a, "done")
         a.refresh_from_db()
         self.assertIsNone(a.follow_up_date)
         self.assertEqual(a.events.filter(kind="followup").count(), 2)
 
-    def test_snooze_is_clamped_and_unknown_actions_404(self):
+    def test_snooze_is_clamped_and_other_actions_do_not_exist(self):
         a = job(self.u, follow_up_date=self.today)
-        self.client.post(reverse("followup_action", args=[a.pk, "snooze"]), {"days": 100000})
+        self.act(a, "snooze", days=100000)
         a.refresh_from_db()
         self.assertEqual(a.follow_up_date, self.today + timedelta(days=90))
-        self.assertEqual(self.client.post(reverse("followup_action", args=[a.pk, "delete"])).status_code, 404)
-        self.assertEqual(self.client.get(reverse("followup_action", args=[a.pk, "done"])).status_code, 405)
+        self.assertEqual(self.act(a, "delete").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/jobs/{a.pk}/followup/done").status_code, 405)
 
     def test_cannot_touch_someone_elses_reminders(self):
         theirs = job(person("bob"), follow_up_date=self.today)
-        self.assertEqual(self.client.post(reverse("followup_action", args=[theirs.pk, "done"])).status_code, 404)
+        self.assertEqual(self.act(theirs, "done").status_code, 404)
         theirs.refresh_from_db()
         self.assertEqual(theirs.follow_up_date, self.today)
 
@@ -289,10 +299,10 @@ class Protection(TestCase):
 
     def test_a_cv_that_was_sent_cannot_be_deleted(self):
         post_record(self.client, self.app, cv=self.cv.pk, days=7)
-        self.client.post(reverse("cv_delete", args=[self.cv.pk]))
+        self.client.delete(f"/api/v1/cv/{self.cv.pk}")
         self.assertTrue(CVVersion.objects.filter(pk=self.cv.pk).exists())
         unsent = tailored(self.u, self.app, label="never sent")
-        self.client.post(reverse("cv_delete", args=[unsent.pk]))
+        self.client.delete(f"/api/v1/cv/{unsent.pk}")
         self.assertFalse(CVVersion.objects.filter(pk=unsent.pk).exists())
 
     def test_deleting_an_application_or_an_account_still_works(self):
@@ -305,7 +315,7 @@ class Protection(TestCase):
         self.app.delete()  # the application and the CV sent with it go together
         self.assertFalse(CVVersion.objects.filter(pk=self.cv.pk).exists())
         self.client.force_login(other)
-        self.client.post(reverse("delete_account"), {"confirm": "leaver"})
+        self.client.post("/api/v1/account/delete", data=json.dumps({"confirm": "leaver"}), content_type="application/json")
         self.assertFalse(User.objects.filter(username="leaver").exists())
         self.assertFalse(CVVersion.objects.filter(pk=other_cv.pk).exists())
 

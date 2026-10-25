@@ -5,9 +5,8 @@ from unittest import mock
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
-from django.urls import reverse
 
-from tracker.models import Application, CVVersion, Document, DocumentKind, Event, JobSource, KnowledgeSource, Posting, SiteConfig, Status, UserProfile
+from tracker.models import Application, CVVersion, Document, DocumentKind, Event, JobSource, KnowledgeSource, Posting
 from tracker.tests_api import BASE, job, person
 from tracker.services import knowledge
 
@@ -404,28 +403,3 @@ class Apply(Base):
 
         self.post(self.path("/applied"), {"cv": self.master.pk})
         self.assertEqual(mail.outbox, [])
-
-
-class ClassicRedirects(Base):
-    def opt_in(self, on=True):
-        SiteConfig.objects.update_or_create(pk=1, defaults={"new_app_enabled": on})
-        UserProfile.objects.filter(user=self.a).update(use_new_app=on)
-
-    def test_classic_pages_send_opted_in_people_to_the_new_screens(self):
-        app = job(self.a)
-        pairs = [
-            (reverse("add_job"), "/app/jobs/add"), (reverse("job_edit", args=[app.pk]), f"/app/jobs/{app.pk}/edit"),
-            (reverse("apply_page", args=[app.pk]), f"/app/jobs/{app.pk}/apply"), (reverse("all_postings"), "/app/postings"), (reverse("knowledge"), "/app/knowledge"),
-        ]
-        for classic, _ in pairs:
-            self.assertEqual(self.client.get(classic).status_code, 200, classic)
-        self.opt_in()
-        for classic, new in pairs:
-            self.assertRedirects(self.client.get(classic), new, fetch_redirect_response=False)
-            self.assertEqual(self.client.get(classic + "?classic=1").status_code, 200, classic)
-
-    def test_classic_posts_still_work_for_opted_in_people(self):
-        self.opt_in()
-        r = self.client.post(reverse("add_job"), {"company": "Globex", "role": "Dev"})
-        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)
-        self.assertTrue(Application.objects.filter(company="Globex", owner=self.a, status=Status.objects.get(name="Saved")).exists())

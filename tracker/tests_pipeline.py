@@ -14,9 +14,16 @@ from tracker.models import Contact, Interview, Offer, Referral, SiteConfig
 from tracker.services import pipeline
 from tracker.tests_apply import job, person
 from tracker.tests_cv import PW
-from tracker.views_pipeline import comparison
+from tracker.services.pipeline import comparison
 
 User = get_user_model()
+
+
+def call(client, method, path, body=None):
+    """A call to the app's JSON API."""
+    if method in ("get", "delete"):
+        return getattr(client, method)(f"/api/v1{path}")
+    return getattr(client, method)(f"/api/v1{path}", data=json.dumps(body or {}), content_type="application/json")
 
 
 def when(days=2):
@@ -24,6 +31,8 @@ def when(days=2):
 
 
 class InterviewTests(TestCase):
+    """The screens run on the JSON API (full rules in tests_api_pipeline); these pin what the API must keep doing."""
+
     def setUp(self):
         self.u = person("jane")
         self.app = job(self.u)
@@ -32,45 +41,28 @@ class InterviewTests(TestCase):
     def add(self, **kw):
         data = {"application": self.app.pk, "scheduled_at": when(), "kind": "video", "where": "https://meet.example.com/x", "notes": "Ask about the team"}
         data.update(kw)
-        return self.client.post(reverse("interviews"), data)
+        return call(self.client, "post", "/interviews", data)
 
-    def test_add_logs_an_event_and_shows_on_the_dashboard(self):
+    def test_add_logs_an_event_and_is_coming_up(self):
         self.add()
         self.assertEqual(Interview.objects.filter(owner=self.u).count(), 1)
         self.assertTrue(self.app.events.filter(kind="interview", text__contains="scheduled").exists())
-        self.assertContains(self.client.get(reverse("dashboard")), "Coming up")
-        self.assertContains(self.client.get(reverse("interviews")), "Ask about the team")
-
-    def test_bad_date_is_refused(self):
-        self.add(scheduled_at="soon")
-        self.assertEqual(Interview.objects.count(), 0)
-
-    def test_outcome_and_delete(self):
-        self.add()
-        i = Interview.objects.get()
-        self.client.post(reverse("interview_action", args=[i.pk, "outcome"]), {"outcome": "passed"})
-        i.refresh_from_db()
-        self.assertEqual(i.outcome, "passed")
-        self.client.post(reverse("interview_action", args=[i.pk, "outcome"]), {"outcome": "bogus"})
-        i.refresh_from_db()
-        self.assertEqual(i.outcome, "passed")
-        self.client.post(reverse("interview_action", args=[i.pk, "delete"]))
-        self.assertEqual(Interview.objects.count(), 0)
+        self.assertEqual(len(call(self.client, "get", "/dashboard").json()["upcoming_interviews"]), 1)
 
     def test_cancelled_or_past_do_not_show_as_coming_up(self):
         self.add()
         Interview.objects.update(outcome="cancelled")
-        self.assertNotContains(self.client.get(reverse("dashboard")), "Coming up")
+        self.assertEqual(call(self.client, "get", "/dashboard").json()["upcoming_interviews"], [])
 
-    def test_get_on_actions_is_not_allowed(self):
+    def test_bad_date_is_refused_and_an_unknown_outcome_changes_nothing(self):
+        self.add(scheduled_at="soon")
+        self.assertEqual(Interview.objects.count(), 0)
         self.add()
         i = Interview.objects.get()
-        self.assertEqual(self.client.get(reverse("interview_action", args=[i.pk, "delete"])).status_code, 405)
-
-    def test_unknown_action_is_404(self):
-        self.add()
-        i = Interview.objects.get()
-        self.assertEqual(self.client.post(reverse("interview_action", args=[i.pk, "explode"])).status_code, 404)
+        call(self.client, "post", f"/interviews/{i.pk}/outcome", {"outcome": "passed"})
+        call(self.client, "post", f"/interviews/{i.pk}/outcome", {"outcome": "bogus"})
+        i.refresh_from_db()
+        self.assertEqual(i.outcome, "passed")
 
     @override_settings(STILLOPEN_MAX_PIPELINE=1)
     def test_cap(self):
@@ -86,32 +78,25 @@ class ContactTests(TestCase):
         self.client.login(username="jane", password=PW)
 
     def test_contact_then_referral_flow(self):
-        self.client.post(reverse("contacts"), {"which": "contact", "name": "Sam Lee", "company": "Globex", "link": "https://example.com/sam"})
+        call(self.client, "post", "/contacts", {"name": "Sam Lee", "company": "Globex", "link": "https://example.com/sam"})
         c = Contact.objects.get()
-        self.client.post(reverse("contacts"), {"which": "referral", "contact": c.pk, "application": self.app.pk, "status": "asked", "note": "Coffee on Friday"})
+        call(self.client, "post", "/referrals", {"contact": c.pk, "application": self.app.pk, "status": "asked", "note": "Coffee on Friday"})
         r = Referral.objects.get()
         self.assertEqual((r.owner, r.status), (self.u, "asked"))
-        page = self.client.get(reverse("contacts"))
-        self.assertContains(page, "Sam Lee")
-        self.assertContains(page, "Coffee on Friday")
-        self.client.post(reverse("referral_action", args=[r.pk, "status"]), {"status": "agreed"})
+        call(self.client, "post", f"/referrals/{r.pk}/status", {"status": "agreed"})
         r.refresh_from_db()
         self.assertEqual(r.status, "agreed")
         self.assertTrue(self.app.events.filter(text__contains="Sam Lee").exists())
 
     def test_javascript_links_are_refused(self):
-        self.client.post(reverse("contacts"), {"which": "contact", "name": "Eve", "link": "javascript:alert(1)"})
+        call(self.client, "post", "/contacts", {"name": "Eve", "link": "javascript:alert(1)"})
         self.assertEqual(Contact.objects.count(), 0)
 
     def test_deleting_a_contact_removes_their_referrals(self):
         c = Contact.objects.create(owner=self.u, name="Sam")
         Referral.objects.create(owner=self.u, contact=c, application=self.app)
-        self.client.post(reverse("contact_delete", args=[c.pk]))
+        self.client.delete(f"/api/v1/contacts/{c.pk}")
         self.assertEqual(Referral.objects.count(), 0)
-
-    def test_contact_html_is_escaped(self):
-        Contact.objects.create(owner=self.u, name="<script>alert(1)</script>")
-        self.assertNotContains(self.client.get(reverse("contacts")), "<script>alert(1)</script>")
 
 
 class OfferTests(TestCase):
@@ -146,23 +131,22 @@ class OfferTests(TestCase):
 
     def test_form_normalises_currency_and_rejects_nonsense(self):
         base = {"application": self.a.pk, "base": "50000", "period": "year", "bonus": "0", "equity": "0", "other_benefits": "0", "signing": "0"}
-        self.client.post(reverse("offers"), {**base, "currency": "myr"})
+        call(self.client, "post", "/offers", {**base, "currency": "myr"})
         self.assertEqual(Offer.objects.get().currency, "MYR")
-        self.client.post(reverse("offers"), {**base, "currency": "dollars"})
-        self.client.post(reverse("offers"), {**base, "currency": "USD", "base": "-5"})
+        call(self.client, "post", "/offers", {**base, "currency": "dollars"})
+        call(self.client, "post", "/offers", {**base, "currency": "USD", "base": "-5"})
         self.assertEqual(Offer.objects.count(), 1)
 
-    def test_page_renders_comparison(self):
+    def test_the_offers_screen_compares_per_currency(self):
         self.offer(self.a, base=Decimal("120000"))
         self.offer(self.b, base=Decimal("100000"))
-        page = self.client.get(reverse("offers"))
-        self.assertContains(page, "In USD")
-        self.assertContains(page, "highest")
-        self.assertContains(page, "20,000 less")
+        groups = call(self.client, "get", "/offers").json()["groups"]
+        self.assertEqual([g["currency"] for g in groups], ["USD"])
+        self.assertTrue(groups[0]["rows"][0]["best"])
 
     def test_status_update(self):
         o = self.offer(self.a)
-        self.client.post(reverse("offer_action", args=[o.pk, "status"]), {"status": "accepted"})
+        call(self.client, "post", f"/offers/{o.pk}/status", {"status": "accepted"})
         o.refresh_from_db()
         self.assertEqual(o.status, "accepted")
 
@@ -178,38 +162,29 @@ class PipelineIsolation(TestCase):
         self.client.login(username="bob", password=PW)
 
     def test_other_person_cannot_act_on_any_row(self):
-        post = self.client.post
-        self.assertEqual(post(reverse("interview_action", args=[self.iv.pk, "delete"])).status_code, 404)
-        self.assertEqual(post(reverse("interview_action", args=[self.iv.pk, "outcome"]), {"outcome": "passed"}).status_code, 404)
-        self.assertEqual(post(reverse("contact_delete", args=[self.contact.pk])).status_code, 404)
-        self.assertEqual(post(reverse("referral_action", args=[self.ref.pk, "delete"])).status_code, 404)
-        self.assertEqual(post(reverse("offer_action", args=[self.offer.pk, "delete"])).status_code, 404)
-        self.assertEqual(post(reverse("offer_action", args=[self.offer.pk, "status"]), {"status": "accepted"}).status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/v1/interviews/{self.iv.pk}").status_code, 404)
+        self.assertEqual(call(self.client, "post", f"/interviews/{self.iv.pk}/outcome", {"outcome": "passed"}).status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/v1/contacts/{self.contact.pk}").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/v1/referrals/{self.ref.pk}").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/v1/offers/{self.offer.pk}").status_code, 404)
+        self.assertEqual(call(self.client, "post", f"/offers/{self.offer.pk}/status", {"status": "accepted"}).status_code, 404)
         for model in (Interview, Contact, Referral, Offer):
             self.assertEqual(model.objects.filter(owner=self.a).count(), 1)
 
     def test_lists_show_only_my_rows(self):
-        self.assertNotContains(self.client.get(reverse("contacts")), "Alice's friend")
-        self.assertNotContains(self.client.get(reverse("interviews")), "Globex")
-        self.assertNotContains(self.client.get(reverse("offers")), "Globex")
+        self.assertNotIn("Alice's friend", json.dumps(call(self.client, "get", "/contacts").json()))
+        self.assertNotIn("Globex", json.dumps(call(self.client, "get", "/interviews").json()))
+        self.assertNotIn("Globex", json.dumps(call(self.client, "get", "/offers").json()))
 
     def test_cannot_attach_to_someone_elses_job_or_contact(self):
-        post = self.client.post
-        post(reverse("interviews"), {"application": self.aapp.pk, "scheduled_at": when(), "kind": "video"})
-        post(reverse("offers"), {"application": self.aapp.pk, "base": "1", "period": "year", "currency": "USD", "bonus": "0", "equity": "0", "other_benefits": "0", "signing": "0"})
+        call(self.client, "post", "/interviews", {"application": self.aapp.pk, "scheduled_at": when(), "kind": "video"})
+        call(self.client, "post", "/offers", {"application": self.aapp.pk, "base": "1", "period": "year", "currency": "USD", "bonus": "0", "equity": "0", "other_benefits": "0", "signing": "0"})
         mine = Contact.objects.create(owner=self.b, name="Bobs friend")
-        post(reverse("contacts"), {"which": "referral", "contact": self.contact.pk, "application": self.bapp.pk, "status": "asked"})
-        post(reverse("contacts"), {"which": "referral", "contact": mine.pk, "application": self.aapp.pk, "status": "asked"})
+        call(self.client, "post", "/referrals", {"contact": self.contact.pk, "application": self.bapp.pk, "status": "asked"})
+        call(self.client, "post", "/referrals", {"contact": mine.pk, "application": self.aapp.pk, "status": "asked"})
         self.assertEqual(Interview.objects.filter(owner=self.b).count(), 0)
         self.assertEqual(Offer.objects.filter(owner=self.b).count(), 0)
         self.assertEqual(Referral.objects.filter(owner=self.b).count(), 0)
-
-    def test_login_required(self):
-        self.client.logout()
-        for name in ("interviews", "contacts", "offers"):
-            r = self.client.get(reverse(name))
-            self.assertEqual(r.status_code, 302)
-            self.assertIn("/accounts/login/", r["Location"])
 
     def test_export_has_only_my_data_and_account_delete_cascades(self):
         self.client.force_login(self.a)
@@ -283,8 +258,9 @@ class InsightsTests(TestCase):
         self.u = person("jane")
         self.client.login(username="jane", password=PW)
 
-    def test_empty_state_says_what_to_do(self):
-        self.assertContains(self.client.get(reverse("insights")), "Nothing to show yet")
+    def test_nothing_tracked_gives_zeros(self):
+        data = call(self.client, "get", "/insights").json()
+        self.assertEqual((data["tracked"], data["applied"]), (0, 0))
 
     def test_funnel_counts_and_median(self):
         today = timezone.localdate()
@@ -301,13 +277,9 @@ class InsightsTests(TestCase):
         self.assertEqual(f["median_days_to_interview"], 5)
         site = next(r for r in f["channels"] if r["label"] == "Company site or job board")
         self.assertEqual((site["applied"], site["interviews"], site["offers"]), (2, 2, 1))
-        self.assertContains(self.client.get(reverse("insights")), "Reached an interview")
+        self.assertEqual(call(self.client, "get", "/insights").json()["interviewed"], 2)
 
     def test_only_my_numbers(self):
         bob = person("bob")
         job(bob, applied_date=timezone.localdate())
         self.assertEqual(pipeline.funnel(self.u)["applied"], 0)
-
-    def test_login_required(self):
-        self.client.logout()
-        self.assertEqual(self.client.get(reverse("insights")).status_code, 302)

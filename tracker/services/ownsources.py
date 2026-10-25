@@ -7,7 +7,7 @@ from typing import Callable
 from django.conf import settings
 from django.db import IntegrityError, transaction
 
-from ..models import JobSource
+from ..models import JobSource, SiteConfig
 from . import scan
 from .netguard import FetchError
 
@@ -41,3 +41,9 @@ def add_own_source(user, connector: str, token: str, name: str, rate_limited: Ca
     except IntegrityError:
         raise SourceRefused("You already added that board.", info=True) from None
     return source, len(openings)
+
+
+def shared_sources():
+    """The site-wide sources that really are searched: Jooble ones only count once the site has a Jooble key."""
+    qs = JobSource.objects.filter(owner__isnull=True, enabled=True)
+    return qs if SiteConfig.load().effective_jooble_key else qs.exclude(connector="jooble")

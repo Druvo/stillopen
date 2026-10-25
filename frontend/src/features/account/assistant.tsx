@@ -6,6 +6,7 @@ import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader
 import { FormError, SelectField, TextField, useSubmit } from "@/components/form";
 import { ApiError, errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
+import { notify } from "@/lib/toast";
 import { accountApi, type NewToken } from "./api";
 import { claudeCommand, formatDate, lastUsed, mcpConfig } from "./logic";
 
@@ -67,8 +68,11 @@ export function AssistantPage() {
   const [rowError, setRowError] = useState("");
   const form = useSubmit();
   const revoke = useMutation({
-    mutationFn: (id: number) => accountApi.revokeToken(id),
-    onSuccess: () => client.invalidateQueries({ queryKey: KEY }),
+    mutationFn: (token: { id: number; name: string }) => accountApi.revokeToken(token.id),
+    onSuccess: (_, token) => {
+      notify(`Revoked ${token.name}. It stops working straight away.`);
+      return client.invalidateQueries({ queryKey: KEY });
+    },
     onError: (e) => setRowError(errorText(e)),
   });
 
@@ -179,7 +183,7 @@ export function AssistantPage() {
                             onClick={() => {
                               if (!window.confirm(`Revoke ${t.name}? It stops working straight away.`)) return;
                               setRowError("");
-                              revoke.mutate(t.id);
+                              revoke.mutate({ id: t.id, name: t.name });
                             }}
                           >
                             Revoke

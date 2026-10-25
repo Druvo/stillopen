@@ -2,13 +2,14 @@
 
 import { Dashboard } from "@/features/dashboard/dashboard";
 import { PrepList, PrepPlan, PrepToday } from "@/features/prep/screens";
+import { BadgeDollarSign, BarChart3, Bot, CalendarClock, FileText, FolderOpen, GraduationCap, LayoutDashboard, Search, PlusCircle, Radar, Sparkles, UserRound, Users, type LucideIcon } from "lucide-react";
 import type { Route } from "@/lib/router";
 import * as account from "@/features/account/routes";
 import * as cv from "@/features/cv/routes";
 import * as jobs from "@/features/jobs/routes";
 import * as pipeline from "@/features/pipeline/routes";
 
-/** Every screen of the new app. Screens that have not moved yet are linked to their classic page from the sidebar. */
+/** Every screen of the app, matched against the path inside it (no /app prefix). */
 export const ROUTES: Route[] = [
   { pattern: /^\/$/, render: () => <Dashboard /> },
   { pattern: /^\/prep$/, render: () => <PrepList /> },
@@ -20,23 +21,38 @@ export const ROUTES: Route[] = [
   ...account.ROUTES,
 ];
 
-const OVERRIDES = { ...jobs.NAV_OVERRIDES, ...cv.NAV_OVERRIDES, ...pipeline.NAV_OVERRIDES, ...account.NAV_OVERRIDES };
+export type NavItem = { label: string; to: string; icon: LucideIcon; needs?: "prep_enabled" | "assistant_enabled" };
+export type NavGroup = { title: string; items: NavItem[] };
 
-/** Sidebar: [label, path, whether it is a screen of this app (otherwise a classic Django page)]. */
-const CLASSIC_NAV: [string, string, boolean][] = [
-  ["Dashboard", "/", true],
-  ["Add job", "/jobs/add/", false],
-  ["All postings", "/postings/", false],
-  ["Job sources", "/sources/", false],
-  ["Interviews", "/interviews/", false],
-  ["Contacts", "/contacts/", false],
-  ["Offers", "/offers/", false],
-  ["Prep plans", "/prep", true],
-  ["Insights", "/insights/", false],
-  ["CVs", "/cv/", false],
-  ["Documents", "/knowledge/", false],
-  ["Profile", "/profile/", false],
-  ["AI settings", "/profile/ai/", false],
+/** The sidebar. Every entry is a screen of this app. */
+export const NAV: NavGroup[] = [
+  {
+    title: "Job search",
+    items: [
+      { label: "Dashboard", to: "/", icon: LayoutDashboard },
+      { label: "Add job", to: "/jobs/add", icon: PlusCircle },
+      { label: "All postings", to: "/postings", icon: Search },
+      { label: "Prep plans", to: "/prep", icon: GraduationCap, needs: "prep_enabled" },
+    ],
+  },
+  {
+    title: "After you apply",
+    items: [
+      { label: "Interviews", to: "/interviews", icon: CalendarClock },
+      { label: "Contacts", to: "/contacts", icon: Users },
+      { label: "Offers", to: "/offers", icon: BadgeDollarSign },
+      { label: "Insights", to: "/insights", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "About you",
+    items: [
+      { label: "CVs", to: "/cv", icon: FileText },
+      { label: "Documents", to: "/knowledge", icon: FolderOpen },
+      { label: "Profile", to: "/profile", icon: UserRound },
+      { label: "AI settings", to: "/profile/ai", icon: Sparkles },
+      { label: "Job sources", to: "/sources", icon: Radar },
+      { label: "Assistant", to: "/profile/assistant", icon: Bot, needs: "assistant_enabled" },
+    ],
+  },
 ];
-
-export const NAV: [string, string, boolean][] = CLASSIC_NAV.map(([label, to, inApp]) => (OVERRIDES[to] ? [label, OVERRIDES[to], true] : [label, to, inApp]));

@@ -1,4 +1,5 @@
 """Prep plans, phase 2: daily practice, scoring, the streak, and topics that need another look."""
+import json
 from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
@@ -269,99 +270,115 @@ class DuePlans(QuizBase):
         self.assertNotIn("practice", step["headline"].lower())  # something about the job comes first
         step = guide.next_step(Done(), [{"app": Application(status=self.status, live_state="expired"), "percent": 10, "cv": None}], has_areas=True, prep_due=[plan])
         self.assertIn("Today's practice", step["headline"])
-        self.assertEqual(step["url"], reverse("prep_today", args=[plan.pk]))
+        self.assertEqual(step["url"], f"/app/prep/{plan.pk}/today")
         self.assertIsNone(guide.next_step(Done(), [{"app": Application(status=self.status, live_state="expired"), "percent": 10, "cv": None}], has_areas=True))
 
 
 class QuizViews(QuizBase):
+    """Today's practice runs on the JSON API (more in tests_api.PrepApi)."""
+
     def setUp(self):
         super().setUp()
         self.plan = self.plan_with_questions(topics=1, per_topic=3, weeks=1)
         self.client.force_login(self.user)
 
-    def post_all(self, **override):
-        challenge = quiz.build_challenge(self.plan, 3)
-        data = {f"q{i.question_id}": ["0", "2"] if i.question.kind == "multi" else ["0"] for i in challenge.items.select_related("question")}
-        data.update(override)
-        return self.client.post(reverse("prep_answer", args=[self.plan.pk]), data, follow=True)
+    def today(self, plan=None):
+        return self.client.get(f"/api/v1/prep/plans/{(plan or self.plan).pk}/today")
 
-    def test_the_questions_page_and_the_whole_round_trip(self):
-        page = self.client.get(reverse("prep_today", args=[self.plan.pk]))
-        self.assertContains(page, "Send my answers")
-        self.assertContains(page, "T0Q0")
-        self.assertContains(page, 'type="checkbox"')  # the multi-answer question
-        self.assertContains(page, 'type="radio"')
-        self.assertNotContains(page, "because")  # explanations only after answering
-        done = self.post_all()
-        self.assertContains(done, "3 of 3 right")
-        self.assertContains(done, "because")
-        self.assertContains(done, "kubernetes.io")
-        self.assertContains(done, "1 day in a row")
-        self.assertNotContains(done, "Send my answers")
+    def send(self, plan=None, answers=None):
+        return self.client.post(f"/api/v1/prep/plans/{(plan or self.plan).pk}/answers", data=json.dumps({"answers": answers or {}}), content_type="application/json")
+
+    def right_answers(self, **override):
+        challenge = quiz.build_challenge(self.plan, 3)
+        answers = {str(i.question_id): [0, 2] if i.question.kind == "multi" else [0] for i in challenge.items.select_related("question")}
+        answers.update({str(k): v for k, v in override.items()})
+        return answers
+
+    def test_the_questions_and_the_whole_round_trip(self):
+        data = self.today().json()
+        self.assertFalse(data["finished"])
+        self.assertEqual(data["total"], 3)
+        self.assertIn("T0Q0", json.dumps(data["rows"]))
+        self.assertEqual({r["kind"] for r in data["rows"]} - {"single", "multi"}, set())
+        self.assertNotIn("because", json.dumps(data))  # explanations only after answering
+        self.assertNotIn("correct", data["rows"][0])
+        r = self.send(answers=self.right_answers())
+        self.assertEqual(r.status_code, 200, r.content)
+        done = self.today().json()
+        self.assertTrue(done["finished"])
+        self.assertEqual((done["right"], done["total"]), (3, 3))
+        self.assertIn("because", json.dumps(done))
+        self.assertIn("kubernetes.io", json.dumps(done))
+        self.assertEqual(done["streak"], 1)
 
     def test_a_wrong_answer_is_explained_and_shown(self):
         first = quiz.build_challenge(self.plan, 3).items.first().question
-        done = self.post_all(**{f"q{first.pk}": ["3"]})
-        self.assertContains(done, "2 of 3 right")
-        self.assertContains(done, "your pick")
-        self.assertContains(done, "right answer")
+        self.send(answers={**self.right_answers(), str(first.pk): [3]})
+        done = self.today().json()
+        self.assertEqual(done["right"], 2)
+        row = next(r for r in done["rows"] if r["id"] == first.pk)
+        self.assertEqual((row["chosen"], row["right"]), ([3], False))
+        self.assertEqual(row["correct"], first.correct)
+        self.assertTrue(row["explanation"])
 
     def test_a_missing_answer_asks_again_and_saves_nothing(self):
         challenge = quiz.build_challenge(self.plan, 3)
-        r = self.client.post(reverse("prep_answer", args=[self.plan.pk]), {f"q{challenge.items.first().question_id}": ["0"]}, follow=True)
-        self.assertContains(r, "Answer every question")
+        r = self.send(answers={str(challenge.items.first().question_id): [0]})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Answer every question", r.json()["error"])
         self.assertEqual(PrepAnswer.objects.count(), 0)
 
     def test_sending_twice_does_not_double_count(self):
-        self.post_all()
-        again = self.post_all()
-        self.assertContains(again, "already answered")
+        self.send(answers=self.right_answers())
+        again = self.send(answers=self.right_answers())
+        self.assertEqual(again.status_code, 400)
+        self.assertIn("already answered", again.json()["error"])
         self.assertEqual(PrepAnswer.objects.count(), 3)
 
-    def test_junk_in_the_form_is_ignored(self):
+    def test_junk_in_the_answers_is_ignored(self):
         challenge = quiz.build_challenge(self.plan, 3)
-        r = self.client.post(reverse("prep_answer", args=[self.plan.pk]), {f"q{challenge.items.first().question_id}": ["abc", "<script>"]}, follow=True)
-        self.assertEqual(r.status_code, 200)
+        r = self.send(answers={str(challenge.items.first().question_id): [], "abc": [1], "<script>": [0]})
+        self.assertEqual(r.status_code // 100, 4)
         self.assertEqual(PrepAnswer.objects.count(), 0)
 
     def test_a_draft_cannot_be_practised_and_other_peoples_plans_are_not_found(self):
         draft = self.plan_with_questions(status="draft")
         theirs = self.plan_with_questions(owner=self.other)
         for plan in (draft, theirs):
-            self.assertEqual(self.client.get(reverse("prep_today", args=[plan.pk])).status_code, 404)
-            self.assertEqual(self.client.post(reverse("prep_answer", args=[plan.pk])).status_code, 404)
+            self.assertEqual(self.today(plan).status_code, 404)
+            self.assertEqual(self.send(plan).status_code, 404)
         self.assertEqual(PrepChallenge.objects.filter(plan__in=[draft, theirs]).count(), 0)
 
-    def test_login_is_required(self):
+    def test_signing_in_is_required(self):
         self.client.logout()
-        self.assertEqual(self.client.get(reverse("prep_today", args=[self.plan.pk])).status_code, 302)
-        self.assertEqual(self.client.post(reverse("prep_answer", args=[self.plan.pk])).status_code, 302)
+        self.assertEqual(self.today().status_code, 401)
+        self.assertEqual(self.send().status_code, 401)
+        self.assertEqual(self.client.get(f"/prep/{self.plan.pk}/today/")["Location"], f"/app/prep/{self.plan.pk}/today")
 
-    def test_the_plan_page_shows_the_practice_button_streak_and_topics_to_revisit(self):
-        page = self.client.get(reverse("prep_plan", args=[self.plan.pk]))
-        self.assertContains(page, "Today&#x27;s practice" if "Today&#x27;s" in page.content.decode() else "Today's practice")
-        self.post_all()
-        page = self.client.get(reverse("prep_plan", args=[self.plan.pk]))
-        self.assertContains(page, "See today")
-        self.assertContains(page, "1 day in a row")
+    def test_the_plan_shows_the_streak_and_topics_to_revisit(self):
+        data = self.client.get(f"/api/v1/prep/plans/{self.plan.pk}").json()
+        self.assertEqual((data["streak"], data["done_today"], data["weak_topics"]), (0, False, []))
+        self.send(answers=self.right_answers())
+        data = self.client.get(f"/api/v1/prep/plans/{self.plan.pk}").json()
+        self.assertTrue(data["done_today"])
+        self.assertEqual(data["streak"], 1)
         for q in self.qs[:2]:
             self.answer(q, False, timezone.localdate())
-        self.assertContains(self.client.get(reverse("prep_plan", args=[self.plan.pk])), "Worth another look")
+        self.assertTrue(self.client.get(f"/api/v1/prep/plans/{self.plan.pk}").json()["weak_topics"])
 
-    def test_the_dashboard_offers_practice_when_nothing_else_is_pending_and_the_feature_can_be_off(self):
+    def test_the_dashboard_offers_practice_and_the_feature_can_be_off(self):
+        step = self.client.get("/api/v1/dashboard").json()["next_step"]
+        self.assertTrue(step)
         SiteConfig.objects.filter(pk=1).update(prep_enabled=False)
-        self.assertNotContains(self.client.get(reverse("dashboard")), "Today&#x27;s practice is ready")
-        self.assertEqual(self.client.get(reverse("prep_today", args=[self.plan.pk])).status_code, 404)
+        self.assertEqual(self.today().status_code, 404)
 
     def test_the_daily_count_is_an_admin_setting(self):
         SiteConfig.objects.filter(pk=1).update(prep_daily_questions=2)
-        self.client.get(reverse("prep_today", args=[self.plan.pk]))
+        self.today()
         self.assertEqual(PrepChallenge.objects.get(plan=self.plan).items.count(), 2)
 
     def test_answers_are_in_the_export_and_go_with_the_account(self):
-        self.post_all()
-        import json
-
+        self.send(answers=self.right_answers())
         data = json.loads(self.client.get(reverse("export_data")).content)
         self.assertEqual(len(data["prep_plans"][0]["answers"]), 3)
         self.user.delete()

@@ -21,8 +21,8 @@ def _version(v: CVVersion) -> dict:
     return {
         "id": v.pk, "label": v.label or v.get_kind_display(), "kind": v.kind, "kind_label": v.get_kind_display(),
         "created": v.created_at.date().isoformat(), "flagged": bool(v.flagged),
-        # file downloads and the print page stay on their classic addresses
-        "docx_url": reverse("cv_download", args=[v.pk, "docx"]), "print_url": reverse("cv_print", args=[v.pk]), "open_url": reverse("cv_detail", args=[v.pk]),
+        # file downloads and the print page stay on their classic addresses; the front end builds the in-app link to the CV itself
+        "docx_url": reverse("cv_download", args=[v.pk, "docx"]), "print_url": reverse("cv_print", args=[v.pk]),
     }
 
 
@@ -44,7 +44,7 @@ def get_apply(request, job_id: int):
         "selected": versions[0].pk if versions else None,
         "has_flagged": CVVersion.objects.filter(owner=request.user, application=app).exists() and not any(v.kind == "tailored" for v in versions),
         "cover_letters": [
-            {"id": l.pk, "created": l.created_at.date().isoformat(), "needs_review": bool(l.flagged and not l.approved), "open_url": reverse("cover_detail", args=[l.pk])}
+            {"id": l.pk, "created": l.created_at.date().isoformat(), "needs_review": bool(l.flagged and not l.approved)}
             for l in letters
         ],
         "draft": apply_service.email_draft(app),

@@ -59,7 +59,6 @@ def _profile_json(user) -> dict:
             "seniority_levels": profile.seniority_levels, "industries": profile.industries, "languages": profile.languages,
             "notice_period": profile.notice_period, "salary_floor": profile.salary_floor, "deal_breakers": profile.deal_breakers,
             "about": profile.about, "profile_cv": profile.profile_cv, "scan_digest_enabled": profile.scan_digest_enabled,
-            "use_new_app": profile.use_new_app,
         },
         "choices": {
             "employment_types": [{"value": v, "label": label} for v, label in UserProfile.EMPLOYMENT],
@@ -69,7 +68,7 @@ def _profile_json(user) -> dict:
         "areas": [area_json(a) for a in areas],
         "max_areas": forms.MAX_AREAS,
         "site": {
-            "new_app_enabled": site.new_app_enabled, "scan_emails_enabled": site.scan_emails_enabled, "assistant_enabled": site.mcp_remote_enabled,
+            "scan_emails_enabled": site.scan_emails_enabled, "assistant_enabled": site.mcp_remote_enabled,
         },
         "account": {
             "username": user.get_username(), "email": user.email, "is_staff": user.is_staff, "can_delete": not user.is_staff,
@@ -81,7 +80,6 @@ def _profile_json(user) -> dict:
             "classic": {
                 "email": reverse("account_email"), "password": reverse("account_change_password"), "two_step": reverse("mfa_index"),
                 "connections": reverse("socialaccount_connections"), "export": reverse("export_data"), "privacy": reverse("privacy"),
-                "documents": reverse("knowledge"),
             },
         },
     }
@@ -93,14 +91,14 @@ def get_profile(request):
 
 
 def _save_profile(request):
-    from ..views import _save_cv_history
+    from ..services.account import save_cv_history
 
     data, files = read_payload(request)
     obj = UserProfile.for_user(request.user)
     form = forms.ProfileForm(merged(forms.ProfileForm(instance=obj), data), files, instance=obj)
     validate_form(form)
     form.save()
-    _save_cv_history(request, obj, form)
+    save_cv_history(request.user, obj, form)
     return _profile_json(request.user)
 
 
@@ -168,7 +166,7 @@ def get_welcome(request):
 
 @router.post("/welcome", summary="Save the welcome answers")
 def save_welcome(request):
-    from ..views import _save_cv_history
+    from ..services.account import save_cv_history
 
     data, files = read_payload(request)
     obj = UserProfile.for_user(request.user)
@@ -176,7 +174,7 @@ def save_welcome(request):
     form = forms.WelcomeForm(merged(forms.WelcomeForm(instance=obj), data), files, instance=obj)
     validate_form(form)
     form.save()
-    _save_cv_history(request, obj, form)
+    save_cv_history(request.user, obj, form)
     forms.create_default_areas(request.user, obj.home_country, form.cleaned_data.get("open_remote", False), form.cleaned_data.get("other_places", ""))
     obj.onboarding_done = True
     obj.save(update_fields=["onboarding_done"])

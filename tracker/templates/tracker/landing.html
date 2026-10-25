@@ -12,7 +12,7 @@
         <h1 class="display-5 fw-bold mb-3">{{ config.landing_headline }}</h1>
         <p class="so-lead mb-4">{{ config.landing_subheadline }}</p>
         <div class="d-flex flex-wrap gap-2 mb-3">
-          {% if user.is_authenticated %}<a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Open dashboard</a>
+          {% if user.is_authenticated %}<a class="btn btn-primary btn-lg" href="/app/">Open dashboard</a>
           {% elif config.signup_open %}<a class="btn btn-primary btn-lg" href="{% url 'account_signup' %}">Create a free account</a>
           <a class="btn btn-outline-secondary btn-lg" href="{% url 'account_login' %}">Sign in</a>
           {% else %}<a class="btn btn-primary btn-lg" href="{% url 'account_login' %}">Sign in</a>{% endif %}
@@ -326,7 +326,7 @@
     <h2 class="display-6 fw-bold">Stop opening tabs. Start applying.</h2>
     <p class="so-lead mx-auto">Create your free account, answer three questions, and your first matches appear in about a minute.</p>
     <div class="d-flex justify-content-center flex-wrap gap-2">
-      {% if user.is_authenticated %}<a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Open dashboard</a>
+      {% if user.is_authenticated %}<a class="btn btn-primary btn-lg" href="/app/">Open dashboard</a>
       {% elif config.signup_open %}<a class="btn btn-primary btn-lg" href="{% url 'account_signup' %}">Create a free account</a>
       <a class="btn btn-outline-secondary btn-lg" href="{% url 'account_login' %}">Sign in</a>
       {% else %}<a class="btn btn-primary btn-lg" href="{% url 'account_login' %}">Sign in</a>{% endif %}

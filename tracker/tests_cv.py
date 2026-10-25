@@ -295,7 +295,15 @@ class Export(TestCase):
         self.assertEqual([t for t, _ in rows], ["same", "del", "add", "same", "add"])
 
 
+def _json(client, method, url, body=None):
+    import json
+
+    return getattr(client, method)(url, data=json.dumps(body or {}), content_type="application/json")
+
+
 class Pages(TestCase):
+    """The CV screens run on the JSON API; the downloads and the print page are plain files."""
+
     def setUp(self):
         self.u = person()
         self.other = person("bob")
@@ -308,34 +316,33 @@ class Pages(TestCase):
         return CVVersion.objects.create(**fields)
 
     def test_profile_cv_changes_land_in_the_history_once(self):
-        data = {"target_roles": "Dev", "remote_preference": "any", "profile_cv": MASTER + "\n- First edit"}
-        self.client.post(reverse("profile"), data)
-        self.client.post(reverse("profile"), data)  # saving the same text again adds nothing
-        self.client.post(reverse("profile"), {**data, "profile_cv": MASTER + "\n- Second edit"})
+        data = {"target_roles": "Dev", "profile_cv": MASTER + "\n- First edit"}
+        _json(self.client, "put", "/api/v1/profile", data)
+        _json(self.client, "put", "/api/v1/profile", data)  # saving the same text again adds nothing
+        _json(self.client, "put", "/api/v1/profile", {**data, "profile_cv": MASTER + "\n- Second edit"})
         texts = list(CVVersion.objects.filter(owner=self.u, kind="master").order_by("pk").values_list("content", flat=True))
         self.assertEqual(len(texts), 2)
         self.assertTrue(texts[-1].endswith("Second edit"))
 
     def test_list_creates_the_first_version_from_the_profile_cv(self):
         self.assertEqual(CVVersion.objects.filter(owner=self.u).count(), 0)
-        self.assertContains(self.client.get(reverse("cv_list")), "Initial CV")
+        data = self.client.get("/api/v1/cv").json()
+        self.assertEqual(len(data["masters"]), 1)
         self.assertEqual(CVVersion.objects.filter(owner=self.u, kind="master").count(), 1)
 
-    def test_tailor_button_creates_a_version_and_dashboard_links_it(self):
-        r = self.client.post(reverse("tailor_cv", args=[self.app.pk]), {"mode": "keywords"})
+    def test_tailoring_creates_a_version_the_dashboard_links(self):
+        r = _json(self.client, "post", f"/api/v1/jobs/{self.app.pk}/tailor", {"mode": "keywords"})
         v = CVVersion.objects.get(owner=self.u, kind="tailored")
-        self.assertRedirects(r, reverse("cv_detail", args=[v.pk]), fetch_redirect_response=False)
-        dashboard = self.client.get(reverse("dashboard")).content.decode()
-        self.assertTrue("Tailor my CV" in dashboard)
-        self.assertTrue(f"CV v{v.pk}" in dashboard)
+        self.assertEqual(r.json()["id"], v.pk)
+        job_row = next(x for x in self.client.get("/api/v1/dashboard").json()["jobs"] if x["id"] == self.app.pk)
+        self.assertEqual(job_row["cv"]["id"], v.pk)
 
     def test_flagged_versions_are_locked_until_approved(self):
         v = self.tailored(content="# Jane\n- Founded Google in 1998", check_report=[{"kind": "number", "text": "1998", "line": 2}])
         for name, args in [("cv_print", [v.pk]), ("cv_download", [v.pk, "docx"]), ("cv_download", [v.pk, "md"])]:
             self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 404, name)
-        page = self.client.get(reverse("cv_detail", args=[v.pk])).content.decode()
-        self.assertTrue("Check these before you use this CV" in page)
-        self.client.post(reverse("cv_approve", args=[v.pk]))
+        self.assertFalse(self.client.get(f"/api/v1/cv/{v.pk}").json()["exportable"])
+        _json(self.client, "post", f"/api/v1/cv/{v.pk}/approve")
         r = self.client.get(reverse("cv_download", args=[v.pk, "docx"]))
         self.assertEqual(r.status_code, 200)
         self.assertIn("wordprocessingml", r["Content-Type"])
@@ -343,13 +350,12 @@ class Pages(TestCase):
         self.assertEqual(self.client.get(reverse("cv_download", args=[v.pk, "md"])).status_code, 200)
         self.assertEqual(self.client.get(reverse("cv_download", args=[v.pk, "pdf"])).status_code, 404)
 
-    def test_print_and_detail_pages_escape_hostile_content(self):
+    def test_the_print_page_escapes_hostile_content(self):
         evil = "# </textarea><script>alert('x')</script>\n- <img src=x onerror=alert(1)>"
         v = self.tailored(content=evil)
-        for url in [reverse("cv_print", args=[v.pk]), reverse("cv_detail", args=[v.pk])]:
-            page = self.client.get(url).content.decode()
-            self.assertFalse("<script>alert" in page, url)
-            self.assertFalse("<img src=x" in page, url)
+        page = self.client.get(reverse("cv_print", args=[v.pk])).content.decode()
+        self.assertFalse("<script>alert" in page)
+        self.assertFalse("<img src=x" in page)
 
     def test_download_filename_is_sanitised(self):
         v = self.tailored(label='x"; filename="evil.exe')
@@ -359,9 +365,9 @@ class Pages(TestCase):
 
     def test_edit_creates_a_new_version(self):
         v = self.tailored(content="# Jane\n- Built things", check_report=[])
-        r = self.client.post(reverse("cv_detail", args=[v.pk]), {"content": "# Jane\n- Built better things", "label": "Tweaked"})
+        r = _json(self.client, "post", f"/api/v1/cv/{v.pk}/edit", {"content": "# Jane\n- Built better things", "label": "Tweaked"})
         new = CVVersion.objects.exclude(pk=v.pk).get(owner=self.u, kind="tailored")
-        self.assertRedirects(r, reverse("cv_detail", args=[new.pk]), fetch_redirect_response=False)
+        self.assertEqual(r.json()["id"], new.pk)
         self.assertEqual((new.parent, new.label), (v, "Tweaked"))
         v.refresh_from_db()
         self.assertEqual(v.content, "# Jane\n- Built things")
@@ -369,23 +375,23 @@ class Pages(TestCase):
     def test_diff_defaults_to_the_parent_and_rejects_other_peoples_versions(self):
         master = cvversions.ensure_master(self.u, SiteConfig.for_user(self.u))
         v = self.tailored(parent=master, content=MASTER + "\n- Extra")
-        r = self.client.get(reverse("cv_diff", args=[v.pk]))
-        self.assertContains(r, "Extra")
+        rows = self.client.get(f"/api/v1/cv/{v.pk}/diff").json()["rows"]
+        self.assertTrue(any("Extra" in r["text"] for r in rows))
         theirs = CVVersion.objects.create(owner=self.other, kind="master", content="Bob's secret CV")
-        self.assertEqual(self.client.get(reverse("cv_diff", args=[v.pk]) + f"?against={theirs.pk}").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/v1/cv/{v.pk}/diff?against={theirs.pk}").status_code, 404)
 
     def test_masters_cannot_be_deleted_tailored_can(self):
         master = cvversions.ensure_master(self.u, SiteConfig.for_user(self.u))
-        self.client.post(reverse("cv_delete", args=[master.pk]))
+        self.client.delete(f"/api/v1/cv/{master.pk}")
         self.assertTrue(CVVersion.objects.filter(pk=master.pk).exists())
         v = self.tailored()
-        self.client.post(reverse("cv_delete", args=[v.pk]))
+        self.client.delete(f"/api/v1/cv/{v.pk}")
         self.assertFalse(CVVersion.objects.filter(pk=v.pk).exists())
 
-    def test_restore_from_the_page(self):
+    def test_restore(self):
         v1 = cvversions.ensure_master(self.u, SiteConfig.for_user(self.u))
         cvversions.new_version_from_edit(v1, MASTER + "\n- Later", SiteConfig.for_user(self.u))
-        self.client.post(reverse("cv_restore", args=[v1.pk]))
+        _json(self.client, "post", f"/api/v1/cv/{v1.pk}/restore")
         self.assertEqual(UserProfile.objects.get(user=self.u).profile_cv, v1.content)
 
     @override_settings(STILLOPEN_CVGEN_PER_HOUR=1)
@@ -393,22 +399,25 @@ class Pages(TestCase):
         from django.core.cache import cache
 
         cache.clear()
-        self.client.post(reverse("tailor_cv", args=[self.app.pk]), {"mode": "keywords"})
-        r = self.client.post(reverse("tailor_cv", args=[self.app.pk]), {"mode": "keywords"}, follow=True)
-        self.assertContains(r, "Too many CV requests")
+        url = f"/api/v1/jobs/{self.app.pk}/tailor"
+        self.assertEqual(_json(self.client, "post", url, {"mode": "keywords"}).status_code, 200)
+        r = _json(self.client, "post", url, {"mode": "keywords"})
+        self.assertEqual(r.status_code, 429)
+        self.assertIn("Too many CV requests", r.json()["error"])
         self.assertEqual(CVVersion.objects.filter(kind="tailored").count(), 1)
 
     def test_a_flagged_result_tells_the_person(self):
         with mock.patch("tracker.services.cvgen.ai.complete", return_value="# Jane\n- Led 500 engineers at Google"):
             UserProfile.objects.filter(user=self.u).update(ai_provider="openai", ai_base_url="https://api.example.test/v1")
-            r = self.client.post(reverse("tailor_cv", args=[self.app.pk]), {"mode": "ai"}, follow=True)
-        self.assertContains(r, "not in your own material")
+            r = _json(self.client, "post", f"/api/v1/jobs/{self.app.pk}/tailor", {"mode": "ai"})
+        self.assertTrue(r.json()["flagged"])
+        self.assertGreaterEqual(r.json()["flagged_count"], 1)
 
-    def test_state_changing_endpoints_need_post(self):
+    def test_state_changing_endpoints_need_post_or_delete(self):
         v = self.tailored()
-        for name in ("cv_approve", "cv_restore", "cv_delete"):
-            self.assertEqual(self.client.get(reverse(name, args=[v.pk])).status_code, 405, name)
-        self.assertEqual(self.client.get(reverse("tailor_cv", args=[self.app.pk])).status_code, 405)
+        for tail in ("approve", "restore"):
+            self.assertEqual(self.client.get(f"/api/v1/cv/{v.pk}/{tail}").status_code, 405, tail)
+        self.assertEqual(self.client.get(f"/api/v1/jobs/{self.app.pk}/tailor").status_code, 405)
 
 
 class Isolation(TestCase):
@@ -419,26 +428,28 @@ class Isolation(TestCase):
         self.client.force_login(self.a)
 
     def test_every_cv_endpoint_404s_for_someone_elses_version(self):
-        for name, args in [("cv_detail", [self.theirs.pk]), ("cv_diff", [self.theirs.pk]), ("cv_print", [self.theirs.pk]),
-                           ("cv_download", [self.theirs.pk, "docx"]), ("cv_download", [self.theirs.pk, "md"])]:
-            self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 404, name)
-        for name in ("cv_approve", "cv_restore", "cv_delete"):
-            self.assertEqual(self.client.post(reverse(name, args=[self.theirs.pk])).status_code, 404, name)
-        self.assertEqual(self.client.post(reverse("cv_detail", args=[self.theirs.pk]), {"content": "hijack"}).status_code, 404)
-        self.assertEqual(self.client.post(reverse("tailor_cv", args=[self.theirs_job.pk])).status_code, 404)
+        pk = self.theirs.pk
+        for url in (f"/api/v1/cv/{pk}", f"/api/v1/cv/{pk}/diff", f"/cv/{pk}/print/", f"/cv/{pk}/download/docx/", f"/cv/{pk}/download/md/"):
+            self.assertEqual(self.client.get(url).status_code, 404, url)
+        for tail in ("approve", "restore"):
+            self.assertEqual(_json(self.client, "post", f"/api/v1/cv/{pk}/{tail}").status_code, 404, tail)
+        self.assertEqual(self.client.delete(f"/api/v1/cv/{pk}").status_code, 404)
+        self.assertEqual(_json(self.client, "post", f"/api/v1/cv/{pk}/edit", {"content": "hijack"}).status_code, 404)
+        self.assertEqual(_json(self.client, "post", f"/api/v1/jobs/{self.theirs_job.pk}/tailor").status_code, 404)
         self.theirs.refresh_from_db()
         self.assertEqual(self.theirs.content, "# Bob\n- Secret")
         self.assertFalse(self.theirs.approved)
 
     def test_lists_and_exports_show_only_my_versions(self):
-        self.assertNotContains(self.client.get(reverse("cv_list")), "BobCo")
+        listed = self.client.get("/api/v1/cv").json()
+        self.assertNotIn("BobCo", str(listed))
         data = self.client.get(reverse("export_data")).json()
         self.assertEqual(data["cv_versions"][0]["kind"], "master")
         self.assertFalse(any("Secret" in v["content"] for v in data["cv_versions"]))
 
     def test_deleting_an_account_deletes_its_versions(self):
         self.client.force_login(self.b)
-        self.client.post(reverse("delete_account"), {"confirm": "bob"})
+        _json(self.client, "post", "/api/v1/account/delete", {"confirm": "bob"})
         self.assertFalse(CVVersion.objects.filter(owner_id=self.b.pk).exists())
 
 

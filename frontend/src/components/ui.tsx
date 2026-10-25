@@ -24,7 +24,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
 });
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-lg border border-border bg-surface p-4", className)} {...props} />;
+  return <div className={cn("rounded-2xl border border-border bg-surface p-4 sm:p-5", className)} {...props} />;
 }
 
 export function Badge({ children, tone = "muted", className }: { children: ReactNode; tone?: "muted" | "good" | "warn" | "bad" | "brand"; className?: string }) {
@@ -67,7 +67,7 @@ export function Loading({ what = "this page" }: { what?: string }) {
 
 export function ErrorBox({ message, onRetry }: { message?: string; onRetry?: () => void }) {
   return (
-    <div role="alert" className="rounded-lg border border-border bg-surface p-4">
+    <div role="alert" className="rounded-2xl border border-border bg-surface p-4">
       <p className="font-medium">{message || "We could not load this."}</p>
       {onRetry && (
         <Button className="mt-2" onClick={onRetry}>

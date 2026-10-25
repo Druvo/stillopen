@@ -40,6 +40,17 @@ def job(owner, **kw):
     return Application.objects.create(**fields)
 
 
+def api(client, method, path, body=None, **extra):
+    """A call to the app's JSON API (`/api/v1`). `body` is sent as JSON."""
+    if body is None and method in ("get", "delete"):
+        return getattr(client, method)(f"/api/v1{path}", **extra)
+    return getattr(client, method)(f"/api/v1{path}", data=json.dumps(body or {}), content_type="application/json", **extra)
+
+
+def signed_in(client) -> bool:
+    return client.get("/api/v1/me").status_code == 200
+
+
 class Isolation(TestCase):
     def setUp(self):
         cache.clear()
@@ -49,16 +60,15 @@ class Isolation(TestCase):
         self.client.force_login(self.a)
 
     def test_dashboard_shows_only_my_jobs(self):
-        r = self.client.get(reverse("dashboard"))
-        self.assertContains(r, "AliceCo")
-        self.assertNotContains(r, "BobCo")
-        self.assertNotContains(r, "bob summary")
-        self.assertContains(r, "Jobs you are tracking")
+        data = api(self.client, "get", "/dashboard").json()
+        self.assertEqual([j["company"] for j in data["jobs"]], ["AliceCo"])
+        self.assertNotIn("BobCo", json.dumps(data))
+        self.assertNotIn("bob summary", json.dumps(data))
 
     def test_cannot_act_on_someone_elses_job(self):
         applied = Status.objects.get(name="Applied")
-        self.assertEqual(self.client.post(reverse("set_status", args=[self.job_b.pk]), {"status": applied.pk}).status_code, 404)
-        self.assertEqual(self.client.post(reverse("evaluate", args=[self.job_b.pk])).status_code, 404)
+        self.assertEqual(api(self.client, "patch", f"/jobs/{self.job_b.pk}/status", {"status": applied.pk}).status_code, 404)
+        self.assertEqual(api(self.client, "post", f"/jobs/{self.job_b.pk}/evaluate").status_code, 404)
         self.job_b.refresh_from_db()
         self.assertEqual(self.job_b.status.name, "Evaluated")
         self.assertIsNone(self.job_b.score)
@@ -71,10 +81,10 @@ class Isolation(TestCase):
 
     def test_cannot_touch_someone_elses_knowledge(self):
         src = KnowledgeSource.objects.create(owner=self.b, title="Bob notes", text="private")
-        for action in ("delete", "toggle"):
-            self.assertEqual(self.client.post(reverse("knowledge_action", args=[src.pk, action])).status_code, 404)
+        self.assertEqual(api(self.client, "post", f"/documents/{src.pk}/toggle").status_code, 404)
+        self.assertEqual(api(self.client, "delete", f"/documents/{src.pk}").status_code, 404)
         self.assertTrue(KnowledgeSource.objects.filter(pk=src.pk, enabled=True).exists())
-        self.assertNotContains(self.client.get(reverse("knowledge")), "Bob notes")
+        self.assertNotIn("Bob notes", json.dumps(api(self.client, "get", "/documents").json()))
 
     def test_export_contains_only_my_data_and_no_secrets(self):
         UserProfile.objects.get(user=self.a).set_ai_key("sk-alice-secret")
@@ -94,13 +104,13 @@ class Isolation(TestCase):
 
     def test_liveness_runs_are_per_person(self):
         LivenessRun.objects.create(owner=self.b, total=9, done=4, running=True)
-        data = self.client.get(reverse("liveness_status")).json()
+        data = api(self.client, "get", "/liveness/status").json()
         self.assertEqual(data["total"], 0)  # Bob's run is not Alice's
 
     def test_scan_runs_and_results_are_per_person(self):
         JobSource.objects.create(name="Acme", connector="greenhouse", board_token="acme", enabled=True)
         other_run = ScanRun.objects.create(owner=self.b, total=9, done=4, running=True)
-        data = self.client.get(reverse("scan_status")).json()
+        data = api(self.client, "get", "/scan/status").json()
         self.assertEqual(data["total"], 0)  # Bob's run is not Alice's
         with mock.patch("tracker.services.scan.fetch_greenhouse") as fetch:
             fetch.return_value = [{"title": "Senior Backend Engineer", "url": "https://x.test/1", "location": ""}]
@@ -111,14 +121,15 @@ class Isolation(TestCase):
 
     def test_anonymous_visitors_reach_nothing_private(self):
         self.client.logout()
-        for name, args in [("dashboard", []), ("profile", []), ("profile_ai", []), ("knowledge", []), ("add_job", []),
-                           ("export_data", []), ("document_file", [1]), ("scan_status", []), ("all_postings", [])]:
-            r = self.client.get(reverse(name, args=args))
-            self.assertEqual(r.status_code, 302, name)
+        for path in ("/app/", "/profile/export/", "/document/1/", "/cv/1/print/", "/cv/1/download/md/", "/cover/1/download/txt/"):
+            r = self.client.get(path)
+            self.assertEqual(r.status_code, 302, path)
             self.assertIn("/accounts/login/", r["Location"])
-        for name, args in [("set_status", [self.job_a.pk]), ("evaluate", [self.job_a.pk]), ("liveness_start", []),
-                           ("scan_start", []), ("delete_account", []), ("import_tracker", []), ("add_posting", [1])]:
-            self.assertEqual(self.client.post(reverse(name, args=args)).status_code, 302, name)
+        for path in ("/me", "/dashboard", "/scan/status", "/postings", "/profile", "/ai-settings", "/documents", "/cv", "/interviews", "/offers"):
+            self.assertEqual(api(self.client, "get", path).status_code, 401, path)
+        for path in (f"/jobs/{self.job_a.pk}/evaluate", "/liveness", "/scan", "/account/delete", "/import", "/postings/1/add"):
+            self.assertEqual(api(self.client, "post", path).status_code, 401, path)
+        self.assertEqual(api(self.client, "patch", f"/jobs/{self.job_a.pk}/status", {"status": 1}).status_code, 401)
 
     def test_all_postings_never_shows_someone_elses_tracked_status(self):
         from tracker.models import JobSource, Posting
@@ -127,40 +138,41 @@ class Isolation(TestCase):
         src = JobSource.objects.create(name="Acme", connector="greenhouse", board_token="acme", enabled=True)
         p = scan.record_sighting(src, "Backend Engineer", "https://x.test/shared", "Remote", company="Acme")
         job(self.b, url="https://x.test/shared", role="Backend Engineer")  # Bob tracked it
-        r = self.client.get(reverse("all_postings"))  # Alice, who hasn't
-        self.assertContains(r, "Add to tracker")
-        self.assertNotContains(r, "Tracked")
+        data = api(self.client, "get", "/postings").json()  # Alice, who hasn't
+        self.assertEqual(len(data["postings"]), 1)
+        self.assertFalse(data["postings"][0]["tracked"])
+        self.assertIsNone(data["postings"][0]["job_id"])
 
 
 class StaffOnly(TestCase):
     def test_server_features_are_admin_only(self):
         normal = user("normal")
         self.client.force_login(normal)
-        r = self.client.post(reverse("import_tracker"))
+        r = api(self.client, "post", "/import")
         self.assertEqual(r.status_code, 403)
-        self.assertFalse(r.json()["ok"])
         doc_app = job(normal)
         doc = Document.objects.create(application=doc_app, kind=DocumentKind.objects.get(name="CV"), title="x", source_path="/x")
-        self.assertEqual(self.client.post(reverse("push_to_paperless", args=[doc.pk])).status_code, 403)
+        self.assertEqual(api(self.client, "post", f"/documents/files/{doc.pk}/paperless").status_code, 403)
         self.assertEqual(self.client.get("/admin/").status_code, 302)  # sent to the admin login, not in
 
-    def test_dashboard_hides_server_buttons_from_normal_users(self):
+    def test_dashboard_hides_server_features_from_normal_users(self):
         SiteConfig.objects.filter(pk=1).update(careerops_path="/srv/careerops", paperless_enabled=True, paperless_url="http://p.test")
         self.client.force_login(user("normal"))
-        page = self.client.get(reverse("dashboard")).content.decode()
-        self.assertFalse('id="btn-import"' in page)
-        self.assertFalse("/srv/careerops" in page)
-        self.assertFalse("Admin</a>" in page)
+        data = api(self.client, "get", "/dashboard").json()
+        self.assertFalse(data["can_import"])
+        self.assertFalse(data["paperless_on"])
+        self.assertEqual(data["paperless_url"], "")
+        self.assertNotIn("/srv/careerops", json.dumps(data))
+        self.assertFalse(api(self.client, "get", "/me").json()["is_staff"])
         self.client.force_login(user("boss", staff=True))
-        page = self.client.get(reverse("dashboard")).content.decode()
-        self.assertTrue('id="btn-import"' in page)
-        self.assertTrue("Admin</a>" in page)
+        data = api(self.client, "get", "/dashboard").json()
+        self.assertTrue(data["can_import"])
+        self.assertTrue(api(self.client, "get", "/me").json()["is_staff"])
 
     def test_ai_quick_setup_local_presets_are_admin_only(self):
         self.client.force_login(user("boss2staff", staff=True))
-        page = self.client.get(reverse("profile_ai")).content.decode()
-        self.assertIn("Ollama -- local", page)
-        self.assertIn("LM Studio -- local", page)
+        keys = {p["key"] for p in api(self.client, "get", "/ai-settings").json()["presets"]}
+        self.assertTrue({"ollama", "lmstudio"} <= keys)
 
 
 class PerUserConfig(TestCase):
@@ -261,126 +273,107 @@ class ServerSideRequestForgery(TestCase):
 
 
 class ProfilePages(TestCase):
+    """Profile and AI settings are saved through the app's API (more rules in tests_api_account)."""
+
     def setUp(self):
         self.u = user("pat")
         self.client.force_login(self.u)
 
-    def test_dashboard_nudges_until_the_profile_is_complete(self):
-        self.assertContains(self.client.get(reverse("dashboard")), "Finish your profile")
-        self.client.post(reverse("profile"), {
-            "target_roles": "Backend Engineer", "locations": "Dhaka", "remote_preference": "any", "profile_cv": CV,
-        })
-        self.assertNotContains(self.client.get(reverse("dashboard")), "Finish your profile")
+    def next_step(self):
+        return api(self.client, "get", "/dashboard").json()["next_step"]
 
-    def test_banner_names_exactly_what_is_missing(self):
-        # Neither set yet: both named.
-        self.assertContains(self.client.get(reverse("dashboard")), "the roles you want and your CV")
-        # Only target_roles set: banner should name just the CV, not both.
-        self.client.post(reverse("profile"), {"target_roles": "Backend Engineer"})
-        r = self.client.get(reverse("dashboard"))
-        self.assertContains(r, "Finish your profile")
-        self.assertContains(r, "your CV")
-        self.assertNotContains(r, "the roles you want")
-        # Both set: banner gone.
-        self.client.post(reverse("profile"), {"target_roles": "Backend Engineer", "profile_cv": CV})
-        self.assertNotContains(self.client.get(reverse("dashboard")), "Finish your profile")
+    def test_the_app_nudges_until_the_profile_is_complete(self):
+        self.assertIn("Finish your profile", self.next_step()["headline"])
+        api(self.client, "put", "/profile", {"target_roles": "Backend Engineer", "profile_cv": CV})
+        step = self.next_step()
+        self.assertFalse(step and "Finish your profile" in step["headline"])
+
+    def test_the_nudge_names_exactly_what_is_missing(self):
+        self.assertIn("the roles you want and your CV", self.next_step()["body"])
+        api(self.client, "put", "/profile", {"target_roles": "Backend Engineer"})
+        step = self.next_step()
+        self.assertIn("Finish your profile", step["headline"])
+        self.assertIn("your CV", step["body"])
+        self.assertNotIn("the roles you want", step["body"])
+        api(self.client, "put", "/profile", {"target_roles": "Backend Engineer", "profile_cv": CV})
+        step = self.next_step()
+        self.assertFalse(step and "Finish your profile" in step["headline"])
 
     def test_profile_saves_roles_and_cv(self):
-        r = self.client.post(reverse("profile"), {
+        r = api(self.client, "put", "/profile", {
             "target_roles": "Backend Engineer\nSolutions Architect",
             "salary_floor": "100,000 BDT/month", "deal_breakers": "On-call", "about": "8 years", "profile_cv": CV,
-            "areas-TOTAL_FORMS": 1, "areas-INITIAL_FORMS": 0, "areas-MIN_NUM_FORMS": 0, "areas-MAX_NUM_FORMS": 25,
-            "areas-0-place": "Anywhere", "areas-0-allow_remote": "on", "areas-0-salary_period": "month",
         })
-        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.status_code, 200, r.content)
+        api(self.client, "post", "/profile/areas", {"place": "Anywhere", "allow_remote": True, "salary_period": "month"})
         p = UserProfile.objects.get(user=self.u)
         self.assertEqual(p.target_roles, "Backend Engineer\nSolutions Architect")
         text = p.preferences_text()
         for expected in ["Backend Engineer; Solutions Architect", "Anywhere: remote", "100,000 BDT/month", "On-call", "8 years"]:
             self.assertIn(expected, text)
         self.assertTrue(p.is_complete)
-        self.assertContains(self.client.get(reverse("profile")), "Backend Engineer")
+        self.assertEqual(api(self.client, "get", "/profile").json()["profile"]["target_roles"], "Backend Engineer\nSolutions Architect")
 
     def test_cv_upload_fills_the_cv_text_and_keeps_no_file(self):
         with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
-            r = self.client.post(reverse("profile"), {
-                "target_roles": "Dev", "remote_preference": "any", "profile_cv": "",
+            r = self.client.post("/api/v1/profile", {
+                "target_roles": "Dev", "profile_cv": "",
                 "cv_file": SimpleUploadedFile("cv.txt", b"Uploaded CV about Rust and Go."),
             })
-            self.assertEqual(r.status_code, 302)
+            self.assertEqual(r.status_code, 200, r.content)
             import os
             self.assertEqual(os.listdir(media), [])  # only the text is stored
         self.assertIn("Rust and Go", UserProfile.objects.get(user=self.u).profile_cv)
 
     def test_bad_cv_upload_is_rejected_with_a_reason(self):
-        r = self.client.post(reverse("profile"), {
-            "target_roles": "Dev", "remote_preference": "any", "profile_cv": "",
+        r = self.client.post("/api/v1/profile", {
+            "target_roles": "Dev", "profile_cv": "",
             "cv_file": SimpleUploadedFile("cv.exe", b"MZ"),
         })
-        self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "Upload a .txt, .md or .pdf file")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Upload a .txt, .md or .pdf file", r.json()["error"])
 
-    def test_ai_page_never_shows_a_saved_key(self):
-        r = self.client.post(reverse("profile_ai"), {
-            "ai_provider": "anthropic", "ai_model": "", "ai_base_url": "", "ai_custom_headers": "", "ai_custom_body": "",
-            "ai_custom_response_path": "", "ai_timeout": 60, "ai_max_input_chars": 8000, "rag_enabled": "on", "rag_mode": "lexical",
-            "rag_top_k": 5, "rag_chunk_chars": 900, "rag_always_chars": 1500, "rag_embedding_base_url": "", "rag_embedding_model": "",
-            "ai_api_key": "sk-ant-visible-secret",
-        })
-        self.assertEqual(r.status_code, 302)
+    def test_ai_settings_never_show_a_saved_key(self):
+        r = api(self.client, "put", "/ai-settings", {"ai_provider": "anthropic", "ai_api_key": "sk-ant-visible-secret"})
+        self.assertEqual(r.status_code, 200, r.content)
         profile = UserProfile.objects.get(user=self.u)
         self.assertNotIn("visible-secret", profile.ai_key_encrypted)
         self.assertEqual(profile.effective_ai_key, "sk-ant-visible-secret")
-        page = self.client.get(reverse("profile_ai")).content.decode()
-        self.assertNotIn("visible-secret", page)
-        self.assertIn("saved", page)
+        text = api(self.client, "get", "/ai-settings").content.decode()
+        self.assertNotIn("visible-secret", text)
+        self.assertNotIn("visible-secret", r.content.decode())
+        self.assertTrue(api(self.client, "get", "/ai-settings").json()["has_key"])
 
-    def test_ai_page_offers_provider_quick_setup_presets(self):
-        page = self.client.get(reverse("profile_ai"))
-        self.assertContains(page, 'id="ai-preset"')
-        for name in ("Google Gemini", "Groq", "Mistral", "DeepSeek", "OpenRouter", "GLM / Zhipu AI"):
-            self.assertContains(page, name)
-        self.assertNotContains(page, "Ollama -- local")  # local-only presets are for site admins, not this user
-        self.assertNotContains(page, "LM Studio -- local")
-
-    def test_ai_page_shows_no_usage_yet_then_this_months_total(self):
-        page = self.client.get(reverse("profile_ai"))
-        self.assertContains(page, "No paid-provider AI calls yet this month")
+    def test_ai_settings_show_no_usage_yet_then_this_months_total(self):
+        self.assertEqual(api(self.client, "get", "/ai-settings").json()["usage"]["calls"], 0)
         AIUsageEvent.objects.create(owner=self.u, provider="anthropic", purpose="evaluate", input_tokens=1000, output_tokens=200, cost_usd="0.0180", cost_is_estimate=True)
-        page = self.client.get(reverse("profile_ai"))
-        self.assertContains(page, "1 paid-provider call")
-        self.assertContains(page, "1200 tokens")
-        self.assertContains(page, "$0.0180")
+        usage = api(self.client, "get", "/ai-settings").json()["usage"]
+        self.assertEqual((usage["calls"], usage["total_tokens"], usage["cost_usd"]), (1, 1200, 0.018))
         other = User.objects.create_user("otherAiUser", password=PW)
         AIUsageEvent.objects.create(owner=other, provider="anthropic", purpose="evaluate", input_tokens=99999, output_tokens=99999)
-        page = self.client.get(reverse("profile_ai"))
-        self.assertContains(page, "1 paid-provider call")  # the other person's usage never shows up here
+        self.assertEqual(api(self.client, "get", "/ai-settings").json()["usage"]["calls"], 1)  # the other person's usage never shows up here
 
-    def _ai_post(self, **extra):
-        data = {
-            "ai_provider": "openai", "ai_model": "m", "ai_base_url": "", "ai_custom_headers": "", "ai_custom_body": "",
-            "ai_custom_response_path": "", "ai_timeout": 60, "ai_max_input_chars": 8000, "rag_enabled": "on", "rag_mode": "lexical",
-            "rag_top_k": 5, "rag_chunk_chars": 900, "rag_always_chars": 1500, "rag_embedding_base_url": "", "rag_embedding_model": "",
-        }
+    def _ai_put(self, **extra):
+        data = {"ai_provider": "openai", "ai_model": "m"}
         data.update(extra)
-        return self.client.post(reverse("profile_ai"), data)
+        return api(self.client, "put", "/ai-settings", data)
 
     def test_ordinary_users_cannot_pick_server_side_providers_or_private_urls(self):
         for provider in ("claude_cli", "agent_sdk"):
-            self.assertEqual(self._ai_post(ai_provider=provider).status_code, 200)  # form error, not saved
+            self.assertEqual(self._ai_put(ai_provider=provider).status_code, 400)  # form error, not saved
         for url in ["http://127.0.0.1:11434/v1", "http://169.254.169.254/", "http://localhost/v1", "ftp://x.test"]:
-            self.assertEqual(self._ai_post(ai_base_url=url).status_code, 200, url)
-        self.assertEqual(self._ai_post(rag_embedding_base_url="http://10.1.2.3/v1").status_code, 200)
+            self.assertEqual(self._ai_put(ai_base_url=url).status_code, 400, url)
+        self.assertEqual(self._ai_put(rag_embedding_base_url="http://10.1.2.3/v1").status_code, 400)
         self.assertEqual(UserProfile.objects.get(user=self.u).ai_provider, "none")
 
     def test_settings_are_bounded(self):
         for field, value in [("ai_timeout", 100000), ("ai_max_input_chars", 99999999), ("rag_top_k", 500), ("rag_chunk_chars", 5)]:
-            self.assertEqual(self._ai_post(**{field: value}).status_code, 200, field)
+            self.assertEqual(self._ai_put(**{field: value}).status_code, 400, field)
 
     def test_admins_can_pick_local_providers(self):
         self.client.force_login(user("root", staff=True))
-        self.assertEqual(self._ai_post(ai_provider="claude_cli").status_code, 302)
-        self.assertEqual(self._ai_post(ai_base_url="http://127.0.0.1:11434/v1").status_code, 302)
+        self.assertEqual(self._ai_put(ai_provider="claude_cli").status_code, 200)
+        self.assertEqual(self._ai_put(ai_base_url="http://127.0.0.1:11434/v1").status_code, 200)
 
 
 class AddingJobsAndDocuments(TestCase):
@@ -389,79 +382,77 @@ class AddingJobsAndDocuments(TestCase):
         self.client.force_login(self.u)
 
     def test_add_job_belongs_to_me_and_defaults_to_the_first_open_status(self):
-        r = self.client.post(reverse("add_job"), {"company": "Globex", "role": "Backend", "url": "https://jobs.example.com/1", "description": JD})
-        self.assertEqual(r.status_code, 302)
+        r = api(self.client, "post", "/jobs", {"company": "Globex", "role": "Backend", "url": "https://jobs.example.com/1", "description": JD})
+        self.assertEqual(r.status_code, 200, r.content)
         app = Application.objects.get(company="Globex")
         self.assertEqual(app.owner, self.u)
         self.assertEqual(app.status.name, "Saved")
         self.assertTrue(app.events.exists())
-        self.assertContains(self.client.get(reverse("dashboard")), "Globex")
+        self.assertEqual([j["company"] for j in api(self.client, "get", "/dashboard").json()["jobs"]], ["Globex"])
 
     def test_add_job_validation(self):
-        self.assertEqual(self.client.post(reverse("add_job"), {"company": "", "role": ""}).status_code, 200)
-        self.assertEqual(self.client.post(reverse("add_job"), {"company": "A", "role": "B", "url": "javascript:alert(1)"}).status_code, 200)
-        self.assertEqual(self.client.post(reverse("add_job"), {"company": "A", "role": "B", "description": "x" * 30001}).status_code, 200)
+        self.assertEqual(api(self.client, "post", "/jobs", {"company": "", "role": ""}).status_code, 400)
+        self.assertEqual(api(self.client, "post", "/jobs", {"company": "A", "role": "B", "url": "javascript:alert(1)"}).status_code, 400)
+        self.assertEqual(api(self.client, "post", "/jobs", {"company": "A", "role": "B", "description": "x" * 30001}).status_code, 400)
         self.assertFalse(Application.objects.filter(owner=self.u).exists())
 
     @override_settings(STILLOPEN_MAX_APPLICATIONS=2)
     def test_job_quota(self):
         for i in range(2):
             job(self.u, company=f"J{i}")
-        r = self.client.post(reverse("add_job"), {"company": "Third", "role": "R"})
-        self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "limit of 2")
+        r = api(self.client, "post", "/jobs", {"company": "Third", "role": "R"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("limit of 2", r.json()["error"])
         self.assertFalse(Application.objects.filter(company="Third").exists())
 
     @mock.patch("tracker.services.netguard.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))])
     @mock.patch("tracker.services.netguard.requests.get")
-    def test_quickadd_prefills_add_job_via_session_not_querystring(self, get, _dns):
+    def test_quickadd_reads_the_link_and_saves_nothing(self, get, _dns):
         get.return_value = mock.Mock(
             status_code=200, is_redirect=False, headers={},
             text="<html><head><title>Backend Engineer at Globex</title></head><body><p>" + "Real job text. " * 30 + "</p></body></html>",
         )
-        r = self.client.post(reverse("quickadd_fetch"), {"url": "https://jobs.example.com/1"})
+        r = api(self.client, "post", "/quickadd", {"url": "https://jobs.example.com/1"})
         self.assertEqual(r.json()["ok"], True)
-        form_page = self.client.get(reverse("add_job"))
-        self.assertContains(form_page, "Globex")
-        self.assertContains(form_page, "Real job text")
-        self.assertContains(form_page, "We read this from the link")
-        # the prefill is one-shot: a second GET sees a blank form again
-        self.assertNotContains(self.client.get(reverse("add_job")), "We read this from the link")
+        self.assertIn("Globex", json.dumps(r.json()))
+        self.assertIn("Real job text", json.dumps(r.json()))
+        self.assertFalse(Application.objects.filter(owner=self.u).exists())  # the person still reviews and submits the form
 
     def test_quickadd_requires_a_url_and_is_throttled(self):
-        self.assertEqual(self.client.post(reverse("quickadd_fetch"), {}).status_code, 400)
+        self.assertEqual(api(self.client, "post", "/quickadd", {}).status_code // 100, 4)
         with override_settings(STILLOPEN_QUICKADD_PER_HOUR=1):
             cache.clear()
-            with mock.patch("tracker.views.jobtext.fetch_posting", side_effect=jobtext.FetchError("nope")):
-                self.assertEqual(self.client.post(reverse("quickadd_fetch"), {"url": "https://x.example.com"}).status_code, 400)
-                self.assertEqual(self.client.post(reverse("quickadd_fetch"), {"url": "https://x.example.com"}).status_code, 429)
+            with mock.patch("tracker.api.jobs.tracking.fetch_prefill", side_effect=jobtext.FetchError("nope")):
+                self.assertEqual(api(self.client, "post", "/quickadd", {"url": "https://x.example.com"}).status_code, 400)
+                self.assertEqual(api(self.client, "post", "/quickadd", {"url": "https://x.example.com"}).status_code, 429)
 
     def test_knowledge_add_toggle_delete_and_no_file_kept(self):
         with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
-            r = self.client.post(reverse("knowledge"), {
+            r = self.client.post("/api/v1/documents", {
                 "title": "Projects", "kind": "project", "text": "",
                 "file": SimpleUploadedFile("notes.md", b"# Projects\nBuilt a Kubernetes platform with Helm."),
             })
-            self.assertEqual(r.status_code, 302)
+            self.assertEqual(r.status_code, 200, r.content)
             import os
             self.assertEqual(os.listdir(media), [])
         src = KnowledgeSource.objects.get(owner=self.u, title="Projects")
         self.assertIn("Kubernetes", src.text)
         self.assertFalse(src.file)
         self.assertGreaterEqual(src.chunks.count(), 1)
-        self.client.post(reverse("knowledge_action", args=[src.pk, "toggle"]))
+        api(self.client, "post", f"/documents/{src.pk}/toggle")
         src.refresh_from_db()
         self.assertFalse(src.enabled)
         self.assertEqual(src.chunks.count(), 0)  # hidden sources contribute nothing
-        self.client.post(reverse("knowledge_action", args=[src.pk, "delete"]))
+        api(self.client, "delete", f"/documents/{src.pk}")
         self.assertFalse(KnowledgeSource.objects.filter(pk=src.pk).exists())
 
     @override_settings(STILLOPEN_MAX_KNOWLEDGE=1)
     def test_knowledge_quota_and_empty_rejection(self):
-        self.assertEqual(self.client.post(reverse("knowledge"), {"title": "Empty", "kind": "other", "text": ""}).status_code, 200)
-        self.client.post(reverse("knowledge"), {"title": "One", "kind": "other", "text": "something"})
-        r = self.client.post(reverse("knowledge"), {"title": "Two", "kind": "other", "text": "more"})
-        self.assertContains(r, "limit of 1")
+        self.assertEqual(api(self.client, "post", "/documents", {"title": "Empty", "kind": "other", "text": ""}).status_code, 400)
+        api(self.client, "post", "/documents", {"title": "One", "kind": "other", "text": "something"})
+        r = api(self.client, "post", "/documents", {"title": "Two", "kind": "other", "text": "more"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("limit of 1", r.json()["error"])
         self.assertEqual(KnowledgeSource.objects.filter(owner=self.u, key=None).count(), 1)
 
 
@@ -479,10 +470,10 @@ class AccountDeletion(TestCase):
             import os
             self.assertTrue(os.path.exists(path))
             self.client.force_login(me)
-            self.client.post(reverse("delete_account"), {"confirm": "wrong"})
+            api(self.client, "post", "/account/delete", {"confirm": "wrong"})
             self.assertTrue(User.objects.filter(username="leaver").exists())  # needs the exact username
-            r = self.client.post(reverse("delete_account"), {"confirm": "leaver"})
-            self.assertEqual(r.status_code, 302)
+            r = api(self.client, "post", "/account/delete", {"confirm": "leaver"})
+            self.assertEqual(r.status_code, 200)
             self.assertFalse(os.path.exists(path))  # the stored file is deleted too
         self.assertFalse(User.objects.filter(username="leaver").exists())
         self.assertFalse(Application.objects.filter(company="MineCo").exists())
@@ -490,18 +481,18 @@ class AccountDeletion(TestCase):
         self.assertFalse(UserProfile.objects.filter(user_id=me.pk).exists())
         self.assertTrue(Application.objects.filter(pk=theirs.pk).exists())
         self.assertTrue(KnowledgeSource.objects.filter(title="theirs").exists())
-        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 302)  # logged out
+        self.assertEqual(api(self.client, "get", "/me").status_code, 401)  # logged out
 
     def test_admin_accounts_cannot_delete_themselves_here(self):
         boss = user("boss3", staff=True)
         self.client.force_login(boss)
-        self.client.post(reverse("delete_account"), {"confirm": "boss3"})
+        api(self.client, "post", "/account/delete", {"confirm": "boss3"})
         self.assertTrue(User.objects.filter(username="boss3").exists())
 
     def test_get_does_not_delete(self):
         me = user("careful")
         self.client.force_login(me)
-        self.assertEqual(self.client.get(reverse("delete_account")).status_code, 405)
+        self.assertEqual(api(self.client, "get", "/account/delete").status_code, 405)
         self.assertTrue(User.objects.filter(username="careful").exists())
 
 
@@ -515,11 +506,11 @@ class Throttling(TestCase):
         ja = job(a, description=JD)
         jb = job(b, description=JD)
         self.client.force_login(a)
-        codes = [self.client.post(reverse("evaluate", args=[ja.pk])).status_code for _ in range(3)]
+        codes = [api(self.client, "post", f"/jobs/{ja.pk}/evaluate").status_code for _ in range(3)]
         self.assertEqual(codes[2], 429)
         self.assertNotEqual(codes[0], 429)
         self.client.force_login(b)  # Alice's limit does not use up Bob's
-        self.assertNotEqual(self.client.post(reverse("evaluate", args=[jb.pk])).status_code, 429)
+        self.assertNotEqual(api(self.client, "post", f"/jobs/{jb.pk}/evaluate").status_code, 429)
 
 
 @override_settings(STILLOPEN_SIGNUP_MIN_SECONDS=0, ACCOUNT_RATE_LIMITS={"signup": "1000/m/ip"})
@@ -546,12 +537,12 @@ class Registration(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         # cannot get in before confirming the address
         r = self.client.post(reverse("account_login"), {"login": "newbie", "password": PW})
-        self.assertNotEqual(self.client.get(reverse("dashboard")).status_code, 200)
+        self.assertFalse(signed_in(self.client))
         link = re.search(r"https?://[^\s]+/accounts/confirm-email/[^\s/]+/", mail.outbox[0].body).group(0)
         path = "/" + link.split("/", 3)[3]
         # the link alone confirms the address, signs the person in and lands them on the welcome page
-        self.assertRedirects(self.client.get(path), reverse("welcome"), fetch_redirect_response=False)
-        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
+        self.assertRedirects(self.client.get(path), "/app/welcome", fetch_redirect_response=False)
+        self.assertTrue(signed_in(self.client))
         self.assertTrue(UserProfile.objects.filter(user=newbie).exists())
 
     def test_duplicate_email_is_refused(self):
@@ -568,7 +559,7 @@ class Registration(TestCase):
         for name in ("owner", "legacy"):
             self.client.logout()
             self.client.post(reverse("account_login"), {"login": name, "password": PW})
-            self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200, name)
+            self.assertTrue(signed_in(self.client), name)
 
     def test_unconfirmed_self_registered_accounts_stay_blocked_and_get_a_new_link(self):
         SiteConfig.objects.filter(pk=1).update(signup_mode="open")
@@ -578,7 +569,7 @@ class Registration(TestCase):
         self.client.logout()
         for _ in range(2):
             self.client.post(reverse("account_login"), {"login": "newbie", "password": PW})
-            self.assertEqual(self.client.get(reverse("dashboard")).status_code, 302)
+            self.assertFalse(signed_in(self.client))
         self.assertEqual(len(mail.outbox), 3)  # each blocked attempt sends a fresh link
 
     def test_the_admin_site_is_not_a_way_around_confirmation(self):
@@ -718,12 +709,11 @@ class PrepPlanIsolation(TestCase):
     """Prep plans belong to one person; the full set of checks is in tests_prep.py."""
 
     def test_another_persons_plan_is_a_404_and_stays_out_of_my_list(self):
-        from django.urls import reverse
         from tracker.models import PrepPlan
 
         a, b = User.objects.create_user("prep-a", password="x" * 20), User.objects.create_user("prep-b", password="x" * 20)
         plan = PrepPlan.objects.create(owner=a, title="Only A", status="draft")
         self.client.force_login(b)
-        self.assertEqual(self.client.get(reverse("prep_plan", args=[plan.pk])).status_code, 404)
-        self.assertEqual(self.client.post(reverse("prep_activate", args=[plan.pk])).status_code, 404)
-        self.assertNotContains(self.client.get(reverse("prep_list")), "Only A")
+        self.assertEqual(api(self.client, "get", f"/prep/plans/{plan.pk}").status_code, 404)
+        self.assertEqual(api(self.client, "post", f"/prep/plans/{plan.pk}/start").status_code, 404)
+        self.assertNotIn("Only A", json.dumps(api(self.client, "get", "/prep/plans").json()))
