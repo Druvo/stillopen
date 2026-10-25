@@ -8,3 +8,4 @@ python-docx>=1.1
 gunicorn>=23.0
 whitenoise>=6.7
 mcp>=2,<3
+django-ninja>=1.4,<2

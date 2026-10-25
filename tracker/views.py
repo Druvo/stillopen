@@ -22,7 +22,7 @@ from .models import (
 )
 from .services import ai, careerops, cvversions, jobtext, knowledge, liveness, quiz, scan
 from .services import apply as apply_service
-from .services import fit as fit_service, geo, guide
+from .services import board, fit as fit_service, geo, guide
 from .services.cvversions import CVError
 from .services.files import resolve_document_path
 from .services.paperless import PaperlessClient, PaperlessError, push_document
@@ -143,6 +143,8 @@ def card_for(app, config, bands, areas=None, profile=None):
 def dashboard(request):
     config = SiteConfig.for_user(request.user)
     profile = UserProfile.for_user(request.user)
+    if SiteConfig.load().new_app_enabled and profile.use_new_app and "classic" not in request.GET:
+        return redirect("app_shell")  # the person opted in; "?classic=1" is the way back to this page
     bands = list(ScoreBand.objects.all())
     buckets = list(Bucket.objects.all())
     statuses = list(Status.objects.all())
@@ -207,16 +209,7 @@ def dashboard(request):
 def set_status(request, pk):
     app = owned_app(request, pk)
     status = get_object_or_404(Status, pk=request.POST.get("status"))
-    if app.status_id != status.pk:
-        app.status = status
-        if status.counts_as_applied and not app.applied_date:
-            app.applied_date = timezone.localdate()
-        app.save()
-        Event.objects.create(
-            application=app,
-            kind="applied" if status.counts_as_applied else "status",
-            text=f"Status set to {status.name}",
-        )
+    board.change_status(app, status)
     return JsonResponse({"ok": True, "status": status.name})
 
 

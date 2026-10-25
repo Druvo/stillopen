@@ -5,6 +5,7 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- New app (beta), phases 0 and 1 of `docs/design/nextjs-frontend.md`: a JSON API at `/api/v1/` (django-ninja; sign-in by the normal session, CSRF on every change, another person's job is a 404, a test walks every route to prove it) and a new dashboard at `/app/` built with Next.js as a static export that Django serves (no Node on the server). It has a board you can drag jobs across (also by keyboard and from a status menu on every card), a list view, search, sorting, search and open/closed progress. Off until the admin ticks "New app (beta)" in Site configuration; each person then opts in from their profile, and `?classic=1` on the dashboard is the way back.
 - Operations: `deploy/backup-postgres.sh` (verified nightly dump with retention) and `deploy/crontab.docker.example` for the Docker setup.
 - Prep plans (phase 2): a daily practice of 3 questions per plan (admin setting) drawn from this week and earlier, exact-match scoring, explanations with the official source after answering, a streak, and topics that need another look (two different questions missed within 30 days; clears after right answers on three separate days across two questions). The dashboard nudges when today's practice is waiting. Answers are in the data export.
 
