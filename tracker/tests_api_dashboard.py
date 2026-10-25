@@ -168,12 +168,13 @@ class ScanProgress(TestCase):
         self.a, self.b = person("alice"), person("bob")
         self.client.force_login(self.a)
 
-    def status(self):
-        return self.client.get(f"{BASE}/scan/status").json()
+    def status(self, log=True):
+        return self.client.get(f"{BASE}/scan/status" + ("?log=1" if log else "")).json()
 
     def test_no_run_yet(self):
         data = self.status()
         self.assertEqual((data["running"], data["phase"], data["entries"], data["started_at"], data["note"]), (False, "done", [], None, ""))
+        self.assertNotIn("entries", self.status(log=False))  # the log is only sent when asked for
 
     def test_the_log_note_and_phases_mirror_the_classic_page(self):
         run = ScanRun.objects.create(owner=self.a, running=True, total=10, done=4, found=30, added=2, note="Only the best were added")
@@ -195,7 +196,8 @@ class ScanProgress(TestCase):
         ScanLogEntry.objects.create(run=run, source_name="Acme", connector="greenhouse")
         scan = self.client.get(f"{BASE}/dashboard").json()["scan"]
         self.assertEqual((scan["found"], scan["added"], scan["phase"]), (9, 1, "done"))
-        self.assertEqual(len(scan["entries"]), 1)
+        self.assertNotIn("entries", scan)  # the dashboard says how many rows the log has; the rows come when the log is opened
+        self.assertEqual(scan["entries_count"], 1)
 
     def test_someone_elses_search_is_never_shown(self):
         ScanRun.objects.create(owner=self.b, running=False, total=3, done=3, found=99, added=7, note="bob's note")
@@ -209,8 +211,9 @@ class ScanProgress(TestCase):
             r = self.client.post(f"{BASE}/scan", content_type="application/json")
         self.assertEqual(r.status_code, 200)
         data = r.json()
-        for key in ("running", "done", "total", "found", "added", "note", "started_at", "phase", "entries", "error"):
+        for key in ("running", "done", "total", "found", "added", "note", "started_at", "phase", "entries_count", "error"):
             self.assertIn(key, data)
+        self.assertNotIn("entries", data)
 
 
 class WhoAmI(TestCase):

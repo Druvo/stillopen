@@ -69,6 +69,8 @@ SITE_ID = 1
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "tracker.middleware.ApiGZipMiddleware",  # outermost of the two: compresses last, after the ETag has been worked out on the plain body
+    "tracker.middleware.ApiConditionalGetMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

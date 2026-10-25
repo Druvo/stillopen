@@ -313,11 +313,13 @@ class ScanViewTests(TestCase):
         data = r.json()
         self.assertFalse(data["running"])
         self.assertEqual(data["added"], 1)
+        self.assertEqual((data["entries_count"], "entries" in data), (1, False))  # the rows come only when the log is asked for
+        data = self.client.get("/api/v1/scan/status?log=1").json()
         self.assertEqual(len(data["entries"]), 1)
         self.assertEqual(data["entries"][0]["source"], "Acme")
 
     def test_status_with_no_run_yet(self):
-        data = self.client.get("/api/v1/scan/status").json()
+        data = self.client.get("/api/v1/scan/status?log=1").json()
         self.assertEqual({k: data[k] for k in ("running", "done", "total", "found", "added", "error", "entries")},
                          {"running": False, "done": 0, "total": 0, "found": 0, "added": 0, "error": "", "entries": []})
 

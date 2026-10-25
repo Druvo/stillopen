@@ -7,7 +7,7 @@ from ninja.security import django_auth
 
 from ..context import staff_flags
 from ..models import Application, Bucket, JobSource, ScoreBand, SiteConfig, Status, UserProfile
-from ..services import ai, board, careerops, geo, guide, liveness, quiz, scan
+from ..services import ai, board, careerops, geo, guide, liveness, preferences, quiz, scan
 from ..services import apply as apply_service
 from ..services.cards import card_for
 from ..services.pipeline import upcoming_interviews
@@ -57,6 +57,7 @@ def me(request):
         "site_title": site.site_title,
         "prep_enabled": config.prep_enabled,
         "assistant_enabled": site.mcp_remote_enabled,
+        "preferences": preferences.read(UserProfile.for_user(user)),
         # the two banners only a site admin sees (the same rule the classic pages used)
         "email_unverified_signups": bool(flags.get("email_unverified_signups")),
         "legal_has_blanks": bool(flags.get("legal_needs_attention")),
@@ -152,15 +153,19 @@ def dashboard(request):
     statuses = list(Status.objects.select_related("bucket"))
     areas = list(user.search_areas.all())
     scan.maybe_auto_start(user)
-    apps = (
+    apps = list(
         Application.objects.filter(owner=user)
         .select_related("status", "status__bucket", "source", "posting", "posting__source", "applied_cv")
         .prefetch_related("insights", "documents__kind", "cv_versions", "events")
     )
+    reposts = scan.repost_signals(a.posting for a in apps if a.posting_id)  # one lookup for the page, not two per job
+    closed = next((b for b in buckets if b.is_closed), None)
     cards = []
     for app in apps:
-        card = card_for(app, config, bands, areas, profile)
-        card["bucket_key"] = app.effective_bucket(config).key
+        card = card_for(app, config, bands, areas, profile, reposts)
+        # Same rule as Application.effective_bucket, without asking the database for the closed stage once per job.
+        expired = config.auto_close_expired and app.live_state == "expired" and not app.status.counts_as_applied
+        card["bucket_key"] = (closed if expired and closed else app.status.bucket).key
         cards.append(card)
     cards.sort(key=lambda c: (0 if c["urgent"] else 1, -(c["percent"] if c["percent"] is not None else -1)))
     scored = [c["percent"] for c in cards if c["percent"] is not None]
@@ -214,6 +219,25 @@ def dashboard(request):
         "paperless_url": config.effective_paperless_url if paperless_on else "",
         "can_import": user.is_staff and bool(config.careerops_path),
         "scan": _scan_payload(scan_run) if scan_run else None,
+        "search_summary": _search_summary(profile, config, areas),
+    }
+
+
+def _search_summary(profile, config, areas) -> dict:
+    """What drives the person's matches, in a few plain facts, for the dashboard's "Your search" card (each links to its place in the profile)."""
+    def mode(area):
+        kinds = [label for flag, label in ((area.allow_remote, "remote"), (area.allow_hybrid, "hybrid"), (area.allow_onsite, "on-site")) if flag]
+        return ", ".join(kinds) if kinds else "any kind of work"
+
+    return {
+        "roles": [line.strip() for line in profile.target_roles.splitlines() if line.strip()][:8],
+        "places": [{"place": a.place + (f", {a.city}" if a.city else ""), "mode": mode(a)} for a in areas][:8],
+        "remote": profile.get_remote_preference_display(),
+        "salary_floor": profile.salary_floor.strip(),
+        "alerts_on": bool(profile.scan_digest_enabled),
+        "alerts_available": bool(SiteConfig.load().scan_emails_enabled),
+        "has_cv": bool(profile.profile_cv.strip()),
+        "ai": "keyword" if config.ai_provider == "none" else config.get_ai_provider_display(),
     }
 
 
@@ -253,22 +277,28 @@ def _progress(run, extra=False) -> dict:
     return out
 
 
-def _scan_payload(run) -> dict:
-    """A search run as the dashboard's search card needs it: progress, the plain note, and what each source gave."""
+def _scan_payload(run, log: bool = False) -> dict:
+    """A search run as the dashboard's search card needs it: progress and the plain note.
+
+    What each source gave (about a hundred rows) only comes with `log=True`: it is the one big part, and it is only looked at
+    when the person opens the log, so the dashboard and the progress polling leave it out and say how many rows there are."""
     if run is None:
-        return {**_progress(None, extra=True), "note": "", "started_at": None, "finished_at": None, "phase": "done", "entries": []}
+        return {**_progress(None, extra=True), "note": "", "started_at": None, "finished_at": None, "phase": "done", "entries_count": 0, **({"entries": []} if log else {})}
     phase = "done" if not run.running else "sorting" if run.total > 0 and run.done >= run.total else "reading"
-    return {
+    out = {
         **_progress(run, extra=True),
         "note": run.note, "started_at": _iso(run.started_at), "finished_at": _iso(run.finished_at), "phase": phase,
-        "entries": [
+        "entries_count": run.entries.count(),
+    }
+    if log:
+        out["entries"] = [
             {
                 "source": e.source_name, "connector": e.get_connector_display(), "found": e.found, "matched": e.matched,
                 "added": e.added, "duplicates": e.duplicates, "outside": e.outside, "error": e.error,
             }
             for e in run.entries.all()
-        ],
-    }
+        ]
+    return out
 
 
 @api.post("/scan", summary="Search for new jobs")
@@ -279,8 +309,8 @@ def scan_start(request):
 
 
 @api.get("/scan/status", summary="Progress of the person's latest search")
-def scan_status(request):
-    return _scan_payload(scan.current_run(request.user))
+def scan_status(request, log: bool = False):
+    return _scan_payload(scan.current_run(request.user), log=log)
 
 
 @api.post("/liveness", summary="Check which jobs are still open")

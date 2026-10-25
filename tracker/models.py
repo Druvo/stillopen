@@ -411,6 +411,10 @@ class UserProfile(PersonalSettings):
         default=False, verbose_name="Search for new jobs for me and email me what is found",
         help_text="Runs your saved search on a schedule and emails one short list of new matches. Off until you turn it on.",
     )
+    ui_preferences = models.JSONField(
+        default=dict, blank=True, editable=False,
+        help_text="How this person likes the app laid out (dashboard view, filters, sidebar, theme, text size). Saved so it follows them to every device; see services/preferences.py.",
+    )
     onboarding_done = models.BooleanField(
         default=False, editable=False,
         help_text="The person has seen (or skipped) the short welcome questions after signing up.",

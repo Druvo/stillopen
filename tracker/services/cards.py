@@ -12,7 +12,8 @@ def band_for(percent, bands):
     return None
 
 
-def card_for(app, config, bands, areas=None, profile=None):
+def card_for(app, config, bands, areas=None, profile=None, reposts=None):
+    """`reposts` is the batch from `scan.repost_signals` (one lookup for the whole page); without it each card looks its own up."""
     percent = app.match_percent(config.score_scale)
     fit = fit_service.fit_flags(app, areas if areas is not None else [], profile)
     band = band_for(percent, bands)
@@ -31,6 +32,6 @@ def card_for(app, config, bands, areas=None, profile=None):
         "fit": fit,
         "fit_level": fit_service.summary_level(fit),
         "fit_text": " ".join(f["text"] for f in fit if f["level"] != "ok") or " ".join(f["text"] for f in fit),
-        "repost": scan.repost_signal(app.posting) if app.posting_id else None,
+        "repost": (reposts.get(app.posting_id) if reposts is not None else scan.repost_signal(app.posting)) if app.posting_id else None,
         "skill_matched": any(e.kind == "note" and "skill match" in e.text for e in app.events.all()),
     }

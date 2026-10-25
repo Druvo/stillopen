@@ -179,19 +179,43 @@ def record_sightings(source: JobSource, postings: list[dict], seen_date=None) ->
     )
 
 
+def repost_signals(postings) -> dict:
+    """{posting id: evidence or None} for many postings in three queries (one per posting would be two queries each).
+
+    Same rule as `repost_signal`: 2+ distinct URLs on 2+ distinct scan dates for the same company+title at the same source."""
+    postings = [p for p in postings if p is not None]
+    if not postings:
+        return {}
+    keys = {(p.source_id, p.title_key) for p in postings}
+    siblings = list(
+        Posting.objects.filter(source_id__in={k[0] for k in keys}, title_key__in={k[1] for k in keys}).only("id", "source_id", "title_key", "first_seen_at", "last_seen_at")
+    )
+    groups: dict = {}
+    for s in siblings:
+        if (s.source_id, s.title_key) in keys:
+            groups.setdefault((s.source_id, s.title_key), []).append(s)
+    ids = {s.pk for members in groups.values() for s in members}
+    seen: dict = {}
+    for posting_id, seen_date in PostingSighting.objects.filter(posting_id__in=ids).values_list("posting_id", "seen_date"):
+        seen.setdefault(posting_id, set()).add(seen_date)
+    evidence: dict = {}
+    for key, members in groups.items():
+        dates = set().union(*(seen.get(m.pk, set()) for m in members))
+        if len(members) < 2 or len(dates) < 2:
+            evidence[key] = None
+        else:
+            evidence[key] = {
+                "distinct_urls": len(members),
+                "distinct_dates": len(dates),
+                "first_seen": min(m.first_seen_at for m in members),
+                "last_seen": max(m.last_seen_at for m in members),
+            }
+    return {p.pk: evidence.get((p.source_id, p.title_key)) for p in postings}
+
+
 def repost_signal(posting: Posting) -> dict | None:
     """None if `posting` shows no repost pattern; otherwise the evidence -- never a verdict on why."""
-    siblings = Posting.objects.filter(source_id=posting.source_id, title_key=posting.title_key)
-    distinct_urls = siblings.count()
-    dates = set(PostingSighting.objects.filter(posting__in=siblings).values_list("seen_date", flat=True))
-    if distinct_urls < 2 or len(dates) < 2:
-        return None
-    return {
-        "distinct_urls": distinct_urls,
-        "distinct_dates": len(dates),
-        "first_seen": siblings.order_by("first_seen_at").first().first_seen_at,
-        "last_seen": siblings.order_by("-last_seen_at").first().last_seen_at,
-    }
+    return repost_signals([posting]).get(posting.pk)
 
 
 _FILLER = {
