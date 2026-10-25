@@ -37,6 +37,24 @@ def routes():
     return found
 
 
+def _world_modules():
+    """Every `tracker/world_<area>.py`: each API area describes its own fixtures for the route inventory.
+
+    A module defines `world(owner, ids) -> {path parameter name: id}` (rows owned by `owner`, one set per person; `ids` holds what
+    earlier modules made, e.g. `job_id`) and may define `BODIES = {("POST", "/path/{param}"): {...json...}}` for routes that need a body
+    to get past validation. Path parameter names must be unique per resource (`cv_id`, `contact_id`, ...)."""
+    import importlib
+    import pkgutil
+
+    import tracker
+
+    return [importlib.import_module(f"tracker.{i.name}") for i in pkgutil.iter_modules(tracker.__path__) if i.name.startswith("world_")]
+
+
+WORLD_MODULES = _world_modules()
+EXTRA_BODIES = {key: body for module in WORLD_MODULES for key, body in getattr(module, "BODIES", {}).items()}
+
+
 def world(owner):
     """One job and one started prep plan (a week with a lesson, a task and two questions) for `owner`; returns the ids by parameter name."""
     from tracker.models import PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, PrepTopic, PrepWeek
@@ -52,7 +70,10 @@ def world(owner):
                                     sources=[{"title": "Docs", "url": "https://kubernetes.io/docs/"}])
         for n in range(2)
     ]
-    return {"job_id": app.pk, "plan_id": plan.pk, "lesson_id": lesson.pk, "milestone_id": milestone.pk, "question_id": questions[0].pk}
+    ids = {"job_id": app.pk, "plan_id": plan.pk, "lesson_id": lesson.pk, "milestone_id": milestone.pk, "question_id": questions[0].pk}
+    for module in WORLD_MODULES:
+        ids.update(module.world(owner, dict(ids)))
+    return ids
 
 
 class RouteInventory(TestCase):
@@ -70,6 +91,8 @@ class RouteInventory(TestCase):
         return path
 
     def body(self, method, path):
+        if (method, path) in EXTRA_BODIES:
+            return EXTRA_BODIES[(method, path)]
         if method == "PATCH":
             return {"status": Status.objects.get(name="Applied").pk}
         if path.endswith("/prep"):
