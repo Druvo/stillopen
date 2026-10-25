@@ -232,21 +232,6 @@ class OffsiteBackupScript(TestCase):
                     continue
         return None
 
-    @staticmethod
-    def find_bash():
-        """A bash that really runs (on Windows `bash` can be the WSL stub, so try Git's first)."""
-        import shutil
-        import subprocess
-
-        for candidate in ("C:/Program Files/Git/bin/bash.exe", "/usr/bin/bash", shutil.which("bash")):
-            if candidate and (Path(candidate).exists() or candidate == shutil.which("bash")):
-                try:
-                    if subprocess.run([candidate, "-c", "echo ok"], capture_output=True, text=True, timeout=20).stdout.strip() == "ok":
-                        return candidate
-                except (OSError, subprocess.SubprocessError):
-                    continue
-        return None
-
     def run_script(self, **extra):
         import subprocess
 
@@ -274,7 +259,9 @@ class OffsiteBackupScript(TestCase):
             '  deletefile) rm -f "$R/$(basename "${args[0]}")" ;;\n'
             "esac\n"
         )
-        (bin_dir / "rclone").write_text(script, encoding="utf-8", newline="\n")
+        fake = bin_dir / "rclone"
+        fake.write_text(script, encoding="utf-8", newline="\n")
+        fake.chmod(0o755)  # on Linux `command -v` only accepts a file that can be run; Windows does not care
         return bin_dir, remote, log
 
     def test_the_script_parses_and_is_in_the_schedule_and_docs(self):
