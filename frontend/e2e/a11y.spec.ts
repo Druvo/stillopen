@@ -105,6 +105,13 @@ test.describe("titles, focus and messages", () => {
     await expect(page).toHaveTitle(/^Contacts and referrals - .+/);
   });
 
+  test("a screen opened directly from its address has its own title too, not only after a move", async ({ page }) => {
+    await signIn(page, "alice", "/app/contacts");
+    await expect(page).toHaveTitle(/^Contacts and referrals - .+/);
+    await page.reload();
+    await expect(page).toHaveTitle(/^Contacts and referrals - .+/);
+  });
+
   test("the title of a page that does not exist says so", async ({ page }) => {
     await signIn(page, "alice", "/app/nothing-here");
     await expect(page).toHaveTitle(/^We could not find that page - /);

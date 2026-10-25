@@ -39,10 +39,12 @@ export function useScreenAnnouncer(main: RefObject<HTMLElement | null>, path: st
     last.current = path;
     const root = main.current;
     if (!root) return;
+    let wanted = "";
     const sync = () => {
       const heading = shownHeading(root);
       const name = FIXED_HEADINGS[path] ?? (heading?.textContent?.replace(/\s+/g, " ").trim() ?? "");
-      document.title = screenTitle(name, site);
+      wanted = screenTitle(name, site);
+      document.title = wanted;
       if (pending.current && heading) {
         pending.current = false;
         focusScreen(root, heading);
@@ -50,6 +52,12 @@ export function useScreenAnnouncer(main: RefObject<HTMLElement | null>, path: st
       }
     };
     sync();
+    // The framework writes its own fixed title once it has taken over a page that was opened on a deep link (/app/help), after this code
+    // has run; put the screen's title back whenever the <title> is changed from under us.
+    const titleWatcher = new MutationObserver(() => {
+      if (wanted && document.title !== wanted) document.title = wanted;
+    });
+    titleWatcher.observe(document.head, { childList: true, subtree: true, characterData: true });
     const observer = new MutationObserver(sync);
     observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "hidden", "class"] }); // a revealed screen changes style, not content
     // A screen that never shows a heading still gets the focus, so the person is not left on a link that is gone.
@@ -59,6 +67,7 @@ export function useScreenAnnouncer(main: RefObject<HTMLElement | null>, path: st
       focusScreen(root, null);
     }, 4000);
     return () => {
+      titleWatcher.disconnect();
       observer.disconnect();
       window.clearTimeout(timer);
     };
