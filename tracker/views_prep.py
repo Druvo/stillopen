@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
+from .views_app import new_app_redirect
 from .models import Application, PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, SiteConfig
 from .services import prep, quiz
 
@@ -36,6 +37,8 @@ def _int(value, default=None):
 @require_GET
 def prep_list(request):
     _config(request)
+    if go := new_app_redirect(request, "/prep"):
+        return go
     plans = PrepPlan.objects.filter(owner=request.user).select_related("application").annotate(
         lessons_total=Count("weeks__lessons", distinct=True),
         lessons_done=Count("weeks__lessons", filter=Q(weeks__lessons__done_at__isnull=False), distinct=True),
@@ -65,6 +68,8 @@ def prep_create(request, pk):
 def prep_plan(request, pk):
     _config(request)
     plan = _plan(request, pk)
+    if go := new_app_redirect(request, f"/prep/{plan.pk}"):
+        return go
     weeks = plan.weeks.prefetch_related("lessons__questions", "milestones")
     done, total = plan.progress_counts()
     return render(request, "tracker/prep_plan.html", {
@@ -152,6 +157,8 @@ def prep_today(request, pk):
     """Today's practice: the questions to answer, or, once answered, how it went with each explanation."""
     config = _config(request)
     plan = _practice_plan(request, pk)
+    if go := new_app_redirect(request, f"/prep/{plan.pk}/today"):
+        return go
     try:
         challenge = quiz.build_challenge(plan, config.prep_daily_questions)
     except quiz.QuizError as exc:

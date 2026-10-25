@@ -392,3 +392,27 @@ class PrepApi(TestCase):
         for url in (f"{BASE}/prep/plans", self.url(""), self.url("/today")):
             self.assertEqual(self.client.get(url).status_code, 404, url)
         self.assertEqual(self.post(f"{BASE}/jobs/{self.ids['job_id']}/prep").status_code, 404)
+
+
+class ClassicRedirects(TestCase):
+    """Classic pages with a twin in the new app send an opted-in person there; ?classic=1 and everyone else stay."""
+
+    def setUp(self):
+        cache.clear()
+        self.a = person("alice")
+        self.client.force_login(self.a)
+        self.ids = world(self.a)
+
+    def opt_in(self, on=True):
+        SiteConfig.objects.update(new_app_enabled=on)
+        UserProfile.objects.filter(user=self.a).update(use_new_app=on)
+
+    def test_prep_pages(self):
+        pid = self.ids["plan_id"]
+        pairs = [(reverse("prep_list"), "/app/prep"), (reverse("prep_plan", args=[pid]), f"/app/prep/{pid}"), (reverse("prep_today", args=[pid]), f"/app/prep/{pid}/today")]
+        for classic, new in pairs:
+            self.assertEqual(self.client.get(classic).status_code, 200, classic)  # not opted in: unchanged
+        self.opt_in()
+        for classic, new in pairs:
+            self.assertRedirects(self.client.get(classic), new, fetch_redirect_response=False)
+            self.assertEqual(self.client.get(classic + "?classic=1").status_code, 200)

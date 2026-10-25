@@ -1,8 +1,10 @@
 "use client";
 
 import { GripVertical } from "lucide-react";
-import type { HTMLAttributes, Ref } from "react";
-import { csrfToken } from "@/lib/api";
+import { useState, type HTMLAttributes, type Ref } from "react";
+import { prepApi } from "@/features/prep/api";
+import { csrfToken, errorText } from "@/lib/api";
+import { navigate } from "@/lib/router";
 import type { Job, StatusInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +26,32 @@ function PostButton({ action, children }: { action: string; children: React.Reac
         {children}
       </button>
     </form>
+  );
+}
+
+/** Asks for a prep plan (or opens the one that exists) and goes to it. */
+function PrepareButton({ jobId }: { jobId: number }) {
+  const [state, setState] = useState<"idle" | "busy" | string>("idle");
+  return (
+    <>
+      <button
+        type="button"
+        disabled={state === "busy"}
+        onClick={async () => {
+          setState("busy");
+          try {
+            const made = await prepApi.create(jobId);
+            navigate(`/prep/${made.id}`);
+          } catch (e) {
+            setState(errorText(e));
+          }
+        }}
+        className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg"
+      >
+        {state === "busy" ? "Preparing…" : "Prepare"}
+      </button>
+      {state !== "idle" && state !== "busy" && <span role="alert" className="basis-full px-2 text-xs text-bad">{state}</span>}
+    </>
   );
 }
 
@@ -125,7 +153,7 @@ export function JobCard({ job, statuses, onMove, onCheckFit, checking, dragHandl
             </a>
             <PostButton action={job.tailor_url}>Tailor CV</PostButton>
             <PostButton action={job.cover_url}>Cover letter</PostButton>
-            <PostButton action={job.prep_url}>Prepare</PostButton>
+            <PrepareButton jobId={job.id} />
             <a href={job.edit_url} className="rounded-md px-2 py-1 text-xs text-muted hover:bg-surface-2 hover:text-fg">
               Edit
             </a>

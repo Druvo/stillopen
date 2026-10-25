@@ -1,23 +1,10 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
-import { Dashboard } from "@/features/dashboard/dashboard";
-
-// Screens that have not moved yet stay on the classic pages, so nothing is lost mid-migration.
-const CLASSIC_LINKS: [string, string][] = [
-  ["Add job", "/jobs/add/"],
-  ["All postings", "/postings/"],
-  ["Job sources", "/sources/"],
-  ["Interviews", "/interviews/"],
-  ["Contacts", "/contacts/"],
-  ["Offers", "/offers/"],
-  ["Prep plans", "/prep/"],
-  ["Insights", "/insights/"],
-  ["CVs", "/cv/"],
-  ["Documents", "/knowledge/"],
-  ["Profile", "/profile/"],
-  ["AI settings", "/profile/ai/"],
-];
+import { Link, matchRoute, useAppPath } from "@/lib/router";
+import { cn } from "@/lib/utils";
+import { NAV, ROUTES } from "@/routes";
+import { Loading, PageHeader } from "./ui";
 
 function toggleTheme() {
   const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -29,14 +16,23 @@ function toggleTheme() {
   }
 }
 
+function isCurrent(path: string, to: string) {
+  return to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
+}
+
 export function AppShell() {
+  const path = useAppPath();
+  const screen = path === null ? null : matchRoute(ROUTES, path);
+  const itemClass = (current: boolean) =>
+    cn("block shrink-0 rounded-md px-3 py-2 text-sm", current ? "bg-surface-2 font-medium" : "text-muted hover:bg-surface-2 hover:text-fg");
+
   return (
     <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col lg:flex-row">
       <aside className="border-b border-border bg-surface lg:w-56 lg:shrink-0 lg:border-r lg:border-b-0">
         <div className="flex items-center justify-between gap-2 px-4 py-3 lg:block lg:py-5">
-          <a href="/app/" className="text-lg font-semibold tracking-tight">
+          <Link to="/" className="text-lg font-semibold tracking-tight">
             StillOpen
-          </a>
+          </Link>
           <button
             type="button"
             onClick={toggleTheme}
@@ -49,21 +45,34 @@ export function AppShell() {
           </button>
         </div>
         <nav aria-label="Main" className="flex gap-1 overflow-x-auto px-3 pb-3 lg:block lg:overflow-visible lg:pb-5">
-          <a href="/app/" aria-current="page" className="block shrink-0 rounded-md bg-surface-2 px-3 py-2 text-sm font-medium">
-            Dashboard
-          </a>
-          {CLASSIC_LINKS.map(([label, href]) => (
-            <a key={href} href={href} className="block shrink-0 rounded-md px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-fg">
-              {label}
-            </a>
-          ))}
-          <a href="/dashboard/?classic=1" className="mt-2 block shrink-0 rounded-md px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-fg">
+          {NAV.map(([label, to, inApp]) => {
+            const current = path !== null && inApp && isCurrent(path, to);
+            return inApp ? (
+              <Link key={to} to={to} aria-current={current ? "page" : undefined} className={itemClass(current)}>
+                {label}
+              </Link>
+            ) : (
+              <a key={to} href={to} className={itemClass(false)}>
+                {label}
+              </a>
+            );
+          })}
+          <a href="/dashboard/?classic=1" className={cn(itemClass(false), "lg:mt-2")}>
             Back to the classic view
           </a>
         </nav>
       </aside>
       <main className="min-w-0 flex-1 px-4 py-5 lg:px-8">
-        <Dashboard />
+        {path === null ? (
+          <Loading />
+        ) : screen ?? (
+          <>
+            <PageHeader title="We could not find that page" />
+            <Link to="/" className="text-brand underline">
+              Back to your dashboard
+            </Link>
+          </>
+        )}
       </main>
     </div>
   );

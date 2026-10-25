@@ -5,6 +5,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    /** Per-field messages when a form was refused: { company: ["This field is required."] }. */
+    public fields: Record<string, string[]> = {},
   ) {
     super(message);
   }
@@ -15,18 +17,19 @@ export function csrfToken(): string {
   return match ? decodeURIComponent(match.slice("csrftoken=".length)) : "";
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+
+export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (method !== "GET") {
-    headers["X-CSRFToken"] = csrfToken();
-    if (body !== undefined) headers["Content-Type"] = "application/json";
+  let payload: BodyInit | undefined;
+  if (method !== "GET") headers["X-CSRFToken"] = csrfToken();
+  if (body instanceof FormData) {
+    payload = body; // the browser sets the multipart boundary
+  } else if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    payload = JSON.stringify(body);
   }
-  const response = await fetch(`/api/v1${path}`, {
-    method,
-    headers,
-    credentials: "same-origin",
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const response = await fetch(`/api/v1${path}`, { method, headers, credentials: "same-origin", body: payload });
   if (response.status === 401) {
     // Signed out (session ended): go to the normal sign-in page and come straight back.
     window.location.assign(`/accounts/login/?next=${encodeURIComponent(window.location.pathname)}`);
@@ -35,9 +38,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = typeof data?.error === "string" ? data.error : "Something went wrong. Please try again.";
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, data?.fields ?? {});
   }
   return data as T;
+}
+
+export function errorText(error: unknown, fallback = "Something went wrong. Please try again."): string {
+  return error instanceof ApiError ? error.message : fallback;
 }
 
 export const api = {

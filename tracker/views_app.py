@@ -16,6 +16,15 @@ from django.views.decorators.http import require_GET
 from .models import SiteConfig, UserProfile
 
 
+def new_app_redirect(request, path: str):
+    """A redirect to `path` inside the new app when this person has opted in (and did not ask for the classic page with ?classic=1), else None.
+
+    Classic pages that have a new-app twin call this first, so bookmarks and emails keep landing on the right screen."""
+    if "classic" in request.GET or not SiteConfig.load().new_app_enabled or not UserProfile.for_user(request.user).use_new_app:
+        return None
+    return redirect(f"/app{path}")
+
+
 def build_dir() -> Path:
     return Path(settings.STILLOPEN_FRONTEND_DIR)
 
