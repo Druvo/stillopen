@@ -356,6 +356,15 @@ for _provider in ("google", "github", "facebook"):
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# The per-person rate limits (and the search-source cache) live in Django's cache. The default, LocMemCache,
+# is per-process memory -- fine for the one-process-per-machine setup docs/HOSTING.md describes, but it means
+# running more than one gunicorn worker (or more than one machine) splits those counters, so a limit meant to
+# be site-wide becomes "site-wide per worker". Set REDIS_URL to share the cache across every process/machine;
+# unset, nothing changes from before. Needs requirements-redis.txt.
+_redis_url = os.environ.get("REDIS_URL", "").strip()
+if _redis_url:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": _redis_url}}
+
 # Seeds for SiteConfig on first migrate (editable later in the admin).
 CAREEROPS_PATH_DEFAULT = os.environ.get("CAREEROPS_PATH", "")
 NODE_COMMAND_DEFAULT = os.environ.get("NODE_COMMAND", "node")
@@ -376,7 +385,7 @@ if not DEBUG:
 
 # Optional: error tracking. GlitchTip (self-hosted, open-source) speaks the same DSN/API as Sentry, so the
 # official sentry-sdk works against either -- point GLITCHTIP_DSN (or SENTRY_DSN) at your own instance.
-# Off by default: nothing is sent anywhere unless one of these is set. Needs requirements-hosting.txt.
+# Off by default: nothing is sent anywhere unless one of these is set. Needs requirements-errors.txt.
 _error_tracking_dsn = os.environ.get("GLITCHTIP_DSN") or os.environ.get("SENTRY_DSN")
 if _error_tracking_dsn:
     import sentry_sdk

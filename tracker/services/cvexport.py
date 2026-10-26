@@ -5,7 +5,18 @@ import io
 import re
 
 from docx import Document as DocxDocument
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Pt, RGBColor
+
+# A few built-in, single-column, ATS-safe looks -- font and colour variation only, never a table, column or
+# image (those are exactly what breaks an applicant-tracking-system parser, the reason `to_docx` stays plain
+# in the first place). "classic" is the original, unchanged look; it stays the default everywhere so existing
+# downloads look the same unless a person picks something else.
+TEMPLATES = {
+    "classic": {"label": "Classic", "font": "Calibri", "heading_font": "Calibri", "accent": "111111", "body_pt": 10.5, "print_pt": 11, "line_height": 1.45, "upper_h2": True},
+    "modern": {"label": "Modern", "font": "Calibri", "heading_font": "Georgia", "accent": "2A5DB0", "body_pt": 10.5, "print_pt": 11, "line_height": 1.45, "upper_h2": False},
+    "compact": {"label": "Compact", "font": "Arial", "heading_font": "Arial", "accent": "111111", "body_pt": 9.5, "print_pt": 9.5, "line_height": 1.3, "upper_h2": True},
+}
+DEFAULT_TEMPLATE = "classic"
 
 _BULLET = re.compile(r"^\s*(?:[-*•])\s+(.*)$")
 _HEADING = re.compile(r"^(#{1,3})\s+(.*)$")
@@ -86,18 +97,29 @@ def _add_runs(paragraph, text: str) -> None:
         paragraph.add_run(text[pos:])
 
 
-def to_docx(markdown: str) -> bytes:
-    """A plain, single-column DOCX: real headings and bullets, no tables, images or text boxes (ATS friendly)."""
+def to_docx(markdown: str, template: str = DEFAULT_TEMPLATE) -> bytes:
+    """A plain, single-column DOCX: real headings and bullets, no tables, images or text boxes (ATS friendly).
+    `template` picks a font/colour look from TEMPLATES; an unknown name falls back to the default rather than
+    erroring, since this only ever reaches here from a validated choice or a trusted default."""
+    style = TEMPLATES.get(template, TEMPLATES[DEFAULT_TEMPLATE])
+    accent = RGBColor.from_string(style["accent"])
     doc = DocxDocument()
     section = doc.sections[0]
     section.left_margin = section.right_margin = Inches(0.8)
     section.top_margin = section.bottom_margin = Inches(0.7)
     normal = doc.styles["Normal"]
-    normal.font.name = "Calibri"
-    normal.font.size = Pt(10.5)
+    normal.font.name = style["font"]
+    normal.font.size = Pt(style["body_pt"])
     for kind, text in _blocks(markdown):
         if kind in ("h1", "h2", "h3"):
-            _add_runs(doc.add_heading("", level={"h1": 0, "h2": 1, "h3": 2}[kind]), text)
+            heading = doc.add_heading("", level={"h1": 0, "h2": 1, "h3": 2}[kind])
+            _add_runs(heading, text)
+            if template != DEFAULT_TEMPLATE:  # "classic" keeps the original look untouched (Word's own heading style)
+                for run in heading.runs:
+                    run.font.name = style["heading_font"]
+                    run.font.color.rgb = accent
+                    if kind == "h2" and style["upper_h2"]:
+                        run.font.all_caps = True  # a display property: the underlying text (and so ATS parsing) is untouched
         elif kind == "li":
             _add_runs(doc.add_paragraph(style="List Bullet"), text)
         elif kind == "p":
