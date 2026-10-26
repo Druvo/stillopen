@@ -114,6 +114,7 @@ export type Me = {
   site_title: string;
   prep_enabled: boolean;
   assistant_enabled: boolean;
+  writing_check_enabled: boolean;
   email_unverified_signups: boolean;
   legal_has_blanks: boolean;
   jooble_sources_dormant: boolean;

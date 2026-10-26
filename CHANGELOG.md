@@ -5,6 +5,9 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Optional "Check writing" button on CVs and cover letters: a grammar/clarity check via LanguageTool
+  (self-hostable, open-source). Off by default -- set `LANGUAGETOOL_URL` (Site configuration > Job search
+  keys & writing check) to turn it on. Real linting only, no invented metrics.
 - Every job card now shows "Recognized technologies": named tools the posting mentions (Docker, Kubernetes,
   React...), each marked whether your own CV/knowledge already covers it. Grounded in the US Department of
   Labor's O*NET database (a real, CC-licensed, named-technology vocabulary), not generic word frequency --

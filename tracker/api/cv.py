@@ -7,10 +7,10 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 
 from ..models import CVVersion, SiteConfig
-from ..services import cvbuilder, cvexport, cvgen, cvversions
+from ..services import cvbuilder, cvexport, cvgen, cvversions, languagetool
 from ..services.cvversions import CVError
 from ..services.throttle import throttled
-from .common import owned, owned_job
+from .common import owned, owned_job, throttle
 
 router = Router()
 
@@ -112,6 +112,20 @@ def get_version(request, cv_id: int):
         "children": version.children.filter(owner=request.user).count(), "downloads": _downloads(version),
         "diff_url": f"/cv/{version.pk}/diff",
     }
+
+
+@router.post("/cv/{cv_id}/writing-check", summary="Grammar/clarity check of this version's own text (LanguageTool, off unless the admin set one up)")
+def writing_check(request, cv_id: int):
+    version = _version(request, cv_id)
+    config = SiteConfig.for_user(request.user)
+    if not languagetool.available(config):
+        raise HttpError(400, "Writing check is not set up on this server.")
+    throttle(request, "writing-check", settings.STILLOPEN_CHECKS_PER_HOUR)
+    try:
+        matches = languagetool.check(version.content, config)
+    except languagetool.LanguageToolError as exc:
+        raise HttpError(400, str(exc))
+    return {"matches": matches}
 
 
 class EditIn(Schema):

@@ -267,6 +267,17 @@ admin adds the `JobSource` (any board_token, it carries no meaning for either) t
   score actually lead anywhere?" has a real (if small-sample) answer. Surfaced on the existing Insights page
   (`frontend/src/features/pipeline/insights.tsx`) under "Does a higher match score lead anywhere?".
 
+### LanguageTool writing check (built, 2026-10-26)
+
+A "Check writing" button on CVs and cover letters, calling a LanguageTool server (self-hostable,
+open-source, the `erikvl87/languagetool` Docker image, or pointed at the public `api.languagetool.org`
+instance). Off by default like Paperless and GlitchTip: nothing is sent anywhere until an admin sets
+`SiteConfig.languagetool_url` / `LANGUAGETOOL_URL`. Unlike those two, there is no separate "enabled" toggle --
+a URL is the opt-in, since this is a one-shot read of text the person is already editing, not a standing
+integration. `services/languagetool.py`, `POST /api/v1/cv/{id}/writing-check` and `/cover/{id}/writing-check`
+(owner-scoped, rate-limited the same as other external checks via `STILLOPEN_CHECKS_PER_HOUR`), a shared
+`writing_check_enabled` flag on `/me`.
+
 ### Recognized technologies on the job card, via O*NET (built, 2026-10-26)
 
 ESCO (see earlier entry) was rejected after live-checking: zero hits for "docker"/"kubernetes", noisy
