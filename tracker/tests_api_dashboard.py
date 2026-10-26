@@ -63,6 +63,16 @@ class DashboardPayload(TestCase):
         CVVersion.objects.create(owner=self.a, application=app, kind="tailored", content="c", check_report=[{"claim": "x"}], approved=True)
         self.assertTrue(self.get()["jobs"][0]["cv"]["approved"])
 
+    def test_card_carries_recognized_tech_skills_against_the_owners_knowledge(self):
+        from tracker.models import KnowledgeSource
+
+        KnowledgeSource.objects.create(owner=self.a, title="CV", kind="cv", text="Backend engineer with Docker experience.")
+        job(self.a, description="We need someone who knows Docker and Kubernetes well.")
+        j = self.get()["jobs"][0]
+        by_name = {t["name"]: t for t in j["tech_skills"]}
+        self.assertTrue(by_name["Docker"]["have"])
+        self.assertFalse(by_name["Kubernetes"]["have"])
+
     def test_the_fit_badge_follows_the_classic_rule(self):
         job(self.a)
         self.assertIsNone(self.get()["jobs"][0]["fit_badge"])  # no places yet: "Fit unknown" is not shown

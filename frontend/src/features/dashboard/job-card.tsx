@@ -144,7 +144,7 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
   const applied = appliedParts(job);
   const canJudge = job.has_description || !!job.url;
   const needsFit = canJudge && !job.ai_evaluated;
-  const hasDetails = job.strengths.length > 0 || job.gaps.length > 0 || !!job.notes || job.documents.length > 0 || applied.length > 0 || !!job.next_action || !!job.ai_method;
+  const hasDetails = job.strengths.length > 0 || job.gaps.length > 0 || job.tech_skills.length > 0 || !!job.notes || job.documents.length > 0 || applied.length > 0 || !!job.next_action || !!job.ai_method;
   const [working, setWorking] = useState<string | null>(null);
   const [problem, setProblem] = useState("");
   const name = `${job.role} at ${job.company}`;
@@ -356,6 +356,24 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
                         <li key={i}>{t}</li>
                       ))}
                     </ul>
+                  </>
+                )}
+                {job.tech_skills.length > 0 && (
+                  <>
+                    <strong>Recognized technologies</strong>
+                    <p className="mb-2 text-theme-xs text-muted">Named tools this posting mentions (O*NET&apos;s own database), and whether your CV already covers them.</p>
+                    <div className="mb-2 flex flex-wrap gap-1.5">
+                      {job.tech_skills.map((t) => (
+                        <span
+                          key={t.name}
+                          title={t.hot ? "In demand, per O*NET" : undefined}
+                          className={cn(PILL, t.have ? "text-good" : "text-muted")}
+                        >
+                          {t.name}
+                          {t.hot && " ★"}
+                        </span>
+                      ))}
+                    </div>
                   </>
                 )}
                 {job.notes && <p className="whitespace-pre-line text-muted">{job.notes}</p>}

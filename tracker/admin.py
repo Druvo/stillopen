@@ -181,14 +181,15 @@ class SiteConfigAdmin(ModelAdmin):
             },
         ),
         (
-            "Job search keys",
+            "Job search keys & writing check",
             {
                 "classes": ("tab",),
-                "fields": ("jooble_api_key", "usajobs_api_key", "usajobs_email"),
+                "fields": ("jooble_api_key", "usajobs_api_key", "usajobs_email", "languagetool_url"),
                 "description": "Optional. Jooble covers Bangladesh, Malaysia and the Gulf, where few job sites publish an open feed. "
                 "USAJobs is the official US federal job board's own documented API -- unlike Jooble it also needs the email "
                 "address the key was requested with (USAJobs requires it on every request). Without a key those sources are "
-                "simply skipped.",
+                "simply skipped. LanguageTool is unrelated to job search -- it switches on a 'Check writing' button on CVs "
+                "and cover letters, self-hosted or pointed at the public instance, off (nothing sent anywhere) while blank.",
             },
         ),
         (

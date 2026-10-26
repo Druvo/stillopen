@@ -19,7 +19,7 @@ function job(over: Partial<Job>): Job {
     notes: "", source: "", advertised_pay: "", location: "", country: "", country_name: "", arrangement: "", found_date: "2026-10-01", applied_date: null,
     applied_channel: "", applied_cv: null, follow_up_date: null, counts_as_applied: false, deadline: null, days_left: null, urgent: false, overdue: false,
     live_state: "unknown", live_detail: "", strengths: [], gaps: [], fit_level: "", fit_text: "", fit_badge: null, has_cv: false, cv: null, repost: null,
-    skill_matched: false, evaluated: false, ai_evaluated: false, ai_method: "", has_description: false, documents: [], ...over,
+    skill_matched: false, tech_skills: [], evaluated: false, ai_evaluated: false, ai_method: "", has_description: false, documents: [], ...over,
   };
 }
 

@@ -8,6 +8,8 @@ export type Repost = { distinct_urls: number; distinct_dates: number; first_seen
 
 export type CvBadge = { id: number; label: string; flagged: boolean; approved: boolean };
 
+export type TechSkill = { name: string; hot: boolean; have: boolean };
+
 export type JobDocument = { id: number; kind: string; title: string; paperless_id: number | null; paperless_error: string };
 
 export type Job = {
@@ -51,6 +53,7 @@ export type Job = {
   cv: CvBadge | null;
   repost: Repost | null;
   skill_matched: boolean;
+  tech_skills: TechSkill[];
   evaluated: boolean;
   ai_evaluated: boolean;
   ai_method: string;
@@ -163,6 +166,7 @@ export type Me = {
   site_title: string;
   prep_enabled: boolean;
   assistant_enabled: boolean;
+  writing_check_enabled: boolean;
   email_unverified_signups: boolean;
   legal_has_blanks: boolean;
   jooble_sources_dormant: boolean;

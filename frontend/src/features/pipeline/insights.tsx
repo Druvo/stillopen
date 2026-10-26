@@ -7,6 +7,11 @@ import { Link } from "@/lib/router";
 import { YourNumbers } from "@/features/stats/numbers";
 import { pipelineApi } from "./api";
 
+function monthLabel(month: string): string {
+  const [year, m] = month.split("-").map(Number);
+  return new Date(year, m - 1, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
 function Stat({ label, value, note }: { label: string; value: number; note?: string }) {
   return (
     <Card>
@@ -46,6 +51,11 @@ export function Insights() {
           {f.median_days_to_interview !== null && (
             <p className="mb-2">
               Typically <strong>{f.median_days_to_interview} {f.median_days_to_interview === 1 ? "day" : "days"}</strong> from applying to your first interview.
+            </p>
+          )}
+          {f.median_days_to_offer !== null && (
+            <p className="mb-2">
+              Typically <strong>{f.median_days_to_offer} {f.median_days_to_offer === 1 ? "day" : "days"}</strong> from applying to your first offer.
             </p>
           )}
           {f.referred_applied > 0 && (
@@ -98,6 +108,40 @@ export function Insights() {
                     {f.by_score.map((r) => (
                       <tr key={r.label} className="border-b border-border last:border-0">
                         <td className="p-3">{r.label}</td>
+                        <td className="p-3 text-right">{r.applied}</td>
+                        <td className="p-3 text-right">
+                          {r.interviews}
+                          {r.interview_rate !== null && <span className="text-muted"> ({r.interview_rate}%)</span>}
+                        </td>
+                        <td className="p-3 text-right">
+                          {r.offers}
+                          {r.offer_rate !== null && <span className="text-muted"> ({r.offer_rate}%)</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </>
+          )}
+          {f.monthly_trend.length > 0 && (
+            <>
+              <h2 className="mb-2 mt-6 font-semibold">How your search has moved over time</h2>
+              <p className="mb-2 text-sm text-muted">Applications grouped by the month you applied, oldest first -- a changed CV or channel shows up here as a shift in the rate, not just the total.</p>
+              <Card className="overflow-x-auto p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-muted">
+                      <th className="p-3 font-medium">Month</th>
+                      <th className="p-3 text-right font-medium">Applied</th>
+                      <th className="p-3 text-right font-medium">Interviews</th>
+                      <th className="p-3 text-right font-medium">Offers</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {f.monthly_trend.map((r) => (
+                      <tr key={r.month} className="border-b border-border last:border-0">
+                        <td className="p-3">{monthLabel(r.month)}</td>
                         <td className="p-3 text-right">{r.applied}</td>
                         <td className="p-3 text-right">
                           {r.interviews}
