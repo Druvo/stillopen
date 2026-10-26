@@ -62,6 +62,7 @@ def _profile_json(user) -> dict:
             "about": profile.about, "profile_cv": profile.profile_cv, "scan_digest_enabled": profile.scan_digest_enabled,
             "timezone": profile.timezone,
             "email_followups": profile.email_followups, "email_interviews": profile.email_interviews, "email_weekly": profile.email_weekly,
+            "weekly_digest_enabled": profile.weekly_digest_enabled,
         },
         "choices": {
             "employment_types": [{"value": v, "label": label} for v, label in UserProfile.EMPLOYMENT],
@@ -73,7 +74,7 @@ def _profile_json(user) -> dict:
         "max_areas": forms.MAX_AREAS,
         "site": {
             "scan_emails_enabled": site.scan_emails_enabled, "followup_emails_enabled": site.followup_emails_enabled,
-            "weekly_emails_enabled": site.weekly_emails_enabled, "assistant_enabled": site.mcp_remote_enabled,
+            "weekly_emails_enabled": site.weekly_emails_enabled, "weekly_digest_site_enabled": site.weekly_digest_site_enabled, "assistant_enabled": site.mcp_remote_enabled,
             "timezone": settings.TIME_ZONE,
         },
         "account": {

@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useMe } from "@/features/dashboard/api";
 import { FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { CreditLink } from "@/components/credit";
 import { Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
@@ -46,6 +47,7 @@ const SELECT_LABELS: Record<(typeof SELECTS)[number], string> = {
 
 export function EditJob({ id }: { id: number }) {
   const client = useQueryClient();
+  const me = useMe();
   const query = useQuery({ queryKey: ["job-details", id], queryFn: () => jobsApi.details(id) });
   const form = useSubmit();
   const [values, setValues] = useState<Record<string, string> | null>(null);
@@ -55,6 +57,9 @@ export function EditJob({ id }: { id: number }) {
   const [removing, setRemoving] = useState(false);
   // The statuses are only needed for "Mark as not for me instead" in the remove box, so they are read when the box opens.
   const statuses = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, enabled: removing, select: (d) => d.statuses });
+  const [translating, setTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState("");
+  const [translated, setTranslated] = useState("");
 
   useEffect(() => {
     if (query.data && values === null) setValues(query.data.values);
@@ -85,6 +90,18 @@ export function EditJob({ id }: { id: number }) {
       setRedetectError(errorText(e));
     } finally {
       setRedetecting(false);
+    }
+  }
+
+  async function translate() {
+    setTranslating(true);
+    setTranslateError("");
+    try {
+      setTranslated((await jobsApi.translate(id)).translated);
+    } catch (e) {
+      setTranslateError(errorText(e));
+    } finally {
+      setTranslating(false);
     }
   }
 
@@ -153,6 +170,20 @@ export function EditJob({ id }: { id: number }) {
 
           <h2 className="mb-2 mt-5 font-semibold">Description and notes</h2>
           <TextAreaField label="The job description" rows={10} value={values.description} onChange={set("description")} errors={form.fields.description} />
+          {me.data?.translate_enabled && (
+            <div className="mb-3">
+              <Button type="button" variant="outline" disabled={translating} onClick={() => void translate()}>
+                {translating ? "Translating…" : "Translate to English"}
+              </Button>
+              {translateError && <div className="mt-2"><Notice tone="error">{translateError}</Notice></div>}
+              {translated && (
+                <Card className="mt-2 bg-surface-2">
+                  <p className="mb-1 text-xs text-muted">Machine translation, for reading only -- not saved.</p>
+                  <p className="whitespace-pre-line text-sm">{translated}</p>
+                </Card>
+              )}
+            </div>
+          )}
           <TextAreaField label="Your own notes" rows={2} value={values.notes} onChange={set("notes")} errors={form.fields.notes} />
           <FormError message={form.error} />
           {notice && !form.error && <Notice tone="success">{notice}</Notice>}

@@ -37,10 +37,14 @@ Without Docker: `pip install -r requirements-hosting.txt`, set `DATABASE_URL=pos
    nothing is sent anywhere unless one of those is set. `send_default_pii` stays off -- job descriptions and
    CV text are personal/untrusted data and are never attached to an error report.
 7. Optional: a writing check. Set `LANGUAGETOOL_URL` (self-hosted, e.g. the `erikvl87/languagetool` Docker
-   image, or Site configuration > Job search keys & writing check) to switch on a "Check writing" button on
-   CVs and cover letters. Off by default; a person's CV/letter text is sent to that one server only when they
-   press the button.
-8. Scaling beyond one process: set `REDIS_URL` and `pip install -r requirements-redis.txt` so rate limits and
+   image, or Site configuration > Job search keys, writing check & translation) to switch on a "Check writing"
+   button on CVs and cover letters. Off by default; a person's CV/letter text is sent to that one server only
+   when they press the button.
+8. Optional: translation. Set `LIBRETRANSLATE_URL` (self-hosted, e.g. the `libretranslate/libretranslate`
+   Docker image) to switch on a "Translate to English" button on a job's description. Off by default; the
+   description text is sent to that one server only when the person presses the button, and the result is
+   never saved.
+9. Scaling beyond one process: set `REDIS_URL` and `pip install -r requirements-redis.txt` so rate limits and
    the search-source cache are shared, not split per worker/machine. Not needed for a single-process install.
 
 ## The public job board

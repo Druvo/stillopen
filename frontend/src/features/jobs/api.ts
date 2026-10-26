@@ -134,6 +134,7 @@ export const jobsApi = {
   details: (id: number) => request<JobDetails>("GET", `/jobs/${id}/details`),
   saveDetails: (id: number, values: Record<string, string>) => request<JobDetails>("PUT", `/jobs/${id}/details`, values),
   redetect: (id: number) => request<JobDetails & { changed: string[] }>("POST", `/jobs/${id}/redetect`),
+  translate: (id: number) => request<{ translated: string }>("POST", `/jobs/${id}/translate`),
   postings: (query: string) => request<PostingPage>("GET", `/postings${query}`),
   addPosting: (id: number, allowDuplicate = false) =>
     request<{ id: number; created: boolean; company: string; role: string }>("POST", `/postings/${id}/add`, allowDuplicate ? { allow_duplicate: true } : {}),

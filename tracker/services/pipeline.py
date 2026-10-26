@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
 
-from tracker.models import Application, Interview, ScoreBand, SiteConfig
+from tracker.models import Application, Interview, Offer, ScoreBand, SiteConfig
 from tracker.services import integrations, links, tz
 from tracker.services.cards import band_for
 
@@ -295,3 +295,54 @@ def upcoming_interviews(user, limit: int = 5):
         Interview.objects.filter(owner=user, outcome="pending", scheduled_at__gte=timezone.now())
         .select_related("application").order_by("scheduled_at")[:limit]
     )
+
+
+# --- weekly digest email: a plain summary of the last 7 days, the same counts Insights already shows --------
+
+def weekly_counts(owner, since, until) -> dict:
+    from tracker.services.apply import due_followups
+
+    return {
+        "applied": Application.objects.filter(owner=owner, applied_date__gte=since, applied_date__lte=until).count(),
+        "interviews": Interview.objects.filter(owner=owner, scheduled_at__date__gte=since, scheduled_at__date__lte=until).count(),
+        "offers": Offer.objects.filter(owner=owner, created_at__date__gte=since, created_at__date__lte=until).count(),
+        "due_now": due_followups(owner).count(),
+    }
+
+
+def weekly_digest_text(counts: dict, since, until) -> str:
+    lines = [f"Your StillOpen week ({since:%d %b} - {until:%d %b}):", ""]
+    lines.append(f"- {counts['applied']} application{'s' if counts['applied'] != 1 else ''} sent")
+    lines.append(f"- {counts['interviews']} interview{'s' if counts['interviews'] != 1 else ''}")
+    lines.append(f"- {counts['offers']} offer{'s' if counts['offers'] != 1 else ''}")
+    if counts["due_now"]:
+        lines.append(f"- {counts['due_now']} follow-up{'s' if counts['due_now'] != 1 else ''} due now")
+    lines += [
+        "", "Plain counts, not a verdict -- see the fuller picture, including what seems to work, on your Insights page.",
+        "Turn these emails off any time under Profile > Job alerts.",
+    ]
+    return "\n".join(lines)
+
+
+def send_weekly_digest(owner, today=None) -> bool:
+    """One email per person per week, Monday to Sunday. Nothing is sent when nothing happened and nothing is due
+    (avoids a weekly "0, 0, 0" email), or when the person has no verified address, or one was already sent for
+    this week (checked by the caller via `UserProfile.weekly_digest_sent_through`)."""
+    from allauth.account.models import EmailAddress
+
+    today = today or timezone.localdate()
+    since = today - timedelta(days=today.weekday())  # this week's Monday
+    until = since + timedelta(days=6)
+    counts = weekly_counts(owner, since, until)
+    if not any(counts.values()):
+        return False
+    if not EmailAddress.objects.filter(user=owner, email=owner.email, verified=True).exists():
+        return False
+    send_mail(
+        subject="StillOpen: your week in review",
+        message=weekly_digest_text(counts, since, until),
+        from_email=integrations.from_email(),
+        recipient_list=[owner.email],
+        fail_silently=False,
+    )
+    return True

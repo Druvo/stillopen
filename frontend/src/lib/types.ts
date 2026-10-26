@@ -187,6 +187,7 @@ export type Me = {
   prep_enabled: boolean;
   assistant_enabled: boolean;
   writing_check_enabled: boolean;
+  translate_enabled: boolean;
   email_unverified_signups: boolean;
   /** The person's own time zone ("" = the site's) and the site's. */
   timezone: string;

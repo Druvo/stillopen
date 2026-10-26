@@ -4,9 +4,9 @@ import { addressLine, choicesOf, emailRows, emailsChanged, withoutEmails } from 
 
 const profile = (over: Partial<ProfileData["profile"]> = {}): ProfileData["profile"] => ({
   target_roles: "", home_country: "", employment_types: [], seniority_levels: [], industries: "", languages: "", notice_period: "", salary_floor: "", deal_breakers: "",
-  about: "", profile_cv: "", scan_digest_enabled: false, timezone: "", email_followups: true, email_interviews: true, email_weekly: false, ...over,
+  about: "", profile_cv: "", scan_digest_enabled: false, weekly_digest_enabled: false, timezone: "", email_followups: true, email_interviews: true, email_weekly: false, ...over,
 });
-const site = (over: Partial<ProfileData["site"]> = {}): ProfileData["site"] => ({ scan_emails_enabled: false, assistant_enabled: true, timezone: "UTC", ...over });
+const site = (over: Partial<ProfileData["site"]> = {}): ProfileData["site"] => ({ scan_emails_enabled: false, weekly_digest_site_enabled: false, assistant_enabled: true, timezone: "UTC", ...over });
 const byKey = (rows: ReturnType<typeof emailRows>) => Object.fromEntries(rows.map((r) => [r.key, r.state]));
 
 describe("emailRows", () => {

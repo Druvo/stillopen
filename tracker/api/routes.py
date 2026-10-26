@@ -63,6 +63,7 @@ def me(request):
         "contact_email": site.contact_email,
         "site_timezone": settings.TIME_ZONE,
         "writing_check_enabled": bool(site.effective_languagetool_url),
+        "translate_enabled": bool(site.effective_libretranslate_url),
         # the banners only a site admin sees (the same rule the classic pages used)
         "email_unverified_signups": bool(flags.get("email_unverified_signups")),
         "legal_has_blanks": bool(flags.get("legal_needs_attention")),

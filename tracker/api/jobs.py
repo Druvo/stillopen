@@ -16,7 +16,7 @@ from ninja.errors import HttpError
 from .. import forms
 from ..models import Application, JobSource, Posting, SiteConfig
 from ..services import fit as fit_service
-from ..services import adzuna, blockedhosts, jobtext, scan, tracking
+from ..services import adzuna, blockedhosts, jobtext, libretranslate, scan, tracking
 from .common import ApiFormError, owned_job, throttle, validate_form
 
 router = Router()
@@ -125,6 +125,22 @@ def save_details(request, job_id: int):
     form.save()
     app.refresh_from_db()
     return _detail(app)
+
+
+@router.post("/jobs/{job_id}/translate", summary="Translate this job's description to English (LibreTranslate, off unless the admin set one up)")
+def translate_description(request, job_id: int):
+    app = owned_job(request, job_id)
+    config = SiteConfig.for_user(request.user)
+    if not libretranslate.available(config):
+        raise HttpError(400, "Translation is not set up on this server.")
+    if not app.description.strip():
+        raise HttpError(400, "There is no description to translate yet.")
+    throttle(request, "translate", settings.STILLOPEN_CHECKS_PER_HOUR)
+    try:
+        translated = libretranslate.translate(app.description, config)
+    except libretranslate.TranslateError as exc:
+        raise HttpError(400, str(exc))
+    return {"translated": translated}
 
 
 @router.post("/jobs/{job_id}/redetect", summary="Read the posting again for location, arrangement and so on")

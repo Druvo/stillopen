@@ -61,6 +61,12 @@ class SiteConfigForm(forms.ModelForm):
         help_text="Free key from developer.usajobs.gov/apirequest. Leave blank to keep the saved key. The USAJOBS_API_KEY environment variable takes precedence.",
     )
 
+    libretranslate_api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text="Only if your LibreTranslate server requires one. Leave blank to keep the saved key.",
+    )
+
     # write-only secrets: blank keeps what is saved
     email_password = forms.CharField(
         required=False, widget=forms.PasswordInput(render_value=False),
@@ -95,6 +101,10 @@ class SiteConfigForm(forms.ModelForm):
         key = self.cleaned_data.get("usajobs_api_key", "")
         return key or (self.instance.usajobs_api_key if self.instance else "")
 
+    def clean_libretranslate_api_key(self):
+        key = self.cleaned_data.get("libretranslate_api_key", "")
+        return key or (self.instance.libretranslate_api_key if self.instance else "")
+
     def clean_paperless_token(self):
         token = self.cleaned_data.get("paperless_token", "")
         return token or (self.instance.paperless_token if self.instance else "")
@@ -116,7 +126,7 @@ class SiteConfigAdmin(ModelAdmin):
             "Dashboard",
             {
                 "classes": ("tab",),
-                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "weekly_emails_enabled", "auto_scan_hours", "mcp_remote_enabled"),
+                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "weekly_emails_enabled", "weekly_digest_site_enabled", "auto_scan_hours", "mcp_remote_enabled"),
                 "description": "Follow-up emails need email set up (the Email tab) and `manage.py send_followup_emails` on a schedule (e.g. daily cron) -- enabling this alone does not send anything by itself.",
             },
         ),
@@ -193,10 +203,10 @@ class SiteConfigAdmin(ModelAdmin):
             },
         ),
         (
-            "Job search keys & writing check",
+            "Job search keys, writing check & translation",
             {
                 "classes": ("tab",),
-                "fields": ("jooble_api_key", "adzuna_app_id", "adzuna_app_key", "usajobs_api_key", "usajobs_email", "languagetool_url"),
+                "fields": ("jooble_api_key", "adzuna_app_id", "adzuna_app_key", "usajobs_api_key", "usajobs_email", "languagetool_url", "libretranslate_url", "libretranslate_api_key"),
                 "description": "Optional, and free. These switch on job searches by country, asked with each person's own target roles; "
                 "without a key those sources are simply skipped. <b>Adzuna</b> (developer.adzuna.com: register, then copy the app id and key "
                 "from your dashboard) covers 19 countries: UK, US, Canada, Australia, New Zealand, India, Singapore, South Africa, Brazil, "
@@ -204,7 +214,7 @@ class SiteConfigAdmin(ModelAdmin):
                 "India, Malaysia, Singapore, Indonesia, the Philippines, Thailand, the Gulf, Egypt, Nigeria, South Africa, Brazil, Mexico, "
                 "Poland and Turkey. <b>USAJobs</b> (developer.usajobs.gov/apirequest) is the official US federal job board's own API; it also "
                 "needs the email address the key was requested with. Run <code>python manage.py check_adzuna</code> or <code>check_jooble</code> "
-                "to test a key. LanguageTool is unrelated to job search: it switches on a 'Check writing' button on CVs and cover letters, self-hosted or pointed at the public instance, and sends nothing anywhere while blank. Adzuna's results are shown with a \"Jobs by Adzuna\" credit and are never put on the public job board.",
+                "to test a key. LanguageTool is unrelated to job search: it switches on a 'Check writing' button on CVs and cover letters, self-hosted or pointed at the public instance, and sends nothing anywhere while blank; LibreTranslate likewise adds a 'Translate' button on a job's description. Adzuna's results are shown with a \"Jobs by Adzuna\" credit and are never put on the public job board.",
             },
         ),
         (

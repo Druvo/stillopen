@@ -303,7 +303,7 @@ describe("a job card", () => {
 
 const staffMe = (over: Partial<Me>): Me =>
   ({
-    id: 1, name: "Pat", email: "pat@example.com", is_staff: true, greeting: "Good morning, Pat", site_title: "StillOpen", prep_enabled: false, assistant_enabled: false, writing_check_enabled: false,
+    id: 1, name: "Pat", email: "pat@example.com", is_staff: true, greeting: "Good morning, Pat", site_title: "StillOpen", prep_enabled: false, assistant_enabled: false, writing_check_enabled: false, translate_enabled: false,
     email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, usajobs_sources_dormant: false, ...over,
   }) as Me;
 
