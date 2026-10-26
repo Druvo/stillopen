@@ -83,6 +83,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
+TEST_RUNNER = "tracker.testrunner.StrayConnectionSafeRunner"
 
 TEMPLATES = [
     {

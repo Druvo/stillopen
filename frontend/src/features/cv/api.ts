@@ -20,6 +20,8 @@ export type Cover = {
   id: number; content: string; source: string; source_label: string; provider: string; updated_at: string; job: JobRef; flagged: boolean; flagged_count: number;
   check_report: Finding[]; approved: boolean; approved_at: string | null; exportable: boolean; downloads: { docx: string; txt: string } | null;
 };
+export type WritingMatch = { message: string; short_message: string; context: string; offset: number; length: number; category: string; suggestions: string[] };
+export type WritingCheckResult = { matches: WritingMatch[] };
 
 export type AtsStatus = "pass" | "warn" | "fail";
 export type AtsCheck = { id: string; group: string; status: AtsStatus; title: string; why: string; fix: string; weight: number; lines: number[] };
@@ -51,6 +53,7 @@ export const cvApi = {
   restore: (id: number) => request<{ id: number }>("POST", `/cv/${id}/restore`),
   remove: (id: number) => request<{ ok: true }>("DELETE", `/cv/${id}`),
   tailor: (jobId: number) => request<Made>("POST", `/jobs/${jobId}/tailor`, { mode: "auto" }),
+  writingCheck: (id: number) => request<WritingCheckResult>("POST", `/cv/${id}/writing-check`),
 };
 
 export const coverApi = {
@@ -59,4 +62,5 @@ export const coverApi = {
   approve: (id: number) => request<{ ok: true; exportable: boolean }>("POST", `/cover/${id}/approve`),
   remove: (id: number) => request<{ ok: true }>("DELETE", `/cover/${id}`),
   write: (jobId: number) => request<Made>("POST", `/jobs/${jobId}/cover-letter`, { mode: "auto" }),
+  writingCheck: (id: number) => request<WritingCheckResult>("POST", `/cover/${id}/writing-check`),
 };

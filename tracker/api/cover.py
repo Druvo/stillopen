@@ -7,10 +7,10 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 
 from ..models import CoverLetter, SiteConfig
-from ..services import coverletter
+from ..services import coverletter, languagetool
 from ..services.cvversions import CVError
 from ..services.throttle import throttled
-from .common import owned_job
+from .common import owned_job, throttle
 
 router = Router()
 
@@ -50,6 +50,20 @@ def save_letter(request, cover_id: int, payload: SaveIn):
     except CVError as exc:
         raise HttpError(400, str(exc))
     return _detail(letter)
+
+
+@router.post("/cover/{cover_id}/writing-check", summary="Grammar/clarity check of this letter's own text (LanguageTool, off unless the admin set one up)")
+def writing_check(request, cover_id: int):
+    letter = _letter(request, cover_id)
+    config = SiteConfig.for_user(request.user)
+    if not languagetool.available(config):
+        raise HttpError(400, "Writing check is not set up on this server.")
+    throttle(request, "writing-check", settings.STILLOPEN_CHECKS_PER_HOUR)
+    try:
+        matches = languagetool.check(letter.content, config)
+    except languagetool.LanguageToolError as exc:
+        raise HttpError(400, str(exc))
+    return {"matches": matches}
 
 
 @router.post("/cover/{cover_id}/approve", summary="Say the flagged items are true, which unlocks downloads")

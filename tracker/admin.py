@@ -193,10 +193,10 @@ class SiteConfigAdmin(ModelAdmin):
             },
         ),
         (
-            "Job search keys",
+            "Job search keys & writing check",
             {
                 "classes": ("tab",),
-                "fields": ("jooble_api_key", "adzuna_app_id", "adzuna_app_key", "usajobs_api_key", "usajobs_email"),
+                "fields": ("jooble_api_key", "adzuna_app_id", "adzuna_app_key", "usajobs_api_key", "usajobs_email", "languagetool_url"),
                 "description": "Optional, and free. These switch on job searches by country, asked with each person's own target roles; "
                 "without a key those sources are simply skipped. <b>Adzuna</b> (developer.adzuna.com: register, then copy the app id and key "
                 "from your dashboard) covers 19 countries: UK, US, Canada, Australia, New Zealand, India, Singapore, South Africa, Brazil, "
@@ -204,7 +204,7 @@ class SiteConfigAdmin(ModelAdmin):
                 "India, Malaysia, Singapore, Indonesia, the Philippines, Thailand, the Gulf, Egypt, Nigeria, South Africa, Brazil, Mexico, "
                 "Poland and Turkey. <b>USAJobs</b> (developer.usajobs.gov/apirequest) is the official US federal job board's own API; it also "
                 "needs the email address the key was requested with. Run <code>python manage.py check_adzuna</code> or <code>check_jooble</code> "
-                "to test a key. Adzuna's results are shown with a \"Jobs by Adzuna\" credit and are never put on the public job board.",
+                "to test a key. LanguageTool is unrelated to job search: it switches on a 'Check writing' button on CVs and cover letters, self-hosted or pointed at the public instance, and sends nothing anywhere while blank. Adzuna's results are shown with a \"Jobs by Adzuna\" credit and are never put on the public job board.",
             },
         ),
         (

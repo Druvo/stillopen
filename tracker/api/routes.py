@@ -6,7 +6,7 @@ from ninja.security import django_auth
 
 from ..context import staff_flags
 from ..models import Application, Bucket, Event, JobSource, ScoreBand, SiteConfig, Status, UserProfile
-from ..services import adzuna, ai, assist, board, careerops, geo, guide, liveness, preferences, quiz, scan, sourcehealth, tz, weekly
+from ..services import adzuna, ai, assist, board, careerops, geo, guide, knowledge, liveness, preferences, quiz, scan, sourcehealth, tz, weekly
 from ..services import apply as apply_service
 from ..services.cards import card_for
 from ..services.pipeline import upcoming_interviews
@@ -62,6 +62,7 @@ def me(request):
         "timezone": profile.timezone,
         "contact_email": site.contact_email,
         "site_timezone": settings.TIME_ZONE,
+        "writing_check_enabled": bool(site.effective_languagetool_url),
         # the banners only a site admin sees (the same rule the classic pages used)
         "email_unverified_signups": bool(flags.get("email_unverified_signups")),
         "legal_has_blanks": bool(flags.get("legal_needs_attention")),
@@ -140,6 +141,7 @@ def _job(card, has_areas: bool, prep: dict | None = None) -> dict:
         "repost": _repost(card["repost"]),
         "skill_matched": card["skill_matched"],
         "credit": adzuna.credit_for(app.posting) if app.posting_id else None,  # "Jobs by Adzuna", required where Adzuna's results appear
+        "tech_skills": card["tech_skills"],
         "evaluated": app.ai_evaluated_at is not None or app.score is not None,
         "ai_evaluated": app.ai_evaluated_at is not None,
         "ai_method": app.ai_method,
@@ -172,10 +174,11 @@ def dashboard(request):
     )
     prep_progress = assist.prep_progress(user)  # one query for every job's prep plan
     reposts = scan.repost_signals(a.posting for a in apps if a.posting_id)  # one lookup for the page, not two per job
+    candidate_text = knowledge.all_candidate_text(config, user)
     closed = next((b for b in buckets if b.is_closed), None)
     cards = []
     for app in apps:
-        card = card_for(app, config, bands, areas, profile, reposts, today)
+        card = card_for(app, config, bands, areas, profile, reposts, today, candidate_text)
         # Same rule as Application.effective_bucket, without asking the database for the closed stage once per job.
         expired = config.auto_close_expired and app.live_state == "expired" and not app.status.counts_as_applied
         card["bucket_key"] = (closed if expired and closed else app.status.bucket).key

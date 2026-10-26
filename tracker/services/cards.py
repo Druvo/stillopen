@@ -1,6 +1,7 @@
 """The job card the dashboard shows: match percent, band, deadline flags, fit and the other facts one row needs."""
 from . import fit as fit_service
 from . import scan
+from . import techskills
 
 
 def band_for(percent, bands):
@@ -12,8 +13,10 @@ def band_for(percent, bands):
     return None
 
 
-def card_for(app, config, bands, areas=None, profile=None, reposts=None, today=None):
-    """`reposts` is the batch from `scan.repost_signals` (one lookup for the whole page); without it each card looks its own up."""
+def card_for(app, config, bands, areas=None, profile=None, reposts=None, today=None, candidate_text=None):
+    """`reposts` is the batch from `scan.repost_signals` (one lookup for the whole page); without it each card looks its own up.
+    `candidate_text` (the owner's CV + knowledge sources): pass it in already read when listing many jobs at once (the dashboard),
+    so it is fetched once per request, not once per card."""
     percent = app.match_percent(config.score_scale)
     fit = fit_service.fit_flags(app, areas if areas is not None else [], profile)
     band = band_for(percent, bands)
@@ -34,4 +37,5 @@ def card_for(app, config, bands, areas=None, profile=None, reposts=None, today=N
         "fit_text": " ".join(f["text"] for f in fit if f["level"] != "ok") or " ".join(f["text"] for f in fit),
         "repost": (reposts.get(app.posting_id) if reposts is not None else scan.repost_signal(app.posting)) if app.posting_id else None,
         "skill_matched": any(e.kind == "note" and "skill match" in e.text for e in app.events.all()),
+        "tech_skills": techskills.recognized(app.description, candidate_text or ""),
     }

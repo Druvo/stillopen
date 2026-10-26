@@ -294,6 +294,13 @@ class SiteConfig(PersonalSettings):
         help_text="The email address used to request the USAJobs key -- USAJobs requires it on every request, as the "
         "User-Agent. The USAJOBS_EMAIL environment variable takes precedence.",
     )
+    languagetool_url = models.CharField(
+        max_length=300, blank=True,
+        help_text="Base URL of a LanguageTool server (self-hosted, e.g. with the erikvl87/languagetool Docker image, "
+        "or https://api.languagetool.org for the public instance -- mind its rate limit and privacy if you use that "
+        "one). Switches on a 'Check writing' button on CVs and cover letters. Off (nothing sent anywhere) when blank. "
+        "The LANGUAGETOOL_URL environment variable takes precedence.",
+    )
     paperless_verify_tls = models.BooleanField(default=True)
     paperless_auto_upload = models.BooleanField(
         default=False, help_text="Upload documents to Paperless automatically when they are imported."
@@ -451,6 +458,10 @@ class SiteConfig(PersonalSettings):
     @property
     def effective_usajobs_email(self):
         return os.environ.get("USAJOBS_EMAIL", "").strip() or self.usajobs_email.strip()
+
+    @property
+    def effective_languagetool_url(self):
+        return (os.environ.get("LANGUAGETOOL_URL", "").strip() or self.languagetool_url.strip()).rstrip("/")
 
     @property
     def effective_paperless_token(self):

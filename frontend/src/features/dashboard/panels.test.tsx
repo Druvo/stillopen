@@ -255,7 +255,7 @@ describe("a job card", () => {
       id: 1, company: "Acme", role: "Backend Engineer", url: "https://x.example/1", status_id: 1, bucket_key: "new", percent: null, band: null, decision: "", risk: "", summary: "",
       next_action: "", notes: "", source: "Greenhouse", advertised_pay: "", location: "Kuala Lumpur", country: "MY", country_name: "Malaysia", arrangement: "", found_date: "2026-10-01",
       applied_date: null, applied_channel: "", applied_cv: null, follow_up_date: null, counts_as_applied: false, deadline: null, days_left: null, urgent: false, overdue: false,
-      live_state: "unknown", live_detail: "", strengths: [], gaps: [], fit_level: "", fit_text: "", fit_badge: null, has_cv: false, cv: null, repost: null, skill_matched: false,
+      live_state: "unknown", live_detail: "", strengths: [], gaps: [], fit_level: "", fit_text: "", fit_badge: null, has_cv: false, cv: null, repost: null, skill_matched: false, tech_skills: [],
       evaluated: false, ai_evaluated: false, ai_method: "", has_description: true, documents: [], ...over,
     }) as Job;
   const statuses = [{ id: 1, name: "Saved", bucket_key: "new", color: "#000", counts_as_applied: false }];
@@ -303,7 +303,7 @@ describe("a job card", () => {
 
 const staffMe = (over: Partial<Me>): Me =>
   ({
-    id: 1, name: "Pat", email: "pat@example.com", is_staff: true, greeting: "Good morning, Pat", site_title: "StillOpen", prep_enabled: false, assistant_enabled: false,
+    id: 1, name: "Pat", email: "pat@example.com", is_staff: true, greeting: "Good morning, Pat", site_title: "StillOpen", prep_enabled: false, assistant_enabled: false, writing_check_enabled: false,
     email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, usajobs_sources_dormant: false, ...over,
   }) as Me;
 

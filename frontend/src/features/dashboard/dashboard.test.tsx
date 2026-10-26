@@ -29,12 +29,12 @@ const job = (id: number, over: Partial<Job>): Job =>
     id, company: `Co${id}`, role: `Role${id}`, url: "", status_id: 1, bucket_key: "new", percent: null, band: null, decision: "", risk: "", summary: "", next_action: "", notes: "",
     source: "", advertised_pay: "", location: "", country: "", country_name: "", arrangement: "", found_date: "2026-10-01", applied_date: null, applied_channel: "", applied_cv: null,
     follow_up_date: null, counts_as_applied: false, deadline: null, days_left: null, urgent: false, overdue: false, live_state: "unknown", live_detail: "", strengths: [], gaps: [],
-    fit_level: "", fit_text: "", fit_badge: null, has_cv: false, cv: null, repost: null, skill_matched: false, evaluated: false, ai_evaluated: false, ai_method: "",
+    fit_level: "", fit_text: "", fit_badge: null, has_cv: false, cv: null, repost: null, skill_matched: false, tech_skills: [], evaluated: false, ai_evaluated: false, ai_method: "",
     has_description: false, documents: [], ...over,
   }) as Job;
 
 function setup(prefs: Partial<Preferences> = {}) {
-  me = { id: 1, name: "Al", email: "a@x", is_staff: false, greeting: "", site_title: "", prep_enabled: false, assistant_enabled: false, email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, usajobs_sources_dormant: false, timezone: "", site_timezone: "Asia/Dhaka", preferences: { ...DEFAULT_PREFERENCES, ...prefs } };
+  me = { id: 1, name: "Al", email: "a@x", is_staff: false, greeting: "", site_title: "", prep_enabled: false, assistant_enabled: false, writing_check_enabled: false, email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, usajobs_sources_dormant: false, timezone: "", site_timezone: "Asia/Dhaka", preferences: { ...DEFAULT_PREFERENCES, ...prefs } };
   dashboard = {
     greeting: "Good morning, Al", buckets: [{ key: "new", label: "To apply", description: "", is_closed: false }, { key: "active", label: "Applied", description: "", is_closed: false }],
     statuses: [{ id: 1, name: "Saved", bucket_key: "new", color: "#000", counts_as_applied: false }, { id: 2, name: "Applied", bucket_key: "active", color: "#000", counts_as_applied: true }],

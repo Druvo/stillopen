@@ -275,6 +275,7 @@ class InsightsTests(TestCase):
         self.assertEqual((f["tracked"], f["applied"], f["interviewed"], f["offered"]), (4, 3, 2, 1))
         self.assertEqual(f["interview_rate"], 67)
         self.assertEqual(f["median_days_to_interview"], 5)
+        self.assertEqual(f["median_days_to_offer"], 10)
         site = next(r for r in f["channels"] if r["label"] == "Company site or job board")
         self.assertEqual((site["applied"], site["interviews"], site["offers"]), (2, 2, 1))
         self.assertEqual(call(self.client, "get", "/insights").json()["interviewed"], 2)
@@ -302,3 +303,20 @@ class InsightsTests(TestCase):
 
     def test_by_score_empty_when_nothing_applied(self):
         self.assertEqual(pipeline.funnel(self.u)["by_score"], [])
+
+    def test_monthly_trend_groups_by_the_month_applied_oldest_first(self):
+        this_month = timezone.localdate().replace(day=1)
+        last_month = (this_month - timedelta(days=1)).replace(day=1)
+        a = job(self.u, company="A", applied_date=last_month)
+        job(self.u, company="B", applied_date=last_month)
+        c = job(self.u, company="C", applied_date=this_month)
+        Interview.objects.create(owner=self.u, application=a, scheduled_at=timezone.now())
+        Interview.objects.create(owner=self.u, application=c, scheduled_at=timezone.now())
+        Offer.objects.create(owner=self.u, application=c, base=Decimal("1"), currency="USD")
+        rows = pipeline.funnel(self.u)["monthly_trend"]
+        self.assertEqual([r["month"] for r in rows], [last_month.strftime("%Y-%m"), this_month.strftime("%Y-%m")])
+        self.assertEqual((rows[0]["applied"], rows[0]["interviews"], rows[0]["interview_rate"]), (2, 1, 50))
+        self.assertEqual((rows[1]["applied"], rows[1]["offers"], rows[1]["offer_rate"]), (1, 1, 100))
+
+    def test_monthly_trend_empty_when_nothing_applied(self):
+        self.assertEqual(pipeline.funnel(self.u)["monthly_trend"], [])

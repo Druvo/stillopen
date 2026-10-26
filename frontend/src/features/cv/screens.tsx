@@ -8,7 +8,8 @@ import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { coverApi, cvApi, type CvSummary } from "./api";
+import { useMe } from "@/features/dashboard/api";
+import { coverApi, cvApi, type CvSummary, type WritingMatch } from "./api";
 import { AtsCard } from "./ats";
 import { diffSummary, findingText, parseBlocks, parseInline, type Finding } from "./logic";
 import { applySuggestion, readinessTone } from "./quality";
@@ -183,8 +184,56 @@ export function CvList() {
   );
 }
 
+/** Grammar/clarity check (LanguageTool). Only rendered when the admin has set one up (`me.writing_check_enabled`). */
+function WritingCheck({ run }: { run: () => Promise<{ matches: WritingMatch[] }> }) {
+  const [matches, setMatches] = useState<WritingMatch[] | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="mb-4">
+      <Button
+        variant="outline"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError("");
+          try {
+            setMatches((await run()).matches);
+          } catch (e) {
+            setError(errorText(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Checking writing…" : "Check writing"}
+      </Button>
+      {error && (
+        <div className="mt-2">
+          <Notice tone="error">{error}</Notice>
+        </div>
+      )}
+      {matches &&
+        (matches.length === 0 ? (
+          <p className="mt-2 text-sm text-muted">No issues found.</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {matches.map((m, i) => (
+              <li key={i} className="rounded-lg border border-border p-2 text-sm">
+                <p>{m.message}</p>
+                {m.context && <p className="mt-1 font-mono text-theme-xs text-muted">&quot;{m.context}&quot;</p>}
+                {m.suggestions.length > 0 && <p className="mt-1 text-theme-xs">Try: {m.suggestions.join(", ")}</p>}
+              </li>
+            ))}
+          </ul>
+        ))}
+    </div>
+  );
+}
+
 export function CvDetail({ id }: { id: number }) {
   const client = useQueryClient();
+  const me = useMe();
   const query = useQuery({ queryKey: ["cv", "one", id], queryFn: () => cvApi.get(id) });
   const [message, setMessage] = useState("");
   const [saved, setSaved] = useState("");
@@ -281,6 +330,7 @@ export function CvDetail({ id }: { id: number }) {
           return true;
         }}
       />
+      {me.data?.writing_check_enabled && <WritingCheck run={() => cvApi.writingCheck(id)} />}
 
       <h2 className="mb-2 font-semibold">Preview</h2>
       <Card className="mb-6 bg-white text-neutral-900">
@@ -397,6 +447,7 @@ export function CvDiff({ id }: { id: number }) {
 
 export function CoverDetail({ id }: { id: number }) {
   const client = useQueryClient();
+  const me = useMe();
   const key = ["cover", id] as const;
   const query = useQuery({ queryKey: key, queryFn: () => coverApi.get(id) });
   const [message, setMessage] = useState("");
@@ -424,6 +475,7 @@ export function CoverDetail({ id }: { id: number }) {
       </p>
       {message && <div className="mb-3"><Notice tone="error">{message}</Notice></div>}
       {saved && <div className="mb-3"><Notice tone="success">{saved}</Notice></div>}
+      {me.data?.writing_check_enabled && <WritingCheck run={() => coverApi.writingCheck(id)} />}
       <div className="mb-4">
         <Findings
           items={letter.check_report}

@@ -11,6 +11,8 @@ export type Repost = { distinct_urls: number; distinct_dates: number; first_seen
 
 export type CvBadge = { id: number; label: string; flagged: boolean; approved: boolean };
 
+export type TechSkill = { name: string; hot: boolean; have: boolean };
+
 export type JobDocument = { id: number; kind: string; title: string; paperless_id: number | null; paperless_error: string };
 
 export type Job = {
@@ -56,6 +58,7 @@ export type Job = {
   skill_matched: boolean;
   /** "Jobs by Adzuna" when the job came from an Adzuna search (their terms ask for the credit). */
   credit?: { label: string; url: string } | null;
+  tech_skills: TechSkill[];
   evaluated: boolean;
   ai_evaluated: boolean;
   ai_method: string;
@@ -183,6 +186,7 @@ export type Me = {
   site_title: string;
   prep_enabled: boolean;
   assistant_enabled: boolean;
+  writing_check_enabled: boolean;
   email_unverified_signups: boolean;
   /** The person's own time zone ("" = the site's) and the site's. */
   timezone: string;

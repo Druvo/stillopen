@@ -90,6 +90,27 @@ def by_score(owner, applied) -> list[dict]:
     ]
 
 
+def monthly_trend(applied, interviewed_ids: set, offered_ids: set) -> list[dict]:
+    """How the funnel has moved over time: applied jobs grouped by the month you applied, each with its own
+    interview/offer rate. Lets a person see whether a changed approach (a new CV, a new channel) is actually
+    working, not just a single cumulative percentage. Months with nothing applied are left out rather than
+    padded with zeroes; the oldest 12 months with data are kept so a long history doesn't dwarf recent months."""
+    months: dict[str, dict] = {}
+    for a in applied:
+        if not a.applied_date:
+            continue
+        key = a.applied_date.strftime("%Y-%m")
+        row = months.setdefault(key, {"month": key, "applied": 0, "interviews": 0, "offers": 0})
+        row["applied"] += 1
+        row["interviews"] += 1 if a.pk in interviewed_ids else 0
+        row["offers"] += 1 if a.pk in offered_ids else 0
+    rows = [months[key] for key in sorted(months)][-12:]
+    for row in rows:
+        row["interview_rate"] = _pct(row["interviews"], row["applied"])
+        row["offer_rate"] = _pct(row["offers"], row["applied"])
+    return rows
+
+
 def funnel(owner) -> dict:
     """Plain counts for one person: how far their applications get, and what seems to work. Never a prediction."""
     apps = list(
@@ -104,6 +125,11 @@ def funnel(owner) -> dict:
         if a.applied_date:
             first = min(tz.local_date(i.scheduled_at, owner) for i in a.interviews.all())
             first_interview_days.append(_days(a.applied_date, first))
+    first_offer_days = []
+    for a in offered:
+        if a.applied_date:
+            first = min(timezone.localtime(o.created_at).date() for o in a.offers.all())
+            first_offer_days.append(_days(a.applied_date, first))
 
     pct = _pct
     channels = {}
@@ -115,6 +141,7 @@ def funnel(owner) -> dict:
         row["offers"] += 1 if a.offers.all() else 0
     return {
         "by_score": by_score(owner, applied),
+        "monthly_trend": monthly_trend(applied, {a.pk for a in interviewed}, {a.pk for a in offered}),
         "tracked": len(apps),
         "applied": len(applied),
         "interviewed": len(interviewed),
@@ -122,6 +149,7 @@ def funnel(owner) -> dict:
         "interview_rate": pct(len(interviewed), len(applied)),
         "offer_rate": pct(len(offered), len(applied)),
         "median_days_to_interview": int(median(first_interview_days)) if first_interview_days else None,
+        "median_days_to_offer": int(median(first_offer_days)) if first_offer_days else None,
         "channels": sorted(channels.values(), key=lambda r: -r["applied"]),
         "referred_applied": sum(1 for a in applied if a.referrals.exists()),
         "referred_interviewed": sum(1 for a in interviewed if a.referrals.exists()),
