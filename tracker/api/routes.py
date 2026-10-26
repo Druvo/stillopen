@@ -62,10 +62,11 @@ def me(request):
         "timezone": profile.timezone,
         "contact_email": site.contact_email,
         "site_timezone": settings.TIME_ZONE,
-        # the two banners only a site admin sees (the same rule the classic pages used)
+        # the banners only a site admin sees (the same rule the classic pages used)
         "email_unverified_signups": bool(flags.get("email_unverified_signups")),
         "legal_has_blanks": bool(flags.get("legal_needs_attention")),
         "no_search_keys": bool(flags.get("no_search_keys")),
+        "jooble_sources_dormant": bool(flags.get("jooble_sources_dormant")),
     }
 
 

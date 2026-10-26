@@ -190,6 +190,8 @@ export type Me = {
   legal_has_blanks: boolean;
   /** Site admins only: neither a Jooble nor an Adzuna key is set, so whole countries have no job search behind them. */
   no_search_keys?: boolean;
+  /** Site admins only: a site-wide Jooble source is enabled but has no key, so it silently finds nothing. */
+  jooble_sources_dormant: boolean;
   /** The site's public contact address, or "" when the site owner has not set one. */
   contact_email?: string;
   preferences: Preferences;
