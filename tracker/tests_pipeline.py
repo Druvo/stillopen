@@ -283,3 +283,22 @@ class InsightsTests(TestCase):
         bob = person("bob")
         job(bob, applied_date=timezone.localdate())
         self.assertEqual(pipeline.funnel(self.u)["applied"], 0)
+
+    def test_by_score_groups_by_match_band_and_counts_interviews(self):
+        today = timezone.localdate()
+        strong = job(self.u, company="A", applied_date=today, score=4.5)  # 90%, Strong
+        job(self.u, company="B", applied_date=today, score=4.5)  # 90%, Strong, no interview
+        stretch = job(self.u, company="C", applied_date=today, score=1.0)  # 20%, A stretch
+        job(self.u, company="D", applied_date=today)  # never scored
+        Interview.objects.create(owner=self.u, application=strong, scheduled_at=timezone.now())
+        Interview.objects.create(owner=self.u, application=stretch, scheduled_at=timezone.now())
+        rows = pipeline.funnel(self.u)["by_score"]
+        self.assertEqual([r["label"] for r in rows], ["Strong", "A stretch", "Not scored"])
+        strong_row = rows[0]
+        self.assertEqual((strong_row["applied"], strong_row["interviews"], strong_row["interview_rate"]), (2, 1, 50))
+        stretch_row = rows[1]
+        self.assertEqual((stretch_row["applied"], stretch_row["interviews"], stretch_row["interview_rate"]), (1, 1, 100))
+        self.assertEqual(rows[2]["applied"], 1)
+
+    def test_by_score_empty_when_nothing_applied(self):
+        self.assertEqual(pipeline.funnel(self.u)["by_score"], [])

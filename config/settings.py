@@ -389,3 +389,19 @@ if not DEBUG:
         SECURE_REFERRER_POLICY = "same-origin"
     if os.environ.get("DJANGO_BEHIND_PROXY") == "1":  # nginx/Caddy terminates TLS and sets X-Forwarded-Proto
         SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Optional: error tracking. GlitchTip (self-hosted, open-source) speaks the same DSN/API as Sentry, so the
+# official sentry-sdk works against either -- point GLITCHTIP_DSN (or SENTRY_DSN) at your own instance.
+# Off by default: nothing is sent anywhere unless one of these is set. Needs requirements-hosting.txt.
+_error_tracking_dsn = os.environ.get("GLITCHTIP_DSN") or os.environ.get("SENTRY_DSN")
+if _error_tracking_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=_error_tracking_dsn,
+        integrations=[DjangoIntegration()],
+        environment=os.environ.get("STILLOPEN_ENVIRONMENT", "production" if not DEBUG else "development"),
+        traces_sample_rate=float(os.environ.get("GLITCHTIP_TRACES_SAMPLE_RATE", "0")),
+        send_default_pii=False,  # job descriptions and CV text are untrusted/personal data; never attach request bodies
+    )

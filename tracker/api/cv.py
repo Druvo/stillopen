@@ -44,6 +44,26 @@ def _downloads(version: CVVersion) -> dict | None:
     }
 
 
+class ExperienceIn(Schema):
+    company: str = ""
+    role: str = ""
+    start: str = ""
+    end: str = ""
+    bullets: list[str] = []
+
+
+class EducationIn(Schema):
+    school: str = ""
+    degree: str = ""
+    start: str = ""
+    end: str = ""
+
+
+class ProjectIn(Schema):
+    name: str = ""
+    description: str = ""
+
+
 @router.get("/cv", summary="The person's CV versions: tailored ones and the master history")
 def list_versions(request):
     config = SiteConfig.for_user(request.user)

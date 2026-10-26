@@ -6,8 +6,9 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
 
-from tracker.models import Application, Interview
+from tracker.models import Application, Interview, ScoreBand, SiteConfig
 from tracker.services import integrations, links, tz
+from tracker.services.cards import band_for
 
 REMINDER_HOURS = 24
 
@@ -59,6 +60,36 @@ def _days(start, end):
     return max(0, (end - start).days)
 
 
+def _pct(part, whole):
+    return round(100 * part / whole) if whole else None
+
+
+def by_score(owner, applied) -> list[dict]:
+    """Outcome calibration: does a higher match score actually turn into more interviews and offers?
+
+    Groups applied jobs by the match-percent band shown on their card at the time of viewing (not frozen
+    at apply time -- a re-evaluated job moves band). One row per band that has at least one applied job,
+    plus a "Not scored" row for jobs applied to without ever being evaluated, sorted highest band first.
+    Small rows say little; the page itself carries that caveat, this just supplies the counts."""
+    config = SiteConfig.for_user(owner)
+    bands = list(ScoreBand.objects.all())
+    groups: dict[int, dict] = {}
+    for a in applied:
+        band = band_for(a.match_percent(config.score_scale), bands)
+        key = band.pk if band else -1
+        row = groups.setdefault(key, {"label": band.label if band else "Not scored", "min_percent": band.min_percent if band else -1, "applied": 0, "interviews": 0, "offers": 0})
+        row["applied"] += 1
+        row["interviews"] += 1 if a.interviews.all() else 0
+        row["offers"] += 1 if a.offers.all() else 0
+    return [
+        {
+            "label": row["label"], "applied": row["applied"], "interviews": row["interviews"], "offers": row["offers"],
+            "interview_rate": _pct(row["interviews"], row["applied"]), "offer_rate": _pct(row["offers"], row["applied"]),
+        }
+        for row in sorted(groups.values(), key=lambda r: -r["min_percent"])
+    ]
+
+
 def funnel(owner) -> dict:
     """Plain counts for one person: how far their applications get, and what seems to work. Never a prediction."""
     apps = list(
@@ -74,9 +105,7 @@ def funnel(owner) -> dict:
             first = min(tz.local_date(i.scheduled_at, owner) for i in a.interviews.all())
             first_interview_days.append(_days(a.applied_date, first))
 
-    def pct(part, whole):
-        return round(100 * part / whole) if whole else None
-
+    pct = _pct
     channels = {}
     for a in applied:
         label = dict(Application.CHANNELS).get(a.applied_channel) or "Not recorded"
@@ -85,6 +114,7 @@ def funnel(owner) -> dict:
         row["interviews"] += 1 if a.interviews.all() else 0
         row["offers"] += 1 if a.offers.all() else 0
     return {
+        "by_score": by_score(owner, applied),
         "tracked": len(apps),
         "applied": len(applied),
         "interviewed": len(interviewed),

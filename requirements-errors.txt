@@ -1,0 +1,4 @@
+# Optional: error tracking (GlitchTip -- self-hosted, open-source, speaks the same DSN/API as Sentry -- or Sentry itself).
+# Set GLITCHTIP_DSN (or SENTRY_DSN) in the environment to turn it on; without one, nothing is sent anywhere.
+-r requirements.txt
+sentry-sdk>=2.0,<3

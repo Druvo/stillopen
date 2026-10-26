@@ -142,13 +142,14 @@ Takeaways:
 10. **Dashboard search/filter.** The "All postings" page already has search/source filters
     (`views.py:328-353`); the main dashboard tabs don't. Add a search box + bucket/source/date filters to the
     dashboard itself — pure UI, no backend gap.
-11. **Guided CV builder for a candidate with nothing yet.** Today, no CV means no scoring, no tailoring, no
-    apply assistant -- every one of those depends on a CV or knowledge doc already existing. A short Q&A
-    wizard (role history, skills, education, a project or two) that assembles a first Markdown CV via the
-    existing `CVVersion`/knowledge pipeline would let a true first-time candidate start from zero instead of
-    needing to arrive with a CV already written. Free-tier version: a fixed question set, template assembly,
-    no AI. Optional AI layer: have the provider turn rough answers into better-phrased bullets, same
-    fact-check-gate discipline as tailoring (never invents anything not in the person's own answers).
+11. **Guided CV builder for a candidate with nothing yet -- done.** `services/cvbuilder.py` + `POST /api/v1/
+    cv/build` + the app's `/cv/build` screen: a short, free Q&A (contact, summary, skills, experience,
+    education, projects, certifications) assembles a first Markdown CV, no AI, nothing beyond what was typed
+    -- an empty section is simply omitted, never filled with invented placeholder text. Saves through the
+    same `cvversions.record_master` path as pasting a CV by hand, so RAG, matching and tailoring all pick it
+    up identically; no separate code path to keep in sync. Entry points: the CV list's empty state and its
+    page header. Not yet done: an optional AI layer to turn rough typed answers into better-phrased bullets
+    (same fact-check-gate discipline as tailoring would apply if this is ever added).
 
 ### Tier 3 — polish / scale prerequisites, do before claiming "production-ready for the public"
 
@@ -250,6 +251,28 @@ out not to mean "not buildable": two sites had real, usable data behind the scen
 
 Both `fetch_bdjobs` and `fetch_bikroy` ship OFF by default -- not seeded anywhere in `seed_sources.py` -- an
 admin adds the `JobSource` (any board_token, it carries no meaning for either) themselves if they want it.
+
+### Open-source integrations added (2026-10-26)
+
+- **GlitchTip / Sentry-compatible error tracking** -- self-hosted, open-source, speaks the same DSN/API as
+  Sentry. Off by default: `sentry-sdk` only imports and initialises when `GLITCHTIP_DSN` or `SENTRY_DSN` is
+  set (`config/settings.py`, `requirements-errors.txt`). `send_default_pii` stays off; job descriptions and CV
+  text never get attached to an error report. See `docs/HOSTING.md` checklist item 6.
+- **ESCO (EU skills/occupations taxonomy)** -- researched, then live-verified against this app's actual
+  tech-keyword vocabulary (`docker` -> 0 results, `kubernetes` -> 0 results, `react` -> 93 mostly-irrelevant
+  soft-skill results): a poor semantic fit, **declined**, not built.
+- **Outcome calibration** -- no external dependency; derived from data the app already collects
+  (`Interview`/`Offer` rows, match score). Added `pipeline.by_score()`: groups a person's own applied jobs by
+  the match-percent band shown on the card, with interview/offer counts and rates per band, so "does a higher
+  score actually lead anywhere?" has a real (if small-sample) answer. Surfaced on the existing Insights page
+  (`frontend/src/features/pipeline/insights.tsx`) under "Does a higher match score lead anywhere?".
+
+### Still open, not yet built
+
+- USCIS H-1B employer data (free bulk CSV) -- a "known sponsor" flag on `services/fit.py`'s US sponsorship
+  check. Niche (US-only), low effort, no live-API dependency.
+- A funnel/analytics dashboard beyond what Insights already shows (response rate over time, time-to-offer).
+- Redis-backed rate limiting and a real Postgres exercise in CI (see `docs/HOSTING.md` "Not covered yet").
 
 **Jooble** also legitimately aggregates Bangladesh listings and is already wired in (`scan.fetch_jooble`,
 `token="bd"`, seeded as "Jooble Bangladesh", enabled by default but inert without a key). Free key from

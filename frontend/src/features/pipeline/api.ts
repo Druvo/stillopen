@@ -33,6 +33,7 @@ export type Insights = {
   tracked: number; applied: number; interviewed: number; offered: number; interview_rate: number | null; offer_rate: number | null;
   median_days_to_interview: number | null; channels: { label: string; applied: number; interviews: number; offers: number }[];
   referred_applied: number; referred_interviewed: number;
+  by_score: { label: string; applied: number; interviews: number; offers: number; interview_rate: number | null; offer_rate: number | null }[];
 };
 
 type Ok = { ok: true };
