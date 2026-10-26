@@ -16,7 +16,7 @@ export function Spinner() {
   return <Loader2 className="size-4 animate-spin" aria-hidden />;
 }
 
-/** The two warnings only a site admin sees (the same ones the classic dashboard showed). */
+/** The warnings only a site admin sees (the same ones the classic dashboard showed). */
 export function StaffBanners({ me }: { me?: Me }) {
   if (!me?.is_staff) return null;
   return (
@@ -33,6 +33,20 @@ export function StaffBanners({ me }: { me?: Me }) {
             Site configuration &gt; Legal
           </a>{" "}
           before real people sign up. Run <code>python manage.py update_legal_text</code> first if you are still on the old placeholder text.
+        </Notice>
+      )}
+      {me.jooble_sources_dormant && (
+        <Notice>
+          A Jooble job source is enabled (e.g. Bangladesh, Malaysia, the Gulf) but has no key, so it silently
+          finds nothing on every search. Get a free key at{" "}
+          <a href="https://jooble.org/api/about" target="_blank" rel="noopener noreferrer" className="text-brand underline">
+            jooble.org/api/about
+          </a>{" "}
+          and paste it under{" "}
+          <a href="/admin/tracker/siteconfig/" className="text-brand underline">
+            Site configuration &gt; Job search keys
+          </a>
+          .
         </Notice>
       )}
     </>

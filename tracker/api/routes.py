@@ -57,9 +57,10 @@ def me(request):
         "site_title": site.site_title,
         "prep_enabled": config.prep_enabled,
         "assistant_enabled": site.mcp_remote_enabled,
-        # the two banners only a site admin sees (the same rule the classic pages used)
+        # the banners only a site admin sees (the same rule the classic pages used)
         "email_unverified_signups": bool(flags.get("email_unverified_signups")),
         "legal_has_blanks": bool(flags.get("legal_needs_attention")),
+        "jooble_sources_dormant": bool(flags.get("jooble_sources_dormant")),
     }
 
 

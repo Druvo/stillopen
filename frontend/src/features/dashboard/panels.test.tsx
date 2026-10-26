@@ -1,11 +1,17 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Job, ScanStatus } from "@/lib/types";
+import type { Job, Me, ScanStatus } from "@/lib/types";
 import { FilterBar } from "./filters";
 import { DEFAULT_FILTERS } from "./logic";
-import { NextStepCard, ScanCard, StatTiles } from "./panels";
+import { NextStepCard, ScanCard, StaffBanners, StatTiles } from "./panels";
 
 afterEach(cleanup);
+
+const me = (over: Partial<Me>): Me => ({
+  id: 1, name: "Pat", email: "pat@example.com", is_staff: true, greeting: "Good morning, Pat",
+  site_title: "StillOpen", prep_enabled: false, assistant_enabled: false,
+  email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, ...over,
+});
 
 const scan = (over: Partial<ScanStatus>): ScanStatus => ({
   running: false, done: 0, total: 0, error: "", found: 0, added: 0, note: "", started_at: null, finished_at: null, phase: "done", entries: [], ...over,
@@ -110,5 +116,26 @@ describe("the filter bar", () => {
     expect(set).toHaveBeenCalledWith({ sort: "oldest" });
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(reset).toHaveBeenCalled();
+  });
+});
+
+describe("the staff-only banners", () => {
+  it("shows nothing for an ordinary user, even with every flag true", () => {
+    render(<StaffBanners me={me({ is_staff: false, email_unverified_signups: true, legal_has_blanks: true, jooble_sources_dormant: true })} />);
+    expect(screen.queryByText(/jooble.org\/api\/about/)).toBeNull();
+    expect(screen.queryByText(/EMAIL_HOST/)).toBeNull();
+  });
+
+  it("nudges staff to add a Jooble key when a site-wide source is dormant", () => {
+    render(<StaffBanners me={me({ jooble_sources_dormant: true })} />);
+    expect(screen.getByText(/silently finds nothing on every search/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "jooble.org/api/about" }).getAttribute("href")).toBe("https://jooble.org/api/about");
+  });
+
+  it("shows nothing when no flag is set", () => {
+    render(<StaffBanners me={me({})} />);
+    expect(screen.queryByText(/jooble.org\/api\/about/)).toBeNull();
+    expect(screen.queryByText(/EMAIL_HOST/)).toBeNull();
+    expect(screen.queryByText(/bracketed parts/)).toBeNull();
   });
 });

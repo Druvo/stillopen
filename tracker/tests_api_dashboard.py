@@ -247,6 +247,22 @@ class WhoAmI(TestCase):
         self.assertFalse(staff["email_unverified_signups"])
         self.assertFalse(staff["legal_has_blanks"])
 
+    def test_jooble_dormant_banner_only_when_enabled_sitewide_and_no_key(self):
+        from tracker.models import JobSource
+
+        self.assertFalse(self.me(self.staff)["jooble_sources_dormant"])  # no Jooble source at all yet
+        JobSource.objects.create(name="Jooble Bangladesh", connector="jooble", board_token="bd", enabled=True)
+        self.assertTrue(self.me(self.staff)["jooble_sources_dormant"])
+        self.assertFalse(self.me(self.a)["jooble_sources_dormant"])  # staff-only, same as the other two banners
+        SiteConfig.objects.update(jooble_api_key="some-key")
+        self.assertFalse(self.me(self.staff)["jooble_sources_dormant"])  # a key turns it off
+        SiteConfig.objects.update(jooble_api_key="")
+        JobSource.objects.filter(connector="jooble").update(enabled=False)
+        self.assertFalse(self.me(self.staff)["jooble_sources_dormant"])  # disabled source, nothing to nudge about
+        JobSource.objects.filter(connector="jooble").update(enabled=True)
+        JobSource.objects.filter(connector="jooble").update(owner=self.a)
+        self.assertFalse(self.me(self.staff)["jooble_sources_dormant"])  # a per-user source is that user's own choice, not site-wide
+
 
 class ImportFromCareerOps(TestCase):
     def setUp(self):
