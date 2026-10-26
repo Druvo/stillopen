@@ -7,7 +7,7 @@ from ninja.security import django_auth
 
 from ..context import staff_flags
 from ..models import Application, Bucket, JobSource, ScoreBand, SiteConfig, Status, UserProfile
-from ..services import ai, board, careerops, geo, guide, liveness, quiz, scan
+from ..services import ai, board, careerops, geo, guide, knowledge, liveness, quiz, scan
 from ..services import apply as apply_service
 from ..services.cards import card_for
 from ..services.pipeline import upcoming_interviews
@@ -133,6 +133,7 @@ def _job(card, has_areas: bool) -> dict:
         "cv": {"id": cv.pk, "label": f"CV v{cv.pk}", "flagged": cv.flagged, "approved": cv.approved} if cv else None,
         "repost": _repost(card["repost"]),
         "skill_matched": card["skill_matched"],
+        "tech_skills": card["tech_skills"],
         "evaluated": app.ai_evaluated_at is not None or app.score is not None,
         "ai_evaluated": app.ai_evaluated_at is not None,
         "ai_method": app.ai_method,
@@ -159,9 +160,10 @@ def dashboard(request):
         .select_related("status", "status__bucket", "source", "posting", "posting__source", "applied_cv")
         .prefetch_related("insights", "documents__kind", "cv_versions", "events")
     )
+    candidate_text = knowledge.all_candidate_text(config, user)
     cards = []
     for app in apps:
-        card = card_for(app, config, bands, areas, profile)
+        card = card_for(app, config, bands, areas, profile, candidate_text)
         card["bucket_key"] = app.effective_bucket(config).key
         cards.append(card)
     cards.sort(key=lambda c: (0 if c["urgent"] else 1, -(c["percent"] if c["percent"] is not None else -1)))

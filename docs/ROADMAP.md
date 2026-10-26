@@ -267,6 +267,21 @@ admin adds the `JobSource` (any board_token, it carries no meaning for either) t
   score actually lead anywhere?" has a real (if small-sample) answer. Surfaced on the existing Insights page
   (`frontend/src/features/pipeline/insights.tsx`) under "Does a higher match score lead anywhere?".
 
+### Recognized technologies on the job card, via O*NET (built, 2026-10-26)
+
+ESCO (see earlier entry) was rejected after live-checking: zero hits for "docker"/"kubernetes", noisy
+soft-skill-only hits for "react". The same live-check against the US Department of Labor's O*NET database
+(its "Software Skills" table, part of the Tools & Technology content model) came back genuinely different:
+28 rows mention Docker, 15 mention Kubernetes, and Software Developers alone lists React, Django, TypeScript
+and more, each flagged "Hot Technology" when O*NET's own employer-postings analysis shows it is actually in
+demand. Built as `services/techskills.py` + a bundled `tracker/data/onet_tech_skills.json` (8,741 distinct
+product names, deduplicated from O*NET's public `software_skills.csv`, release 31.0, CC BY 4.0, no
+registration or key needed -- a one-time download, not a live API call, since this is reference data that
+doesn't change search results day to day). Surfaced as a new "Recognized technologies" panel on every job
+card (zero-token, works with or without an AI key), separate from the existing free keyword match (whose
+tested strengths/gaps output was left untouched rather than risk its pinned-string tests for a vocabulary
+swap).
+
 ### USAJobs connector (built, 2026-10-26)
 
 Unlike every Bangladesh site above, USAJOBS (the US federal government's own job board) publishes and
