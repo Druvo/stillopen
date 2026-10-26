@@ -157,6 +157,21 @@ export function Insights() {
               </Card>
             </>
           )}
+          {f.rejection_patterns.length > 0 && (
+            <>
+              <h2 className="mb-2 mt-6 font-semibold">Keeps coming up in your rejections</h2>
+              <p className="mb-2 text-sm text-muted">
+                Gap terms the free keyword match flagged on more than one job you were later rejected from. Not a verdict -- a rejection usually has more than one reason -- just a pattern worth a look.
+              </p>
+              <Card className="flex flex-wrap gap-1.5 p-3">
+                {f.rejection_patterns.map((r) => (
+                  <span key={r.term} className="inline-flex items-center rounded-md bg-surface-2 px-1.5 py-0.5 text-theme-xs">
+                    {r.term} <span className="ml-1 text-muted">×{r.count}</span>
+                  </span>
+                ))}
+              </Card>
+            </>
+          )}
         </>
       )}
     </>
