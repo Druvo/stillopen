@@ -200,3 +200,40 @@ close most of the practical gap with Teal/Huntr/Simplify. Then Tier 2 (contacts,
 letters, offers, referrals) makes it a genuinely complete job-search product rather than "tracker + scorer."
 Tier 3 is what turns it from "fine for me and a few friends" into something safe to host for strangers at
 scale.
+
+## Update, 2026-10-26: this file is stale — most of Tier 2 shipped already
+
+A large external merge (PR chain through #21, "feature/nextjs-*") landed most of Tier 2 and more, outside
+this document's tracking: contacts/referrals (`Contact`/`Referral` models, `services/pipeline.py`), interview
+scheduling (`Interview` model, `tracker/api/prep.py` interview prep plans), offer comparison (`Offer` model,
+compared per currency, never converted), cover letters (`views_cover.py`, `services/cvgen.py`-style fact-
+checked generation), dashboard search/filter (fully built in the new Next.js app's `FilterBar`), ~100 seeded
+job sources including non-English-speaking-region coverage via Jooble (Bangladesh/Malaysia/Gulf,
+`tracker/seed_sources.py`), a public job board (`/openings/`), and the whole classic-pages-to-Next.js
+rewrite. Tier 3 hardening also mostly landed (CI in `.github/workflows/tests.yml`, self-hosting docs,
+dependabot). Treat this file as a historical record of the Tier 1 work done directly in this conversation
+(quick-add bar, skill-overlap discovery matching, AI cost/token transparency, AI provider Quick setup preset
+dropdown, follow-up email nudges) rather than a current gap list — a fresh audit against the post-merge
+codebase would be needed before trusting this file for planning again.
+
+### Bangladesh job sourcing (researched 2026-10-26)
+
+No Bangladesh job board has a confirmed, documented, stable public API:
+- **bdjobs.com** — already excluded (client-side app, no server-rendered listings). Reconfirmed: only
+  undocumented internal JSON endpoints exist, reverse-engineered by third-party scraper projects on GitHub —
+  same risk class as scraping, stays excluded.
+- **Skill.jobs** — live-checked (network tab, `/browse-jobs`): no JSON API, job data ships inside Next.js RSC
+  (`?_rsc=` streaming) payloads, not a stable/parseable format; also sits behind a Cloudflare bot-challenge.
+  Not usable.
+- **Chakri.com, Bikroy.com jobs, BASIS job board, BPSC/government circulars** — no API or feed found for any
+  of them; government circulars are PDF notices redistributed by third-party aggregators.
+- **Kormo Jobs (Google)** — discontinued (shut down mid-2022).
+
+**The correct path, already built**: Jooble's partner search API legitimately aggregates Bangladesh listings
+and is already wired in (`scan.fetch_jooble`, `token="bd"`, seeded as the "Jooble Bangladesh" `JobSource`,
+enabled by default). It just needs a free key from jooble.org/api/about, pasted into Site configuration > Job
+search keys — `context.staff_flags`'s new `jooble_sources_dormant` flag nudges a staff member with a
+dashboard banner exactly when this is the case (a site-wide Jooble source enabled, no key set).
+
+Any Bangladeshi company using Greenhouse/Lever/Ashby/SmartRecruiters/Recruitee for its own careers page
+already works automatically the moment it's added as a `JobSource` row — no new connector code needed.

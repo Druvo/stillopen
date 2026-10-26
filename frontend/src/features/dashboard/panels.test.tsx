@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Job, ScanStatus } from "@/lib/types";
+import type { Job, Me, ScanStatus } from "@/lib/types";
 
 vi.mock("./api", () => ({
   dashboardApi: { scanLog: vi.fn(), scanStatus: vi.fn(), startScan: vi.fn(), importTracker: vi.fn(), followupDone: vi.fn(), followupSnooze: vi.fn(), sendToPaperless: vi.fn() },
@@ -14,7 +14,7 @@ import { dashboardApi } from "./api";
 import { FilterPanel } from "./filters";
 import { JobCard, type CardExtras } from "./job-card";
 import { DEFAULT_FILTERS } from "./logic";
-import { AsideCard, LastSearchBody, NextStepBody, StatTiles, YourSearchBody } from "./panels";
+import { AsideCard, LastSearchBody, NextStepBody, StaffBanners, StatTiles, YourSearchBody } from "./panels";
 import { StageTabs, Toolbar, type Tab } from "./toolbar";
 
 afterEach(() => {
@@ -296,5 +296,34 @@ describe("a job card", () => {
     expect(details.open).toBe(false);
     expect(details.textContent).toContain("via Email");
     expect(details.textContent).toContain("Call back Friday");
+  });
+});
+
+// ---- the banners only a site admin sees (ported from the Jooble nudge added on main) --------------------------------------------------
+
+const staffMe = (over: Partial<Me>): Me =>
+  ({
+    id: 1, name: "Pat", email: "pat@example.com", is_staff: true, greeting: "Good morning, Pat", site_title: "StillOpen", prep_enabled: false, assistant_enabled: false,
+    email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, ...over,
+  }) as Me;
+
+describe("the staff-only banners", () => {
+  it("shows nothing for an ordinary user, even with every flag true", () => {
+    render(<StaffBanners me={staffMe({ is_staff: false, email_unverified_signups: true, legal_has_blanks: true, jooble_sources_dormant: true })} />);
+    expect(screen.queryByText(/jooble.org\/api\/about/)).toBeNull();
+    expect(screen.queryByText(/EMAIL_HOST/)).toBeNull();
+  });
+
+  it("nudges staff to add a Jooble key when a site-wide source is dormant", () => {
+    render(<StaffBanners me={staffMe({ jooble_sources_dormant: true })} />);
+    expect(screen.getByText(/silently finds nothing on every search/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "jooble.org/api/about" }).getAttribute("href")).toBe("https://jooble.org/api/about");
+  });
+
+  it("shows nothing when no flag is set", () => {
+    render(<StaffBanners me={staffMe({})} />);
+    expect(screen.queryByText(/jooble.org\/api\/about/)).toBeNull();
+    expect(screen.queryByText(/EMAIL_HOST/)).toBeNull();
+    expect(screen.queryByText(/bracketed parts/)).toBeNull();
   });
 });

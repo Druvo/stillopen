@@ -1,17 +1,24 @@
 from django.conf import settings
 
 from . import legal
-from .models import SiteConfig
+from .models import JobSource, SiteConfig
 from .services import integrations
 
 
 def staff_flags(config) -> dict:
-    """The two warnings an admin sees: sign-up is open but email confirmation is off, or the legal pages still have [blanks]."""
+    """The warnings an admin sees: sign-up is open but email confirmation is off, the legal pages still have
+    [blanks], or a Jooble source is enabled site-wide but sitting dormant for lack of a key."""
     return {
         # sign-up is open but /privacy/ or /terms/ still has [blanks] to fill in
         "legal_needs_attention": config.signup_open and (legal.has_placeholders(config.privacy_text) or legal.has_placeholders(config.terms_text)),
         # an admin should know when sign-ups are not email-verified because this install cannot send email
         "email_unverified_signups": config.signup_open and not integrations.require_email_confirmation(),
+        # fetch_jooble() silently returns [] with no key -- a site-wide Jooble source otherwise just looks
+        # permanently empty in the scan log, with nothing telling the admin why
+        "jooble_sources_dormant": (
+            not config.effective_jooble_key
+            and JobSource.objects.filter(owner__isnull=True, connector="jooble", enabled=True).exists()
+        ),
     }
 
 

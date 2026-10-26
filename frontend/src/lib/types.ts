@@ -165,5 +165,6 @@ export type Me = {
   assistant_enabled: boolean;
   email_unverified_signups: boolean;
   legal_has_blanks: boolean;
+  jooble_sources_dormant: boolean;
   preferences: Preferences;
 };
