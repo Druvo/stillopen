@@ -13,10 +13,26 @@ it isn't wired in without a confirmed-working account to verify against.
 Deliberately NOT a connector here: LinkedIn (scraping it violates its Terms of Service and its anti-bot
 measures are the kind this project won't try to defeat -- see AGENTS.md-equivalent discipline in CLAUDE.md;
 paste a LinkedIn URL into "Add job" instead, which fetches that one page you asked for, not a search) and any
-board with no public API or feed that would require a headless browser to read (bdjobs.com is a client-side
-app with no server-rendered listings and no documented API -- out of scope for this zero-token module; a
-Playwright-based scanner the way career-ops' own scan-interamt.mjs handles an equivalent case is a different,
-heavier kind of connector and isn't built here).
+board with no public API or feed that would require a headless browser to read -- still true of bdjobs.com's
+own *listing pages* (a client-side app, nothing server-rendered), but see `fetch_bdjobs` below: its internal
+JSON search API is a different matter and is wired in, on an explicit, fully-informed decision despite its
+own robots.txt disallowing generic bots.
+
+`fetch_bdjobs`'s one exception to "zero-token connector, no scraping" discipline: bdjobs.com has no official,
+documented public API, and its own robots.txt is `User-agent: * / Disallow: /` with exceptions carved out
+only for named crawlers it recognises (Googlebot, Bingbot, LinkedInBot...). What it does have is a real,
+undocumented JSON endpoint its own front end calls (found via the site's own network traffic, verified live
+to answer a plain unauthenticated GET, no cookies, no headless browser needed) -- architecturally identical
+to every other connector here, just not an endpoint bdjobs.com has published or endorsed for third-party use.
+Ships OFF by default (no `JobSource` seeded for it anywhere in seed_sources.py): an admin adds it themselves
+if they want Bangladesh coverage and are fine with that trade-off, same spirit as the local-model-URL
+admin-only gate elsewhere in this app -- a deliberate choice, not an oversight.
+
+`fetch_bikroy` is the same kind of exception for a different reason: bikroy.com's *listing* pages ARE server-
+rendered (no headless browser needed there either), but the data arrives embedded in the page's own Nuxt 3
+hydration script rather than a plain JSON body, decoded here by a small generic resolver (`_nuxt_resolve`)
+rather than a published API. Its own robots.txt does not disallow this path for generic bots. Also ships OFF
+by default, also an admin's own choice to add.
 
 A posting is matched against your own UserProfile.target_roles (simple case-insensitive phrase containment,
 the same zero-token approach career-ops' own title_filter uses) before anything is saved, and a posting whose
@@ -600,6 +616,8 @@ def search_codes(connector: str, token: str) -> set[str] | None:
         return {token.upper()}
     if connector == "jobtech" and token == "se":
         return {"SE"}
+    if connector in ("bdjobs", "bikroy"):
+        return {"BD"}
     if connector == "getonbrd" and token == "latam":
         return set(geo.REGIONS["latam"])
     return None
@@ -621,7 +639,156 @@ def _fetch_search(connector: str, token: str, roles: list[str] | None, keys: dic
         return fetch_jobtech(token, roles)
     if connector == "getonbrd":
         return fetch_getonbrd(token, roles)
+    if connector == "bdjobs":
+        return fetch_bdjobs(token, roles)
+    if connector == "bikroy":
+        return fetch_bikroy(token, roles)
     raise FetchError(f"Unknown connector: {connector}")
+
+
+BDJOBS_ROLES_PER_SEARCH = 3
+BDJOBS_RESULTS_PER_ROLE = 30
+
+
+def fetch_bdjobs(token: str, roles: list[str] | None = None) -> list[dict]:
+    """bdjobs.com's own internal JSON search API (GET https://api.bdjobs.com/Jobs/api/JobSearch/GetJobSearch),
+    found via the site's own network calls and verified live to answer a plain, unauthenticated, cookie-free
+    GET -- no headless browser needed, unlike bdjobs.com's own listing pages, which render nothing without JS.
+
+    NOT an officially published/documented API (no public developer docs page, unlike Greenhouse/Lever/Jooble).
+    bdjobs.com's own robots.txt disallows generic automated access (`User-agent: *` / `Disallow: /`, with
+    explicit exceptions only for named crawlers it recognises -- Googlebot, Bingbot, LinkedInBot...). This
+    connector was added on an explicit, fully-informed decision: both the robots.txt finding and that this
+    calls a real JSON API rather than scraping rendered HTML were disclosed before it was built. An admin who
+    disagrees can disable or delete this JobSource at any time -- it ships OFF by default (see seed_sources.py).
+
+    Unlike a company board this is a search over the whole site (bdjobs.com lists tens of thousands of jobs),
+    so like Jooble it is asked once per one person's own target roles, not scanned wholesale and matched after
+    the fact. `token` carries no meaning (site-wide, one market) and exists only for the JobSource schema."""
+    if not roles:
+        return []
+    import requests
+
+    from tracker.services.netguard import check_public_url
+
+    check_public_url("https://api.bdjobs.com/")
+    out, seen = [], set()
+    for role in roles[:BDJOBS_ROLES_PER_SEARCH]:
+        try:
+            resp = requests.get(
+                "https://api.bdjobs.com/Jobs/api/JobSearch/GetJobSearch",
+                params={
+                    "keyword": role, "pg": "1", "rpp": str(BDJOBS_RESULTS_PER_ROLE),
+                    "isPro": "0", "ToggleJobs": "true", "isFresher": "false",
+                },
+                timeout=20, allow_redirects=False, headers={"User-Agent": "Mozilla/5.0"},
+            )
+        except requests.RequestException as exc:
+            raise FetchError(f"Request failed: {exc.__class__.__name__}") from exc
+        if resp.status_code != 200:
+            raise FetchError(f"HTTP {resp.status_code}")
+        try:
+            payload = resp.json()
+        except ValueError as exc:
+            raise FetchError("bdjobs did not return JSON.") from exc
+        for j in payload.get("data") or []:
+            job_id = str(j.get("Jobid") or "")
+            if not job_id or job_id in seen:
+                continue
+            seen.add(job_id)
+            blurb = " ".join(x for x in (j.get("jobDescription"), j.get("eduRec"), j.get("experience")) if x)
+            out.append({
+                "title": (j.get("jobTitle") or "").strip(), "url": f"https://bdjobs.com/h/details/{job_id}",
+                "location": (j.get("location") or "").strip(), "company": (j.get("companyName") or "").strip(),
+                "description": _blurb(blurb),
+            })
+    return out
+
+
+_NUXT_REACTIVE_WRAPPERS = {"ShallowReactive", "Reactive", "Ref", "ShallowRef"}
+
+
+def _nuxt_resolve(data: list, i, depth: int = 0):
+    """Decode one value out of a Nuxt 3 page's `__NUXT_DATA__` hydration payload: a JSON array where most
+    integers are pointers back into that same array (Nuxt's own "devalue"-style dedup scheme), with a few
+    two-element `["ShallowReactive", pointer]`-style wrapper tags to unwrap. Small and generic rather than a
+    full devalue implementation, since bikroy.com's payload only ever uses this one shape -- good enough to
+    read a page it published itself, but liable to need a tweak if Nuxt's own format changes."""
+    if depth > 25:
+        return None
+    v = data[i] if isinstance(i, int) and 0 <= i < len(data) else i
+    if isinstance(v, list):
+        if len(v) == 2 and isinstance(v[0], str) and v[0] in _NUXT_REACTIVE_WRAPPERS:
+            return _nuxt_resolve(data, v[1], depth + 1)
+        return [_nuxt_resolve(data, x, depth + 1) for x in v]
+    if isinstance(v, dict):
+        return {k: _nuxt_resolve(data, x, depth + 1) for k, x in v.items()}
+    return v
+
+
+def fetch_bikroy(token: str, roles: list[str] | None = None) -> list[dict]:
+    """bikroy.com's Jobs category. Its listing pages are server-rendered (Nuxt 3): a plain GET already returns
+    every posting, embedded in the page's own `__NUXT_DATA__` hydration script (see `_nuxt_resolve`) -- no
+    headless browser needed, same as `fetch_bdjobs` but for a different reason (bdjobs.com's own listing pages
+    need JS; bikroy.com's don't, it's the data shape inside the HTML that needs decoding instead of a simple
+    JSON body). Unlike bdjobs.com, bikroy.com's own robots.txt does not disallow this path for generic bots.
+
+    NOT an officially published/documented API -- there is no bikroy.com developer docs page, and this reads
+    a hydration payload meant for the page's own front end, not a stable public contract. Ships OFF by default
+    (no `JobSource` seeded for it anywhere), same as bdjobs: an admin adds it themselves if they want it.
+
+    Unlike a company board this is a search over the whole classifieds site, so like Jooble/bdjobs it is asked
+    once per one person's own target roles. `token` carries no meaning (site-wide, one market)."""
+    if not roles:
+        return []
+    import json
+    import re
+
+    import requests
+
+    from tracker.services.netguard import check_public_url
+
+    check_public_url("https://bikroy.com/")
+    out, seen = [], set()
+    for role in roles[:BDJOBS_ROLES_PER_SEARCH]:
+        try:
+            resp = requests.get(
+                "https://bikroy.com/jobs", params={"query": role},
+                timeout=20, allow_redirects=False, headers={"User-Agent": "Mozilla/5.0"},
+            )
+        except requests.RequestException as exc:
+            raise FetchError(f"Request failed: {exc.__class__.__name__}") from exc
+        if resp.status_code != 200:
+            raise FetchError(f"HTTP {resp.status_code}")
+        match = re.search(r'<script[^>]*id="__NUXT_DATA__"[^>]*>(.*?)</script>', resp.text, re.S)
+        if not match:
+            raise FetchError("Could not find bikroy's listing data on the page.")
+        try:
+            raw = json.loads(match.group(1))
+        except ValueError as exc:
+            raise FetchError("bikroy's listing data was not valid JSON.") from exc
+        root = _nuxt_resolve(raw, 1)
+        try:
+            page_key = next(k for k in root["data"] if not k.startswith("i-jiji:"))
+            adverts = root["data"][page_key]["listing"]["adverts_list"]["adverts"]
+        except (KeyError, IndexError, TypeError, StopIteration) as exc:
+            raise FetchError("bikroy's page structure has changed.") from exc
+        for a in adverts:
+            if not a.get("is_job"):
+                continue  # the same search also returns CVs-for-hire and unrelated classifieds categories
+            job_id = str(a.get("id") or "")
+            if not job_id or job_id in seen:
+                continue
+            seen.add(job_id)
+            path = a.get("url") or ""
+            out.append({
+                "title": (a.get("title") or "").strip(),
+                "url": f"https://bikroy.com{path}" if path.startswith("/") else path,
+                "location": (a.get("region") or "").strip(),
+                "company": "",  # a classifieds board: the poster is a person, not reliably a named employer
+                "description": _blurb(a.get("details") or a.get("short_description") or ""),
+            })
+    return out
 
 
 def _fetch(connector: str, token: str) -> list[dict]:

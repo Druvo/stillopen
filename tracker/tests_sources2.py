@@ -174,7 +174,7 @@ class SeedLists(TestCase):
 
         from django.apps import apps
 
-        migration = importlib.import_module("tracker.migrations.0058_more_countries")
+        migration = importlib.import_module("tracker.migrations.0060_more_countries")
         with self.settings(STILLOPEN_SEED_SOURCES=True):
             migration.seed(apps, None)
             self.assertEqual(JobSource.objects.count(), 0)  # an install with no site-wide sources is left to migration 0031

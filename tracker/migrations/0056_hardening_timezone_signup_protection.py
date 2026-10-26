@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tracker', '0053_assist_help'),
+        ('tracker', '0055_assist_help'),
     ]
 
     operations = [

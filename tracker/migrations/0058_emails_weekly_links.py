@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tracker', '0055_job_management'),
+        ('tracker', '0057_job_management'),
     ]
 
     operations = [

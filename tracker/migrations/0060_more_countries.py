@@ -22,7 +22,7 @@ def seed(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tracker', '0057_careers_page_connector'),
+        ('tracker', '0059_careers_page_connector'),
     ]
 
     operations = [

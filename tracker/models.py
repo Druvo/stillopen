@@ -1265,6 +1265,8 @@ class JobSource(models.Model):
         ("adzuna", "Adzuna (needs a free key)"),
         ("jobtech", "JobTech Sweden"),
         ("getonbrd", "Get on Board (Latin America)"),
+        ("bdjobs", "Bangladesh -- bdjobs.com (undocumented API, off by default -- see scan.py)"),
+        ("bikroy", "Bangladesh -- bikroy.com Jobs (undocumented API, off by default -- see scan.py)"),
     ]
 
     name = models.CharField(max_length=120, help_text="Shown in the scan log. The company name for a single-company connector; a label like 'RemoteOK' for an aggregator.")
@@ -1277,7 +1279,9 @@ class JobSource(models.Model):
         "optional filter -- a RemoteOK tag (e.g. 'dev'), a We Work Remotely category slug (e.g. "
         "'remote-full-stack-programming-jobs'), or 'all' for no filter (Himalayas ignores this and always "
         "fetches its newest postings, since its public API has no working keyword filter to request narrower "
-        "than that). Letters, digits, dot, dash and underscore only.",
+        "than that). Jooble: a country code (bd, my, ae, sa, qa, kw, bh, om). bdjobs / bikroy: any value, e.g. "
+        "'bd' -- both are a sitewide search, not a per-company board, so the token carries no meaning. Letters, "
+        "digits, dot, dash and underscore only.",
         validators=[validate_board_token],
     )
     enabled = models.BooleanField(default=True)

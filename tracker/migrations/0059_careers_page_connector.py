@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tracker', '0056_emails_weekly_links'),
+        ('tracker', '0058_emails_weekly_links'),
     ]
 
     operations = [

@@ -206,7 +206,7 @@ REGIONAL_MORE = [
 
 # Country searches: asked with each person's own roles, one source per country (the token). `SEARCH_CONNECTORS` are the ones of this
 # kind; Jooble and Adzuna also need the site's free key and are skipped silently without it.
-SEARCH_CONNECTORS = ("jooble", "adzuna", "jobtech", "getonbrd")
+SEARCH_CONNECTORS = ("jooble", "adzuna", "jobtech", "getonbrd", "bdjobs", "bikroy")
 
 _JOOBLE_COUNTRIES = [
     ("bd", "Bangladesh"), ("my", "Malaysia"), ("ae", "United Arab Emirates"), ("sa", "Saudi Arabia"), ("qa", "Qatar"),

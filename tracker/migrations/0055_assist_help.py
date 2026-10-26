@@ -6,7 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("tracker", "0052_ui_preferences"),
+        ("tracker", "0054_ui_preferences"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

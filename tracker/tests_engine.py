@@ -553,6 +553,212 @@ class JoobleKeyInAdmin(TestCase):
         self.assertEqual(cleaned.clean_jooble_api_key(), "saved-key")
 
 
+class BdjobsConnector(TestCase):
+    def response(self, data, status=200, message="Success"):
+        r = mock.Mock(status_code=status)
+        r.json.return_value = {"message": message, "statuscode": "1", "data": data}
+        return r
+
+    def j(self, **kw):
+        base = {
+            "Jobid": "1539875", "jobTitle": "Backend Engineer", "companyName": "Pathao", "location": "Dhaka",
+            "jobDescription": "", "eduRec": "", "experience": "At least 2 years",
+        }
+        base.update(kw)
+        return base
+
+    @mock.patch("requests.get")
+    def test_asks_bdjobs_with_the_persons_roles(self, get):
+        get.return_value = self.response([self.j()])
+        out = scan.fetch_bdjobs("bd", ["backend engineer", "python developer"])
+        keywords = [c.kwargs["params"]["keyword"] for c in get.call_args_list]
+        self.assertEqual(keywords, ["backend engineer", "python developer"])
+        self.assertFalse(get.call_args.kwargs["allow_redirects"])
+        self.assertEqual(len(out), 1)  # the same job id from both role searches is one job
+        j = out[0]
+        self.assertEqual((j["title"], j["company"], j["url"]), ("Backend Engineer", "Pathao", "https://bdjobs.com/h/details/1539875"))
+        self.assertEqual(j["location"], "Dhaka")
+
+    @mock.patch("requests.get")
+    def test_description_comes_from_whatever_text_fields_are_present(self, get):
+        get.return_value = self.response([self.j(jobDescription="Build APIs", eduRec="BSc in CSE", experience="2 to 4 years")])
+        out = scan.fetch_bdjobs("bd", ["backend engineer"])
+        self.assertIn("Build APIs", out[0]["description"])
+        self.assertIn("BSc in CSE", out[0]["description"])
+
+    @mock.patch("requests.get")
+    def test_at_most_three_roles_per_search(self, get):
+        get.return_value = self.response([])
+        scan.fetch_bdjobs("bd", ["a", "b", "c", "d", "e"])
+        self.assertEqual(get.call_count, 3)
+
+    @mock.patch("requests.get")
+    def test_nothing_to_ask_without_roles(self, get):
+        self.assertEqual(scan.fetch_bdjobs("bd", []), [])
+        self.assertEqual(scan.fetch_bdjobs("bd", None), [])
+        get.assert_not_called()
+
+    @mock.patch("requests.get")
+    def test_non_200_or_bad_json_is_a_fetch_error(self, get):
+        get.return_value = mock.Mock(status_code=500)
+        with self.assertRaises(FetchError):
+            scan.fetch_bdjobs("bd", ["x"])
+        get.return_value = mock.Mock(status_code=200, **{"json.side_effect": ValueError("not json")})
+        with self.assertRaises(FetchError):
+            scan.fetch_bdjobs("bd", ["x"])
+
+    def test_bdjobs_is_site_wide_only_and_a_keyless_search(self):
+        self.assertIn("bdjobs", dict(JobSource.CONNECTORS))
+        self.assertNotIn("bdjobs", JobSource.OWN_CONNECTORS)
+
+    def test_not_seeded_by_default_anywhere(self):
+        """Ships off by default: no admin gets this connector without adding it themselves."""
+        from tracker.seed_sources import DEFAULT_SOURCES, JOOBLE, REGIONAL
+
+        self.assertNotIn("bdjobs", {c for _, c, _ in DEFAULT_SOURCES})
+        self.assertNotIn("bdjobs", {c for _, c, _ in JOOBLE})
+        self.assertNotIn("bdjobs", {c for _, c, _ in REGIONAL})
+
+
+class BdjobsInSearch(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.u = person(roles="Backend Engineer")
+        self.src = JobSource.objects.create(name="Bangladesh (bdjobs.com)", connector="bdjobs", board_token="bd")
+
+    def test_skipped_for_someone_with_no_roles(self):
+        UserProfile.objects.filter(user=self.u).update(target_roles="")
+        self.assertEqual(scan.searchable_sources(self.u).count(), 0)
+
+    def test_included_once_the_person_has_a_role(self):
+        self.assertEqual(scan.searchable_sources(self.u).count(), 1)
+
+    def test_a_search_adds_a_bdjobs_posting_and_asks_with_this_persons_roles(self):
+        payload = {"data": [{"Jobid": "99", "jobTitle": "Backend Engineer", "companyName": "Pathao", "location": "Dhaka",
+                              "jobDescription": "C# SQL Server REST APIs Docker Kubernetes", "eduRec": "", "experience": ""}]}
+        with mock.patch("requests.get") as get:
+            get.return_value = mock.Mock(status_code=200, **{"json.return_value": payload})
+            run = scan.start_run(self.u, background=False)
+        self.assertEqual(run.added, 1)
+        app = Application.objects.get(owner=self.u)
+        self.assertEqual((app.company, app.url), ("Pathao", "https://bdjobs.com/h/details/99"))
+        self.assertEqual(get.call_args.kwargs["params"]["keyword"], "backend engineer")
+
+    def test_disabled_source_is_never_searched(self):
+        JobSource.objects.filter(pk=self.src.pk).update(enabled=False)
+        self.assertEqual(scan.searchable_sources(self.u).count(), 0)
+
+
+class BikroyConnector(TestCase):
+    def blob(self, adverts):
+        """A minimal devalue-style __NUXT_DATA__ array matching the shape scan._nuxt_resolve expects --
+        smaller than bikroy's real payload, but the same reference scheme (root fixed at index 1)."""
+        import json
+
+        arr = [None, None]
+
+        def push(v):
+            arr.append(v)
+            return len(arr) - 1
+
+        advert_idxs = [push(a) for a in adverts]
+        adverts_list_i = push({"adverts": advert_idxs})
+        listing_i = push({"adverts_list": adverts_list_i})
+        page_i = push({"listing": listing_i})
+        jobs_key_i = push({"/jobs": page_i})
+        arr[1] = {"data": jobs_key_i}
+        return json.dumps(arr)
+
+    def page(self, adverts, status=200):
+        html = f'<html><body><script id="__NUXT_DATA__" type="application/json">{self.blob(adverts)}</script></body></html>'
+        return mock.Mock(status_code=status, text=html)
+
+    def a(self, **kw):
+        base = {
+            "is_job": True, "id": "ad900001", "title": "Backend Developer", "region": "Dhaka, Gulshan",
+            "url": "/gulshan/computing-and-it-jobs/backend-developer-abc123.html",
+            "details": "We need a Backend Developer with REST APIs.", "short_description": "",
+        }
+        base.update(kw)
+        return base
+
+    @mock.patch("requests.get")
+    def test_asks_bikroy_with_the_persons_roles(self, get):
+        get.return_value = self.page([self.a()])
+        out = scan.fetch_bikroy("bd", ["backend developer", "python developer"])
+        queries = [c.kwargs["params"]["query"] for c in get.call_args_list]
+        self.assertEqual(queries, ["backend developer", "python developer"])
+        self.assertFalse(get.call_args.kwargs["allow_redirects"])
+        self.assertEqual(len(out), 1)  # the same ad id from both role searches is one job
+        j = out[0]
+        self.assertEqual((j["title"], j["url"], j["location"]), ("Backend Developer", "https://bikroy.com/gulshan/computing-and-it-jobs/backend-developer-abc123.html", "Dhaka, Gulshan"))
+        self.assertIn("REST APIs", j["description"])
+        self.assertEqual(j["company"], "")  # a classifieds poster, never assumed to be a named employer
+
+    @mock.patch("requests.get")
+    def test_non_job_adverts_in_the_same_search_are_dropped(self, get):
+        get.return_value = self.page([self.a(is_job=False, id="ad1"), self.a(is_job=True, id="ad2")])
+        out = scan.fetch_bikroy("bd", ["developer"])
+        self.assertEqual(len(out), 1)
+
+    @mock.patch("requests.get")
+    def test_at_most_three_roles_per_search(self, get):
+        get.return_value = self.page([])
+        scan.fetch_bikroy("bd", ["a", "b", "c", "d", "e"])
+        self.assertEqual(get.call_count, 3)
+
+    @mock.patch("requests.get")
+    def test_nothing_to_ask_without_roles(self, get):
+        self.assertEqual(scan.fetch_bikroy("bd", []), [])
+        self.assertEqual(scan.fetch_bikroy("bd", None), [])
+        get.assert_not_called()
+
+    @mock.patch("requests.get")
+    def test_non_200_or_missing_data_script_is_a_fetch_error(self, get):
+        get.return_value = mock.Mock(status_code=500, text="")
+        with self.assertRaises(FetchError):
+            scan.fetch_bikroy("bd", ["x"])
+        get.return_value = mock.Mock(status_code=200, text="<html><body>no data here</body></html>")
+        with self.assertRaises(FetchError):
+            scan.fetch_bikroy("bd", ["x"])
+
+    def test_bikroy_is_site_wide_only_and_a_keyless_search(self):
+        self.assertIn("bikroy", dict(JobSource.CONNECTORS))
+        self.assertNotIn("bikroy", JobSource.OWN_CONNECTORS)
+
+    def test_not_seeded_by_default_anywhere(self):
+        from tracker.seed_sources import DEFAULT_SOURCES, JOOBLE, REGIONAL
+
+        self.assertNotIn("bikroy", {c for _, c, _ in DEFAULT_SOURCES})
+        self.assertNotIn("bikroy", {c for _, c, _ in JOOBLE})
+        self.assertNotIn("bikroy", {c for _, c, _ in REGIONAL})
+
+
+class BikroyInSearch(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.u = person(roles="Backend Engineer")
+        self.src = JobSource.objects.create(name="Bangladesh (bikroy.com)", connector="bikroy", board_token="bd")
+
+    def test_skipped_for_someone_with_no_roles(self):
+        UserProfile.objects.filter(user=self.u).update(target_roles="")
+        self.assertEqual(scan.searchable_sources(self.u).count(), 0)
+
+    def test_included_once_the_person_has_a_role(self):
+        self.assertEqual(scan.searchable_sources(self.u).count(), 1)
+
+    def test_a_search_adds_a_bikroy_posting(self):
+        blob = BikroyConnector().blob([BikroyConnector().a(id="ad900002", title="Backend Engineer")])
+        html = f'<html><body><script id="__NUXT_DATA__" type="application/json">{blob}</script></body></html>'
+        with mock.patch("requests.get") as get:
+            get.return_value = mock.Mock(status_code=200, text=html)
+            run = scan.start_run(self.u, background=False)
+        self.assertEqual(run.added, 1)
+        app = Application.objects.get(owner=self.u)
+        self.assertEqual(app.url, "https://bikroy.com/gulshan/computing-and-it-jobs/backend-developer-abc123.html")
+        self.assertEqual(get.call_args.kwargs["params"]["query"], "backend engineer")
+
+
 class RegionalSources(TestCase):
     def test_regional_and_jooble_lists_are_well_formed(self):
         from tracker.seed_sources import JOOBLE, JOOBLE_MORE, REGIONAL

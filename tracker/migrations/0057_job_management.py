@@ -25,7 +25,7 @@ def restore_statuses(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("tracker", "0054_hardening_timezone_signup_protection")]
+    dependencies = [("tracker", "0056_hardening_timezone_signup_protection")]
 
     operations = [
         migrations.AddField(

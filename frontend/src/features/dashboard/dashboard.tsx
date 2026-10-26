@@ -25,7 +25,7 @@ import {
 import { allSelected, movedText, notForMeStatus, pruneSelection, removedText, selectAllIn, statusLabel, toggleId, undoText, weakLine } from "./jobmgmt";
 import { SelectionBar, UndoBar } from "./selection";
 import { comingUpItems } from "./coming-up";
-import { AiKeyPrompt, AsideCard, ComingUpBody, FollowupsBody, LastSearchBody, NextStepBody, QuickAdd, Spinner, StaffBanners, StatTiles, ThisWeekBody, YourSearchBody } from "./panels";
+import { AiKeyPrompt, AsideCard, ComingUpBody, FollowupsBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, YourSearchBody } from "./panels";
 import { StageTabs, TAB_PANEL_ID, tabId, Toolbar } from "./toolbar";
 import { useRun } from "./use-run";
 import { TimezonePrompt } from "./timezone-prompt";
@@ -389,7 +389,6 @@ export function Dashboard() {
         </aside>
 
         <div className="so-stack min-w-0 xl:col-start-1 xl:row-start-1">
-          <QuickAdd />
           <StageTabs tabs={tabs} active={activeTab.key} onChange={(key) => setFilter({ stage: key })} />
           <Toolbar
             filters={filters}
