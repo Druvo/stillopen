@@ -13,6 +13,14 @@ export type CvDetail = CvSummary & {
 };
 export type CvDiff = { version: { id: number; label: string }; other: { id: number; label: string } | null; rows: DiffRow[]; choices: { id: number; label: string }[] };
 export type Made = { id: number; flagged: boolean; flagged_count: number };
+export type ExperienceIn = { company: string; role: string; start: string; end: string; bullets: string[] };
+export type EducationIn = { school: string; degree: string; start: string; end: string };
+export type ProjectIn = { name: string; description: string };
+export type BuildCvIn = {
+  full_name: string; email: string; phone: string; location: string; links: string[]; summary: string; skills: string[];
+  experience: ExperienceIn[]; education: EducationIn[]; projects: ProjectIn[]; certifications: string[];
+};
+export type BuiltCv = { id: number; content: string };
 export type Cover = {
   id: number; content: string; source: string; source_label: string; provider: string; updated_at: string; job: JobRef; flagged: boolean; flagged_count: number;
   check_report: Finding[]; approved: boolean; approved_at: string | null; exportable: boolean; downloads: { docx: string; txt: string } | null;
@@ -27,6 +35,7 @@ export const cvApi = {
   restore: (id: number) => request<{ id: number }>("POST", `/cv/${id}/restore`),
   remove: (id: number) => request<{ ok: true }>("DELETE", `/cv/${id}`),
   tailor: (jobId: number) => request<Made>("POST", `/jobs/${jobId}/tailor`, { mode: "auto" }),
+  build: (payload: BuildCvIn) => request<BuiltCv>("POST", "/cv/build", payload),
 };
 
 export const coverApi = {

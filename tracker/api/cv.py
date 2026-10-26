@@ -7,7 +7,7 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 
 from ..models import CVVersion, SiteConfig
-from ..services import cvexport, cvgen, cvversions
+from ..services import cvbuilder, cvexport, cvgen, cvversions
 from ..services.cvversions import CVError
 from ..services.throttle import throttled
 from .common import owned, owned_job
@@ -41,6 +41,49 @@ def _downloads(version: CVVersion) -> dict | None:
         "docx": reverse("cv_download", args=[version.pk, "docx"]), "md": reverse("cv_download", args=[version.pk, "md"]),
         "print": reverse("cv_print", args=[version.pk]),
     }
+
+
+class ExperienceIn(Schema):
+    company: str = ""
+    role: str = ""
+    start: str = ""
+    end: str = ""
+    bullets: list[str] = []
+
+
+class EducationIn(Schema):
+    school: str = ""
+    degree: str = ""
+    start: str = ""
+    end: str = ""
+
+
+class ProjectIn(Schema):
+    name: str = ""
+    description: str = ""
+
+
+class BuildCVIn(Schema):
+    full_name: str
+    email: str = ""
+    phone: str = ""
+    location: str = ""
+    links: list[str] = []
+    summary: str = ""
+    skills: list[str] = []
+    experience: list[ExperienceIn] = []
+    education: list[EducationIn] = []
+    projects: list[ProjectIn] = []
+    certifications: list[str] = []
+
+
+@router.post("/cv/build", summary="Build a first CV from a short guided Q&A -- no AI, nothing but what was typed")
+def build_cv(request, payload: BuildCVIn):
+    try:
+        version = cvbuilder.build_and_save(request.user, payload.dict())
+    except CVError as exc:
+        raise HttpError(400, str(exc))
+    return {"id": version.pk, "content": version.content}
 
 
 @router.get("/cv", summary="The person's CV versions: tailored ones and the master history")

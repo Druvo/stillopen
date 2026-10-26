@@ -225,3 +225,46 @@ class CoverApi(TestCase):
         self.assertEqual(self.write().status_code, 404)
         letter.refresh_from_db()
         self.assertEqual(letter.content, "Hello")
+
+
+class BuildCvApi(TestCase):
+    """The guided CV builder's API: a brand-new candidate with no CV yet."""
+
+    def setUp(self):
+        cache.clear()
+        self.a, self.b = person("alice"), person("bob")
+        self.client.force_login(self.a)
+
+    def build(self, **over):
+        payload = {"full_name": "Alice Example", "summary": "Backend engineer.", "skills": ["C#", "Docker"]}
+        payload.update(over)
+        return post(self.client, f"{BASE}/cv/build", payload)
+
+    def test_happy_path_creates_a_master_cv(self):
+        r = self.build()
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn("# Alice Example", data["content"])
+        version = CVVersion.objects.get(pk=data["id"])
+        self.assertEqual((version.owner, version.kind, version.approved), (self.a, "master", True))
+        self.assertEqual(UserProfile.objects.get(user=self.a).profile_cv, version.content)
+
+    def test_no_name_is_a_plain_400(self):
+        r = self.build(full_name="")
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(CVVersion.objects.filter(owner=self.a).exists())
+
+    def test_appears_in_the_cv_list_afterwards(self):
+        self.build()
+        data = self.client.get(f"{BASE}/cv").json()
+        self.assertEqual(len(data["masters"]), 1)
+        self.assertIn("Alice Example", data["masters"][0]["label"] + self.client.get(f"{BASE}/cv/{data['masters'][0]['id']}").json()["content"])
+
+    def test_isolation_never_touches_another_persons_profile(self):
+        self.build()
+        self.assertEqual(UserProfile.objects.get(user=self.b).profile_cv, "")
+        self.assertFalse(CVVersion.objects.filter(owner=self.b).exists())
+
+    def test_anonymous_is_refused(self):
+        self.client.logout()
+        self.assertEqual(self.build().status_code, 401)

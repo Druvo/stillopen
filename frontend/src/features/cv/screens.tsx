@@ -117,7 +117,7 @@ export function CvList() {
   const { masters, tailored } = query.data;
   return (
     <>
-      <PageHeader title="Your CV versions" />
+      <PageHeader title="Your CV versions" actions={<Link to="/cv/build" className={buttonClass("outline")}>Build from questions</Link>} />
       <p className="mb-4 text-sm text-muted">Every change to your CV is kept. Each tailored CV is saved with the job it was made for, so you always know exactly what you sent. Tailor a CV from a job on the dashboard.</p>
       {message && <div className="mb-3"><Notice tone="error">{message}</Notice></div>}
 
@@ -140,7 +140,8 @@ export function CvList() {
       <Card>
         {masters.length === 0 ? (
           <p className="text-sm text-muted">
-            Add your CV in your <Link to="/profile" className="text-brand underline">profile</Link> and it appears here.
+            Add your CV in your <Link to="/profile" className="text-brand underline">profile</Link>, or{" "}
+            <Link to="/cv/build" className="text-brand underline">build one from a few questions</Link> if you don&apos;t have one yet.
           </p>
         ) : (
           <ul className="divide-y divide-border">
