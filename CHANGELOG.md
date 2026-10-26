@@ -18,6 +18,10 @@ supported version, so entries are grouped under **Unreleased** until the first t
   Labor's O*NET database (a real, CC-licensed, named-technology vocabulary), not generic word frequency --
   ESCO was tried for this earlier and rejected as a poor fit; O*NET live-checked well. Zero-token, works
   without an AI key.
+- A weekly digest email (Profile > Job alerts): applications sent, interviews, offers and follow-ups from the
+  last 7 days, the same plain counts the Insights page shows. Off at two levels like the scheduled search
+  email -- a site admin switches it on (Site configuration > Dashboard), each person opts in separately. Run
+  `manage.py send_weekly_digest` on a weekly cron.
 - Optional "Translate to English" button on a job's description, via LibreTranslate (self-hostable,
   open-source). Off by default -- set `LIBRETRANSLATE_URL`. The result is shown for reading only, never saved.
 - CV downloads (DOCX and print/PDF) now offer a choice of three built-in looks -- Classic (unchanged), Modern

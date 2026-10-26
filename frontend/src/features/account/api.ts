@@ -10,13 +10,13 @@ export type AreaValues = Omit<Area, "id" | "description" | "min_salary"> & { min
 
 export type ProfileValues = {
   target_roles: string; home_country: string; employment_types: string[]; seniority_levels: string[]; industries: string; languages: string; notice_period: string;
-  salary_floor: string; deal_breakers: string; about: string; profile_cv: string; scan_digest_enabled: boolean;
+  salary_floor: string; deal_breakers: string; about: string; profile_cv: string; scan_digest_enabled: boolean; weekly_digest_enabled: boolean;
 };
 export type ProfileData = {
   profile: ProfileValues;
   choices: { employment_types: Choice[]; seniority_levels: Choice[]; salary_periods: Choice[] };
   areas: Area[]; max_areas: number;
-  site: { scan_emails_enabled: boolean; assistant_enabled: boolean };
+  site: { scan_emails_enabled: boolean; weekly_digest_site_enabled: boolean; assistant_enabled: boolean };
   account: {
     username: string; email: string; is_staff: boolean; can_delete: boolean; google: boolean;
     counts: { jobs: number; cv_versions: number; documents: number; search_areas: number };

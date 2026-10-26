@@ -201,6 +201,11 @@ class SiteConfig(PersonalSettings):
         help_text="Allow the scheduled job search to email people who opted in (Profile > Job alerts). Needs email set up (Site configuration > Email) -- "
         "without it, emails only print to the server console. Run `manage.py scheduled_scan` on a schedule (e.g. daily cron).",
     )
+    weekly_digest_site_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow the weekly digest to email people who opted in (Profile > Job alerts). Needs email set up (Site configuration > Email) -- "
+        "without it, emails only print to the server console. Run `manage.py send_weekly_digest` on a schedule (e.g. weekly cron).",
+    )
 
     careerops_path = models.CharField(
         max_length=500,
@@ -458,6 +463,16 @@ class UserProfile(PersonalSettings):
     scan_digest_enabled = models.BooleanField(
         default=False, verbose_name="Search for new jobs for me and email me what is found",
         help_text="Runs your saved search on a schedule and emails one short list of new matches. Off until you turn it on.",
+    )
+    weekly_digest_enabled = models.BooleanField(
+        default=False, verbose_name="Email me a weekly summary of how my search is going",
+        help_text="Applications sent, interviews, offers and follow-ups from the last 7 days -- the same plain "
+        "counts the Insights page shows, delivered once a week. Off until you turn it on. Run "
+        "`manage.py send_weekly_digest` on a schedule (e.g. a weekly cron).",
+    )
+    weekly_digest_sent_through = models.DateField(
+        null=True, blank=True, editable=False,
+        help_text="The Monday of the last week a digest was already sent for -- stops a cron run twice a week sending two emails.",
     )
     onboarding_done = models.BooleanField(
         default=False, editable=False,
