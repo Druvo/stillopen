@@ -393,7 +393,7 @@ if not DEBUG:
 
 # Optional: error tracking. GlitchTip (self-hosted, open-source) speaks the same DSN/API as Sentry, so the
 # official sentry-sdk works against either -- point GLITCHTIP_DSN (or SENTRY_DSN) at your own instance.
-# Off by default: nothing is sent anywhere unless one of these is set. Needs requirements-hosting.txt.
+# Off by default: nothing is sent anywhere unless one of these is set. Needs requirements-errors.txt.
 _error_tracking_dsn = os.environ.get("GLITCHTIP_DSN") or os.environ.get("SENTRY_DSN")
 if _error_tracking_dsn:
     import sentry_sdk

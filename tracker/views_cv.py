@@ -24,6 +24,11 @@ def _require_exportable(version: CVVersion) -> None:
         raise Http404("Review and approve the flagged items first.")
 
 
+def _template(request) -> str:
+    name = request.GET.get("template", cvexport.DEFAULT_TEMPLATE)
+    return name if name in cvexport.TEMPLATES else cvexport.DEFAULT_TEMPLATE
+
+
 @login_required
 @require_GET
 def cv_download(request, pk, fmt):
@@ -31,7 +36,7 @@ def cv_download(request, pk, fmt):
     _require_exportable(version)
     if fmt == "docx":
         response = HttpResponse(
-            cvexport.to_docx(version.content),
+            cvexport.to_docx(version.content, _template(request)),
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
         response["Content-Disposition"] = f'attachment; filename="{_filename(version, "docx")}"'
@@ -49,4 +54,5 @@ def cv_download(request, pk, fmt):
 def cv_print(request, pk):
     version = _version(request, pk)
     _require_exportable(version)
-    return render(request, "tracker/cv_print.html", {"v": version, "body": cvexport.to_html(version.content)})
+    style = cvexport.TEMPLATES[_template(request)]
+    return render(request, "tracker/cv_print.html", {"v": version, "body": cvexport.to_html(version.content), "style": style})

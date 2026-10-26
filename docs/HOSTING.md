@@ -40,6 +40,8 @@ Without Docker: `pip install -r requirements-hosting.txt`, set `DATABASE_URL=pos
    image, or Site configuration > Job search keys & writing check) to switch on a "Check writing" button on
    CVs and cover letters. Off by default; a person's CV/letter text is sent to that one server only when they
    press the button.
+8. Scaling beyond one process: set `REDIS_URL` and `pip install -r requirements-redis.txt` so rate limits and
+   the search-source cache are shared, not split per worker/machine. Not needed for a single-process install.
 
 ## The public job board
 
@@ -83,4 +85,4 @@ Be honest with yourself about these before a public launch:
 - **Job search sources:** there is no shared job feed or auto-scraping yet. People add roles themselves.
 - **Staff access:** site admins can read the database and therefore everyone's data. Keep the number of admins small.
 - **Compliance:** cookie notices, data-processing agreements with AI vendors, and data-residency rules depend on where you and your users are. Get proper advice.
-- **PostgreSQL:** the Postgres setup is configured but has only been exercised through the SQLite test suite. Try a staging deployment first.
+- **PostgreSQL:** the full test suite also runs against a real PostgreSQL service in CI (`.github/workflows/tests.yml`'s `test-postgres` job), not only SQLite. Still, try a staging deployment before a public launch -- CI doesn't exercise your own backup/restore process, connection limits, or hosting provider quirks.

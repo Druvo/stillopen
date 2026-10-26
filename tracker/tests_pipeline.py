@@ -320,3 +320,28 @@ class InsightsTests(TestCase):
 
     def test_monthly_trend_empty_when_nothing_applied(self):
         self.assertEqual(pipeline.funnel(self.u)["monthly_trend"], [])
+
+    def test_rejection_patterns_count_repeated_free_match_gaps_across_rejections(self):
+        from tracker.models import Insight, Status
+
+        rejected = Status.objects.get(name="Rejected")
+        a = job(self.u, company="A", status=rejected)
+        b = job(self.u, company="B", status=rejected)
+        c = job(self.u, company="C", status=rejected)
+        Insight.objects.create(application=a, kind="gap", text="Your CV doesn't mention: kubernetes")
+        Insight.objects.create(application=b, kind="gap", text="Your CV doesn't mention: Kubernetes")
+        Insight.objects.create(application=c, kind="gap", text="Your CV doesn't mention: terraform")  # only once: not a pattern
+        Insight.objects.create(application=a, kind="strength", text="docker")  # not a gap: ignored
+        rows = pipeline.funnel(self.u)["rejection_patterns"]
+        self.assertEqual(rows, [{"term": "kubernetes", "count": 2}])
+
+    def test_rejection_patterns_ignore_ai_free_text_and_non_rejected_jobs(self):
+        from tracker.models import Insight, Status
+
+        evaluated = Status.objects.get(name="Evaluated")
+        rejected = Status.objects.get(name="Rejected")
+        still_open = job(self.u, company="A", status=evaluated)
+        Insight.objects.create(application=still_open, kind="gap", text="Your CV doesn't mention: kubernetes")
+        closed = job(self.u, company="B", status=rejected)
+        Insight.objects.create(application=closed, kind="gap", text="You could show more leadership experience")
+        self.assertEqual(pipeline.funnel(self.u)["rejection_patterns"], [])

@@ -141,6 +141,17 @@ test("the search box in the header filters the dashboard too", async ({ page }) 
   await expect(page.locator("article")).toHaveCount(3);
 });
 
+test("a link pasted on Add job reads the posting and fills the form", async ({ page }) => {
+  await page.route("**/api/v1/quickadd", (route) =>
+    route.fulfill({ json: { ok: true, url: "https://jobs.example.com/9", role: "Data Engineer", company: "Initrode", description: "Build pipelines." } }),
+  );
+  await signIn(page, "alice", "/app/jobs/add");
+  await page.getByLabel("Paste a link to the job").fill("https://jobs.example.com/9");
+  await page.getByRole("button", { name: "Read the link" }).click();
+  await expect(page.getByLabel("Company")).toHaveValue("Initrode");
+  await expect(page.getByLabel("Role")).toHaveValue("Data Engineer");
+});
+
 test("a site admin sees the banners, the import button, Paperless and a job's files", async ({ page }) => {
   await page.route("**/api/v1/me", async (route) => {
     const real = await route.fetch();

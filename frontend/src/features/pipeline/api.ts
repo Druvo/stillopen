@@ -36,6 +36,7 @@ export type Insights = {
   referred_applied: number; referred_interviewed: number;
   by_score: { label: string; applied: number; interviews: number; offers: number; interview_rate: number | null; offer_rate: number | null }[];
   monthly_trend: { month: string; applied: number; interviews: number; offers: number; interview_rate: number | null; offer_rate: number | null }[];
+  rejection_patterns: { term: string; count: number }[];
 };
 
 type Ok = { ok: true };

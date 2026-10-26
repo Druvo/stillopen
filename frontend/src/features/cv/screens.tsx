@@ -231,6 +231,13 @@ function WritingCheck({ run }: { run: () => Promise<{ matches: WritingMatch[] }>
   );
 }
 
+/** Built-in download looks -- labels kept in sync by hand with tracker/services/cvexport.py's TEMPLATES. */
+const CV_TEMPLATES: { value: string; label: string }[] = [
+  { value: "classic", label: "Classic" },
+  { value: "modern", label: "Modern" },
+  { value: "compact", label: "Compact" },
+];
+
 export function CvDetail({ id }: { id: number }) {
   const client = useQueryClient();
   const me = useMe();
@@ -238,6 +245,7 @@ export function CvDetail({ id }: { id: number }) {
   const [message, setMessage] = useState("");
   const [saved, setSaved] = useState("");
   const [draft, setDraft] = useState<string | null>(null); // the editor's text when it differs from the saved version (an applied suggestion or typing)
+  const [template, setTemplate] = useState("classic");
   const form = useSubmit();
   const refresh = () => client.invalidateQueries({ queryKey: ["cv"] });
   const act = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn(), onSuccess: refresh, onError: (e) => setMessage(errorText(e)) });
@@ -276,8 +284,20 @@ export function CvDetail({ id }: { id: number }) {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {v.downloads ? (
           <>
-            <a className={buttonClass("primary")} href={v.downloads.docx}>Download DOCX</a>
-            <a className={buttonClass("outline")} href={v.downloads.print} target="_blank" rel="noopener noreferrer">Print / save as PDF</a>
+            <label className="sr-only" htmlFor="cv-template">Download look</label>
+            <select
+              id="cv-template"
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+              className="rounded-lg border border-border bg-surface px-2 py-1 text-theme-xs"
+              title="Font and colour only -- still a plain single-column document, so applicant-tracking systems can read it"
+            >
+              {CV_TEMPLATES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+            <a className={buttonClass("primary")} href={`${v.downloads.docx}?template=${template}`}>Download DOCX</a>
+            <a className={buttonClass("outline")} href={`${v.downloads.print}?template=${template}`} target="_blank" rel="noopener noreferrer">Print / save as PDF</a>
             <a className={buttonClass("outline")} href={v.downloads.md}>Markdown</a>
           </>
         ) : (

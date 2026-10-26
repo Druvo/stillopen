@@ -1,4 +1,6 @@
 """Interview reminder emails and the funnel numbers behind the Insights page. Nothing here changes a job."""
+import re
+from collections import Counter
 from datetime import timedelta
 from statistics import median
 
@@ -111,6 +113,36 @@ def monthly_trend(applied, interviewed_ids: set, offered_ids: set) -> list[dict]
     return rows
 
 
+_GAP_TERM = re.compile(r"^Your CV doesn't mention: (.+)$")
+MIN_PATTERN_COUNT = 2
+MAX_PATTERNS = 8
+
+
+def rejection_patterns(owner) -> list[dict]:
+    """Gap terms the free keyword match flagged, that keep coming up across jobs you were later rejected from.
+
+    Only reads the free match's own structured gap text ("Your CV doesn't mention: X"), not an AI's free-form
+    prose -- an AI's wording for the same missing skill varies job to job, so counting repeats across it would
+    undercount or mislead; the keyword match's fixed phrasing is the one source this can count honestly. A term
+    that only ever showed up once isn't a pattern, so it's left out."""
+    closed = Application.objects.filter(
+        owner=owner, status__bucket__is_closed=True, status__is_terminal=True,
+    ).prefetch_related("insights")
+    counts: Counter = Counter()
+    for app in closed:
+        for insight in app.insights.all():
+            if insight.kind != "gap":
+                continue
+            m = _GAP_TERM.match(insight.text)
+            if m:
+                counts[m.group(1).strip().lower()] += 1
+    return [
+        {"term": term, "count": n}
+        for term, n in counts.most_common(MAX_PATTERNS)
+        if n >= MIN_PATTERN_COUNT
+    ]
+
+
 def funnel(owner) -> dict:
     """Plain counts for one person: how far their applications get, and what seems to work. Never a prediction."""
     apps = list(
@@ -142,6 +174,7 @@ def funnel(owner) -> dict:
     return {
         "by_score": by_score(owner, applied),
         "monthly_trend": monthly_trend(applied, {a.pk for a in interviewed}, {a.pk for a in offered}),
+        "rejection_patterns": rejection_patterns(owner),
         "tracked": len(apps),
         "applied": len(applied),
         "interviewed": len(interviewed),

@@ -290,6 +290,24 @@ class Export(TestCase):
         self.assertIn("Built payment APIs in C# and SQL Server", text)
         self.assertNotIn("**", text)
 
+    def test_a_non_classic_template_changes_heading_font_and_colour_but_never_the_text(self):
+        from docx import Document
+
+        classic_text = "\n".join(p.text for p in Document(io.BytesIO(cvexport.to_docx(MASTER))).paragraphs)
+        modern = Document(io.BytesIO(cvexport.to_docx(MASTER, "modern")))
+        self.assertEqual("\n".join(p.text for p in modern.paragraphs), classic_text)  # same words, still ATS-safe
+        heading_run = next(r for p in modern.paragraphs if p.style.name.startswith("Heading") or p.style.name == "Title" for r in p.runs if r.text)
+        self.assertEqual(heading_run.font.name, "Georgia")
+        self.assertEqual(str(heading_run.font.color.rgb), "2A5DB0")
+
+    def test_an_unknown_template_falls_back_to_classic(self):
+        from docx import Document
+
+        classic = Document(io.BytesIO(cvexport.to_docx(MASTER)))
+        unknown = Document(io.BytesIO(cvexport.to_docx(MASTER, "nonsense")))
+        self.assertEqual([p.text for p in classic.paragraphs], [p.text for p in unknown.paragraphs])
+        self.assertEqual(classic.styles["Normal"].font.name, unknown.styles["Normal"].font.name)
+
     def test_line_diff(self):
         rows = cvexport.line_diff("a\nb\nc", "a\nB\nc\nd")
         self.assertEqual([t for t, _ in rows], ["same", "del", "add", "same", "add"])
@@ -349,6 +367,23 @@ class Pages(TestCase):
         self.assertTrue(zipfile.is_zipfile(io.BytesIO(r.content)))
         self.assertEqual(self.client.get(reverse("cv_download", args=[v.pk, "md"])).status_code, 200)
         self.assertEqual(self.client.get(reverse("cv_download", args=[v.pk, "pdf"])).status_code, 404)
+
+    def test_download_accepts_a_known_template_and_falls_back_for_an_unknown_one(self):
+        v = self.tailored(content="# Jane\n## Experience\n- Built things", check_report=[])
+        for template in ("modern", "compact", "nonsense", ""):
+            r = self.client.get(reverse("cv_download", args=[v.pk, "docx"]) + f"?template={template}")
+            self.assertEqual(r.status_code, 200, template)
+            self.assertTrue(zipfile.is_zipfile(io.BytesIO(r.content)), template)
+
+    def test_print_page_uses_the_requested_templates_styling(self):
+        v = self.tailored(content="# Jane\n## Experience\n- Built things", check_report=[])
+        classic = self.client.get(reverse("cv_print", args=[v.pk])).content.decode()
+        modern = self.client.get(reverse("cv_print", args=[v.pk]) + "?template=modern").content.decode()
+        self.assertIn("Calibri", classic)
+        self.assertIn("Georgia", modern)
+        self.assertIn("#2A5DB0", modern)
+        unknown = self.client.get(reverse("cv_print", args=[v.pk]) + "?template=nonsense").content.decode()
+        self.assertEqual(classic, unknown)  # an unknown template quietly falls back to the default
 
     def test_the_print_page_escapes_hostile_content(self):
         evil = "# </textarea><script>alert('x')</script>\n- <img src=x onerror=alert(1)>"

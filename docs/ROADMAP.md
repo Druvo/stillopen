@@ -304,12 +304,46 @@ the person's own target roles, needs the site's key to do anything, ships OFF by
 `SiteConfig` fields (`usajobs_api_key`, `usajobs_email`, both env-overridable) under Site configuration > Job
 search keys, and a dormant-source dashboard banner matching the existing Jooble one.
 
-### Still open, not yet built
+### OpenCorporates (employer legitimacy check) -- checked, declined (2026-10-26)
 
-- USCIS H-1B employer data (free bulk CSV) -- a "known sponsor" flag on `services/fit.py`'s US sponsorship
-  check. Niche (US-only), low effort, no live-API dependency.
-- A funnel/analytics dashboard beyond what Insights already shows (response rate over time, time-to-offer).
-- Redis-backed rate limiting and a real Postgres exercise in CI (see `docs/HOSTING.md` "Not covered yet").
+`Application.legitimacy` already exists as a free-text field, unused by any automated signal. OpenCorporates
+(open company registry data, real and credible) was the obvious candidate to back it. Checked live:
+cross-checking a posting's employer against a real registry needs an API key, and the free tier is
+**200 requests/month, 50/day site-wide** -- far too small for a multi-user app where dozens of distinct
+employers show up per person per week. Worse, the free tier's own terms require the product the data is
+incorporated into to also be released under an open, share-alike licence with OpenCorporates attribution --
+a real legal condition on how this app is distributed, not just a usage cap. Declined for the same reason as
+ESCO/H-1B above: checked live, found genuinely too limited for this app's actual scale, not a forced shortcut.
+
+### H-1B / visa-sponsor employer data -- checked, declined (2026-10-26)
+
+Two candidate sources, both checked live rather than assumed:
+
+- **USCIS H-1B Employer Data Hub** -- not a bulk file: it is an interactive crosstab query tool (pick filters,
+  "Download to Excel"), no static URL to fetch. Building this without a headless browser would mean either
+  scraping the tool's own postback flow or reverse-engineering whatever endpoint it calls, neither checked here
+  -- same "not investigated enough to trust" category as the sites this session never scraped.
+- **DOL LCA Disclosure Data** (the actual source USCIS's own hub and third-party sites like myvisajobs.com are
+  built from) -- genuinely a bulk download, but multi-hundred-thousand rows per fiscal year, several MB per
+  file, and the column schema has changed across years. Bundling and keeping this current responsibly is a
+  materially bigger, ongoing maintenance commitment than the bdjobs/bikroy/O*NET data bundled this session (all
+  one-time, stable, CC/public-domain, a few hundred KB).
+
+Declined for now, same discipline as ESCO and bdtechjobs.com earlier: checked live, not just researched, and
+the honest finding is "not cleanly buildable at this session's scope" rather than a forced low-quality shortcut.
+
+### Redis cache + a Postgres CI fix (2026-10-26)
+
+- **Redis**: `REDIS_URL` + `requirements-redis.txt` switches Django's cache (and so the per-person rate limits
+  and the search-source cache) from per-process memory to a shared Redis instance, using Django's own built-in
+  `RedisCache` backend (no third-party wrapper needed). Unset, nothing changes -- still one process on purpose.
+- **Postgres in CI**: already there (`.github/workflows/tests.yml`'s `test-postgres` job runs the full suite
+  against a real `postgres:16-alpine` service) -- the "only exercised through SQLite" line in `docs/HOSTING.md`
+  was stale and has been corrected.
+- While checking CI: found and fixed a real regression from this session's earlier quick-add-bar removal --
+  two Playwright e2e specs (`frontend/e2e/dashboard.spec.ts`) still referenced the dashboard's old quick-add
+  widget, which had moved to the Add Job page; CI on `main` had been red across the last three pushes because
+  of it (`vitest`/`tsc`/`eslint` don't run Playwright, so it went unnoticed locally).
 
 **Jooble** also legitimately aggregates Bangladesh listings and is already wired in (`scan.fetch_jooble`,
 `token="bd"`, seeded as "Jooble Bangladesh", enabled by default but inert without a key). Free key from
