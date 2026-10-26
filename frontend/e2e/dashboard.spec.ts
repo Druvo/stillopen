@@ -12,7 +12,7 @@ async function signIn(page: Page, name: string, next = "/app/") {
 
 const card = (page: Page, text: string) => page.locator("article", { hasText: text }).first();
 
-test("the header, the next step, the quick-add bar and the four tiles are there", async ({ page }) => {
+test("the header, the next step and the four tiles are there", async ({ page }) => {
   await signIn(page, "alice");
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
   await expect(page.getByText(/We (last looked at which jobs are still open|have not yet looked)/)).toBeVisible();
@@ -22,7 +22,7 @@ test("the header, the next step, the quick-add bar and the four tiles are there"
   await expect(page.getByRole("button", { name: "Import from career-ops" })).toHaveCount(0); // site admins only
 
   await expect(page.getByText("YOUR NEXT STEP")).toBeVisible();
-  await expect(page.getByText("Found a job you like? Paste its link")).toBeVisible();
+  await expect(page.getByText("Press Add job and paste a link, or type it in by hand.")).toBeVisible();
 
   await expect(page.getByText("Jobs you are tracking")).toBeVisible();
   await expect(page.getByText("Applications sent")).toBeVisible();
@@ -135,14 +135,13 @@ test("the search box in the header filters the dashboard too", async ({ page }) 
   await page.getByRole("button", { name: "Clear filters" }).click();
 });
 
-test("a link pasted in the quick-add bar opens Add job with what was read", async ({ page }) => {
+test("a link pasted on Add job reads the posting and fills the form", async ({ page }) => {
   await page.route("**/api/v1/quickadd", (route) =>
     route.fulfill({ json: { ok: true, url: "https://jobs.example.com/9", role: "Data Engineer", company: "Initrode", description: "Build pipelines." } }),
   );
-  await signIn(page, "alice");
-  await page.getByLabel("Found a job you like? Paste its link").fill("https://jobs.example.com/9");
-  await page.getByRole("button", { name: "Look it up" }).click();
-  await expect(page).toHaveURL(/\/app\/jobs\/add/);
+  await signIn(page, "alice", "/app/jobs/add");
+  await page.getByLabel("Paste a link to the job").fill("https://jobs.example.com/9");
+  await page.getByRole("button", { name: "Read the link" }).click();
   await expect(page.getByLabel("Company")).toHaveValue("Initrode");
   await expect(page.getByLabel("Role")).toHaveValue("Data Engineer");
 });

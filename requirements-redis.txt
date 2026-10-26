@@ -1,0 +1,4 @@
+# Optional: a shared cache (Redis) so per-person rate limits and the search-source cache are shared across
+# every gunicorn worker and machine, not just one process. Set REDIS_URL to turn it on; unset, nothing changes.
+-r requirements.txt
+redis>=5.0,<6

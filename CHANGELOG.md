@@ -5,6 +5,11 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Optional shared cache: set `REDIS_URL` and `pip install -r requirements-redis.txt` so per-person rate limits
+  and the search-source cache are shared across every process/machine instead of split per worker. Unset,
+  nothing changes. Fixed two Playwright e2e specs left broken by the earlier quick-add-bar removal (CI on
+  `main` had been red for the last three pushes because of it) and corrected a stale doc claim that Postgres
+  was only exercised through SQLite -- a `test-postgres` CI job against a real Postgres service already exists.
 - Optional "Check writing" button on CVs and cover letters: a grammar/clarity check via LanguageTool
   (self-hostable, open-source). Off by default -- set `LANGUAGETOOL_URL` (Site configuration > Job search
   keys & writing check) to turn it on. Real linting only, no invented metrics.

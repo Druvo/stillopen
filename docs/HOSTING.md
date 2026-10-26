@@ -21,7 +21,7 @@ docker compose exec web python manage.py createsuperuser
 
 This starts PostgreSQL, the app (gunicorn, one process with 16 threads) and nginx on `127.0.0.1:8080`. Put a TLS-terminating reverse proxy (Caddy, nginx or a cloud load balancer) in front of it, then set `DJANGO_HTTPS=1`, `DJANGO_ALLOWED_HOSTS=your.domain` and `DJANGO_CSRF_TRUSTED_ORIGINS=https://your.domain` in `.env` and restart. Do not expose the app on the open internet over plain HTTP.
 
-The app runs as one process on purpose: the per-person rate limits live in process memory. To scale beyond one machine, switch Django's `CACHES` to a shared cache (Redis) first.
+The app runs as one process on purpose: the per-person rate limits live in process memory. To scale beyond one machine (or one gunicorn worker), set `REDIS_URL` and `pip install -r requirements-redis.txt` first -- without it, the limits and the search-source cache split per process instead of staying site-wide.
 
 Without Docker: `pip install -r requirements-hosting.txt`, set `DATABASE_URL=postgres://user:pass@host:5432/stillopen`, run `python manage.py migrate`, then run gunicorn the way the Dockerfile does.
 
@@ -40,6 +40,8 @@ Without Docker: `pip install -r requirements-hosting.txt`, set `DATABASE_URL=pos
    image, or Site configuration > Job search keys & writing check) to switch on a "Check writing" button on
    CVs and cover letters. Off by default; a person's CV/letter text is sent to that one server only when they
    press the button.
+8. Scaling beyond one process: set `REDIS_URL` and `pip install -r requirements-redis.txt` so rate limits and
+   the search-source cache are shared, not split per worker/machine. Not needed for a single-process install.
 
 ## The public job board
 
@@ -83,4 +85,4 @@ Be honest with yourself about these before a public launch:
 - **Job search sources:** there is no shared job feed or auto-scraping yet. People add roles themselves.
 - **Staff access:** site admins can read the database and therefore everyone's data. Keep the number of admins small.
 - **Compliance:** cookie notices, data-processing agreements with AI vendors, and data-residency rules depend on where you and your users are. Get proper advice.
-- **PostgreSQL:** the Postgres setup is configured but has only been exercised through the SQLite test suite. Try a staging deployment first.
+- **PostgreSQL:** the full test suite also runs against a real PostgreSQL service in CI (`.github/workflows/tests.yml`'s `test-postgres` job), not only SQLite. Still, try a staging deployment before a public launch -- CI doesn't exercise your own backup/restore process, connection limits, or hosting provider quirks.

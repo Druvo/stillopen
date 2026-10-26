@@ -309,7 +309,20 @@ search keys, and a dormant-source dashboard banner matching the existing Jooble 
 - USCIS H-1B employer data (free bulk CSV) -- a "known sponsor" flag on `services/fit.py`'s US sponsorship
   check. Niche (US-only), low effort, no live-API dependency.
 - A funnel/analytics dashboard beyond what Insights already shows (response rate over time, time-to-offer).
-- Redis-backed rate limiting and a real Postgres exercise in CI (see `docs/HOSTING.md` "Not covered yet").
+- ~~Redis-backed rate limiting~~ and ~~a real Postgres exercise in CI~~ -- both done, see below.
+
+### Redis cache + a Postgres CI fix (2026-10-26)
+
+- **Redis**: `REDIS_URL` + `requirements-redis.txt` switches Django's cache (and so the per-person rate limits
+  and the search-source cache) from per-process memory to a shared Redis instance, using Django's own built-in
+  `RedisCache` backend (no third-party wrapper needed). Unset, nothing changes -- still one process on purpose.
+- **Postgres in CI**: already there (`.github/workflows/tests.yml`'s `test-postgres` job runs the full suite
+  against a real `postgres:16-alpine` service) -- the "only exercised through SQLite" line in `docs/HOSTING.md`
+  was stale and has been corrected.
+- While checking CI: found and fixed a real regression from this session's earlier quick-add-bar removal --
+  two Playwright e2e specs (`frontend/e2e/dashboard.spec.ts`) still referenced the dashboard's old quick-add
+  widget, which had moved to the Add Job page; CI on `main` had been red across the last three pushes because
+  of it (`vitest`/`tsc`/`eslint` don't run Playwright, so it went unnoticed locally).
 
 **Jooble** also legitimately aggregates Bangladesh listings and is already wired in (`scan.fetch_jooble`,
 `token="bd"`, seeded as "Jooble Bangladesh", enabled by default but inert without a key). Free key from
