@@ -304,12 +304,22 @@ the person's own target roles, needs the site's key to do anything, ships OFF by
 `SiteConfig` fields (`usajobs_api_key`, `usajobs_email`, both env-overridable) under Site configuration > Job
 search keys, and a dormant-source dashboard banner matching the existing Jooble one.
 
-### Still open, not yet built
+### H-1B / visa-sponsor employer data -- checked, declined (2026-10-26)
 
-- USCIS H-1B employer data (free bulk CSV) -- a "known sponsor" flag on `services/fit.py`'s US sponsorship
-  check. Niche (US-only), low effort, no live-API dependency.
-- A funnel/analytics dashboard beyond what Insights already shows (response rate over time, time-to-offer).
-- ~~Redis-backed rate limiting~~ and ~~a real Postgres exercise in CI~~ -- both done, see below.
+Two candidate sources, both checked live rather than assumed:
+
+- **USCIS H-1B Employer Data Hub** -- not a bulk file: it is an interactive crosstab query tool (pick filters,
+  "Download to Excel"), no static URL to fetch. Building this without a headless browser would mean either
+  scraping the tool's own postback flow or reverse-engineering whatever endpoint it calls, neither checked here
+  -- same "not investigated enough to trust" category as the sites this session never scraped.
+- **DOL LCA Disclosure Data** (the actual source USCIS's own hub and third-party sites like myvisajobs.com are
+  built from) -- genuinely a bulk download, but multi-hundred-thousand rows per fiscal year, several MB per
+  file, and the column schema has changed across years. Bundling and keeping this current responsibly is a
+  materially bigger, ongoing maintenance commitment than the bdjobs/bikroy/O*NET data bundled this session (all
+  one-time, stable, CC/public-domain, a few hundred KB).
+
+Declined for now, same discipline as ESCO and bdtechjobs.com earlier: checked live, not just researched, and
+the honest finding is "not cleanly buildable at this session's scope" rather than a forced low-quality shortcut.
 
 ### Redis cache + a Postgres CI fix (2026-10-26)
 
