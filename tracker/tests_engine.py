@@ -819,3 +819,96 @@ class SameRoleManyTimes(TestCase):
         with mock.patch("tracker.services.scan.fetch_greenhouse", return_value=rows):
             run = scan.start_run(self.u, background=False)
         self.assertEqual(run.added, 3)
+
+
+class UsajobsConnector(TestCase):
+    KEY, EMAIL = "sekret-key-123", "admin@example.com"
+
+    def response(self, items, status=200):
+        r = mock.Mock(status_code=status)
+        r.json.return_value = {"SearchResult": {"SearchResultCount": len(items), "SearchResultItems": items}}
+        return r
+
+    def item(self, **kw):
+        descriptor = {
+            "PositionTitle": "IT Specialist (INFOSEC)", "PositionURI": "https://www.usajobs.gov/GetJob/ViewDetails/1",
+            "PositionLocationDisplay": "San Diego, California", "OrganizationName": "Department of the Navy",
+            "DepartmentName": "Department of Defense", "QualificationSummary": "Plain summary.",
+            "PositionFormattedDescription": [{"Content": "A <b>Dynamic Teaser</b>.", "Label": "Dynamic Teaser"}],
+        }
+        descriptor.update(kw)
+        return {"MatchedObjectId": "1", "MatchedObjectDescriptor": descriptor}
+
+    @mock.patch("requests.get")
+    def test_asks_usajobs_with_the_persons_roles_and_the_right_headers(self, get):
+        get.return_value = self.response([self.item()])
+        out = scan.fetch_usajobs("bd", ["backend engineer", "python developer"], self.KEY, self.EMAIL)
+        self.assertEqual(get.call_args_list[0].args[0], "https://data.usajobs.gov/api/search")
+        headers = get.call_args_list[0].kwargs["headers"]
+        self.assertEqual(headers, {"Host": "data.usajobs.gov", "User-Agent": self.EMAIL, "Authorization-Key": self.KEY})
+        self.assertEqual(get.call_args_list[0].kwargs["params"], {"Keyword": "backend engineer"})
+        self.assertFalse(get.call_args.kwargs["allow_redirects"])
+        self.assertEqual(len(out), 1)  # the same link from both roles is one job
+        j = out[0]
+        self.assertEqual((j["title"], j["company"], j["url"]), ("IT Specialist (INFOSEC)", "Department of the Navy", "https://www.usajobs.gov/GetJob/ViewDetails/1"))
+        self.assertEqual(j["location"], "San Diego, California")
+        self.assertNotIn("<b>", j["description"])
+
+    @mock.patch("requests.get")
+    def test_at_most_three_roles_per_search(self, get):
+        get.return_value = self.response([])
+        scan.fetch_usajobs("bd", ["a", "b", "c", "d", "e"], self.KEY, self.EMAIL)
+        self.assertEqual(get.call_count, 3)
+
+    @mock.patch("requests.get")
+    def test_nothing_to_ask_without_a_key_an_email_or_roles(self, get):
+        self.assertEqual(scan.fetch_usajobs("bd", ["x"], "", self.EMAIL), [])
+        self.assertEqual(scan.fetch_usajobs("bd", ["x"], self.KEY, ""), [])
+        self.assertEqual(scan.fetch_usajobs("bd", [], self.KEY, self.EMAIL), [])
+        get.assert_not_called()
+
+    @mock.patch("requests.get")
+    def test_bad_key_or_http_error_is_a_plain_message(self, get):
+        for status in (401, 403, 500):
+            get.return_value = self.response([], status=status)
+            with self.assertRaises(FetchError):
+                scan.fetch_usajobs("bd", ["x"], self.KEY, self.EMAIL)
+
+    def test_usajobs_is_site_wide_only_and_a_keyed_connector(self):
+        self.assertIn("usajobs", dict(JobSource.CONNECTORS))
+        self.assertNotIn("usajobs", JobSource.OWN_CONNECTORS)
+
+
+class UsajobsInSearch(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.u = person(roles="Backend Engineer")
+        self.src = JobSource.objects.create(name="USAJobs", connector="usajobs", board_token="x")
+
+    def test_skipped_without_a_key_or_email(self):
+        self.assertEqual(scan.searchable_sources(self.u).count(), 0)
+        SiteConfig.objects.filter(pk=1).update(usajobs_api_key="k")
+        self.assertEqual(scan.searchable_sources(self.u).count(), 0)  # key alone is not enough
+        SiteConfig.objects.filter(pk=1).update(usajobs_email="admin@example.com")
+        self.assertEqual(scan.searchable_sources(self.u).count(), 1)
+
+    def test_skipped_for_someone_with_no_roles(self):
+        SiteConfig.objects.filter(pk=1).update(usajobs_api_key="k", usajobs_email="admin@example.com")
+        UserProfile.objects.filter(user=self.u).update(target_roles="")
+        self.assertEqual(scan.searchable_sources(self.u).count(), 0)
+
+    def test_environment_key_and_email_count(self):
+        with mock.patch.dict("os.environ", {"USAJOBS_API_KEY": "envkey", "USAJOBS_EMAIL": "env@example.com"}):
+            self.assertEqual(scan.searchable_sources(self.u).count(), 1)
+            self.assertEqual(SiteConfig.load().effective_usajobs_key, "envkey")
+
+    def test_a_search_adds_a_usajobs_posting(self):
+        SiteConfig.objects.filter(pk=1).update(usajobs_api_key="k", usajobs_email="admin@example.com")
+        payload = {"SearchResult": {"SearchResultItems": [UsajobsConnector().item(PositionTitle="Backend Engineer")]}}
+        with mock.patch("requests.get") as get:
+            get.return_value = mock.Mock(status_code=200, **{"json.return_value": payload})
+            run = scan.start_run(self.u, background=False)
+        self.assertEqual(run.added, 1)
+        app = Application.objects.get(owner=self.u)
+        self.assertEqual(app.url, "https://www.usajobs.gov/GetJob/ViewDetails/1")
+        self.assertEqual(get.call_args.kwargs["params"], {"Keyword": "backend engineer"})

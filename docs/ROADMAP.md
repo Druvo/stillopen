@@ -267,6 +267,17 @@ admin adds the `JobSource` (any board_token, it carries no meaning for either) t
   score actually lead anywhere?" has a real (if small-sample) answer. Surfaced on the existing Insights page
   (`frontend/src/features/pipeline/insights.tsx`) under "Does a higher match score lead anywhere?".
 
+### USAJobs connector (built, 2026-10-26)
+
+Unlike every Bangladesh site above, USAJOBS (the US federal government's own job board) publishes and
+*supports* a real, documented public Search API (developer.usajobs.gov) -- no robots.txt trade-off to weigh at
+all. Needs a free key (instant approval, no phone number) plus the email address it was requested with, which
+USAJobs requires as the `User-Agent` header on every call alongside `Authorization-Key` and a fixed
+`Host: data.usajobs.gov`. Built as `scan.fetch_usajobs`, wired in exactly like Jooble (a site-wide search over
+the person's own target roles, needs the site's key to do anything, ships OFF by default). Two new
+`SiteConfig` fields (`usajobs_api_key`, `usajobs_email`, both env-overridable) under Site configuration > Job
+search keys, and a dormant-source dashboard banner matching the existing Jooble one.
+
 ### Still open, not yet built
 
 - USCIS H-1B employer data (free bulk CSV) -- a "known sponsor" flag on `services/fit.py`'s US sponsorship

@@ -182,8 +182,8 @@ class SearchQuality(TestCase):
         seen = []
         real = scan._prefetch_staged
 
-        def spy(sources, roles=None, jooble_key="", on_progress=None, first_wait=None):
-            return real(sources, roles, jooble_key, on_progress=lambda n: (seen.append(n), on_progress(n)), first_wait=first_wait)
+        def spy(sources, roles=None, jooble_key="", usajobs_auth=("", ""), on_progress=None, first_wait=None):
+            return real(sources, roles, jooble_key, usajobs_auth, on_progress=lambda n: (seen.append(n), on_progress(n)), first_wait=first_wait)
 
         JobSource.objects.create(name="Lever Co", connector="lever", board_token="lev")
         with mock.patch("tracker.services.scan._prefetch_staged", spy), \

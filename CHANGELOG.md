@@ -5,6 +5,9 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- A USAJobs source, off by default: the official, documented US federal job search API (needs a free key plus
+  the email it was requested with -- Site configuration > Job search keys). A dashboard banner nudges admins
+  when the source is enabled site-wide but missing one of those.
 - Insights: a new "Does a higher match score lead anywhere?" table groups your own applied jobs by match band
   and shows interview/offer counts and rates per band (`services/pipeline.py`'s `by_score`, `/api/v1/insights`,
   `frontend/src/features/pipeline/insights.tsx`). Plain counts from the person's own data, no prediction.

@@ -114,4 +114,5 @@ export type Me = {
   email_unverified_signups: boolean;
   legal_has_blanks: boolean;
   jooble_sources_dormant: boolean;
+  usajobs_sources_dormant: boolean;
 };

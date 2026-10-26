@@ -61,6 +61,7 @@ def me(request):
         "email_unverified_signups": bool(flags.get("email_unverified_signups")),
         "legal_has_blanks": bool(flags.get("legal_needs_attention")),
         "jooble_sources_dormant": bool(flags.get("jooble_sources_dormant")),
+        "usajobs_sources_dormant": bool(flags.get("usajobs_sources_dormant")),
     }
 
 

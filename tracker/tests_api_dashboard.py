@@ -263,6 +263,18 @@ class WhoAmI(TestCase):
         JobSource.objects.filter(connector="jooble").update(owner=self.a)
         self.assertFalse(self.me(self.staff)["jooble_sources_dormant"])  # a per-user source is that user's own choice, not site-wide
 
+    def test_usajobs_dormant_banner_needs_both_a_key_and_an_email(self):
+        from tracker.models import JobSource
+
+        self.assertFalse(self.me(self.staff)["usajobs_sources_dormant"])  # no USAJobs source at all yet
+        JobSource.objects.create(name="USAJobs", connector="usajobs", board_token="x", enabled=True)
+        self.assertTrue(self.me(self.staff)["usajobs_sources_dormant"])
+        self.assertFalse(self.me(self.a)["usajobs_sources_dormant"])  # staff-only
+        SiteConfig.objects.update(usajobs_api_key="some-key")
+        self.assertTrue(self.me(self.staff)["usajobs_sources_dormant"])  # a key alone is not enough
+        SiteConfig.objects.update(usajobs_email="admin@example.com")
+        self.assertFalse(self.me(self.staff)["usajobs_sources_dormant"])  # key and email together turn it off
+
 
 class ImportFromCareerOps(TestCase):
     def setUp(self):
