@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tracker', '0051_remove_new_app_switch'),
+        ('tracker', '0053_alter_jobsource_board_token_and_more'),
     ]
 
     operations = [

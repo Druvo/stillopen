@@ -216,24 +216,46 @@ dependabot). Treat this file as a historical record of the Tier 1 work done dire
 dropdown, follow-up email nudges) rather than a current gap list — a fresh audit against the post-merge
 codebase would be needed before trusting this file for planning again.
 
-### Bangladesh job sourcing (researched 2026-10-26)
+### Bangladesh job sourcing (researched + built, 2026-10-26)
 
-No Bangladesh job board has a confirmed, documented, stable public API:
-- **bdjobs.com** — already excluded (client-side app, no server-rendered listings). Reconfirmed: only
-  undocumented internal JSON endpoints exist, reverse-engineered by third-party scraper projects on GitHub —
-  same risk class as scraping, stays excluded.
+No Bangladesh job board publishes a documented, officially-supported public API -- but "no official API" turned
+out not to mean "not buildable": two sites had real, usable data behind the scenes once actually checked live
+(network tab / page source), not just researched secondhand.
+
+- **bdjobs.com** — its *listing pages* are a client-side app (no server-rendered HTML), but a live network
+  trace found a real, clean, undocumented JSON search API its own front end calls
+  (`api.bdjobs.com/Jobs/api/JobSearch/GetJobSearch`), confirmed to answer a plain unauthenticated GET from a
+  server with no cookies. Built as `scan.fetch_bdjobs` -- architecturally identical to every other connector
+  (zero-token, no headless browser), with one caveat the user was given before deciding to proceed anyway:
+  bdjobs.com's own robots.txt disallows generic bots (`Disallow: /`, exceptions only for named crawlers it
+  recognises).
+- **bikroy.com Jobs** — the opposite situation: its listing pages ARE server-rendered (Nuxt 3), so a plain GET
+  already returns every posting, just embedded in the page's own `__NUXT_DATA__` hydration script (a
+  devalue-style array-of-references graph) rather than a clean JSON body. Built as `scan.fetch_bikroy`,
+  decoded with a small generic resolver (`_nuxt_resolve`) rather than a library or a headless browser. Its own
+  robots.txt does **not** disallow this path for generic bots -- the more permissive of the two.
 - **Skill.jobs** — live-checked (network tab, `/browse-jobs`): no JSON API, job data ships inside Next.js RSC
   (`?_rsc=` streaming) payloads, not a stable/parseable format; also sits behind a Cloudflare bot-challenge.
   Not usable.
-- **Chakri.com, Bikroy.com jobs, BASIS job board, BPSC/government circulars** — no API or feed found for any
-  of them; government circulars are PDF notices redistributed by third-party aggregators.
+- **Chakri.com** — unreachable at check time (Cloudflare 523, origin down); moot regardless of robots.txt.
+- **bdtechjobs.com** — explicitly, by name, blocks `Python-requests`/`curl`/`wget`/`Scrapy`/`Selenium`/
+  `HeadlessChrome` in its robots.txt, plus a legal notice against automated extraction. The one site checked
+  with an unambiguous, specific "no" rather than a generic catch-all -- correctly never built.
+- **BASIS job board** — robots.txt allows everything, but there's no real job-board content there worth a
+  connector.
+- **BPSC / government circulars** — PDF notices only, no structured data anywhere. Not feasible.
 - **Kormo Jobs (Google)** — discontinued (shut down mid-2022).
+- **Chakri.ai/app/ChakriBarta** — third-party scrapers *of* bdjobs/chakri.com themselves, nothing original to
+  connect to.
 
-**The correct path, already built**: Jooble's partner search API legitimately aggregates Bangladesh listings
-and is already wired in (`scan.fetch_jooble`, `token="bd"`, seeded as the "Jooble Bangladesh" `JobSource`,
-enabled by default). It just needs a free key from jooble.org/api/about, pasted into Site configuration > Job
-search keys — `context.staff_flags`'s new `jooble_sources_dormant` flag nudges a staff member with a
-dashboard banner exactly when this is the case (a site-wide Jooble source enabled, no key set).
+Both `fetch_bdjobs` and `fetch_bikroy` ship OFF by default -- not seeded anywhere in `seed_sources.py` -- an
+admin adds the `JobSource` (any board_token, it carries no meaning for either) themselves if they want it.
+
+**Jooble** also legitimately aggregates Bangladesh listings and is already wired in (`scan.fetch_jooble`,
+`token="bd"`, seeded as "Jooble Bangladesh", enabled by default but inert without a key). Free key from
+jooble.org/api/about, pasted into Site configuration > Job search keys —
+`context.staff_flags`'s `jooble_sources_dormant` flag nudges a staff member with a dashboard banner exactly
+when a site-wide Jooble source is enabled but no key is set.
 
 Any Bangladeshi company using Greenhouse/Lever/Ashby/SmartRecruiters/Recruitee for its own careers page
 already works automatically the moment it's added as a `JobSource` row — no new connector code needed.

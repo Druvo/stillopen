@@ -5,7 +5,7 @@ import { ChevronDown, Loader2 } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { Button, buttonClass, Card, Notice, Progress } from "@/components/ui";
 import { errorText } from "@/lib/api";
-import { Link, navigate } from "@/lib/router";
+import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import type { Dashboard, Followup, Me, NextStep, ScanStatus, SearchSummary, UpcomingInterview } from "@/lib/types";
 import { useIsWide } from "@/lib/use-media";
@@ -15,7 +15,6 @@ import type { Stats } from "@/features/stats/api";
 import { cardTiles } from "@/features/stats/logic";
 import { dashboardApi } from "./api";
 import { entryText, interviewWhen, nextStepTarget, scanPercent, scanTitle, searchRows, shortDate } from "./logic";
-import { stashPrefill } from "./prefill";
 
 export function Spinner() {
   return <Loader2 className="size-4 animate-spin" aria-hidden />;
@@ -165,59 +164,6 @@ export function NextStepBody({ step, onCard }: { step: NextStep; onCard: (id: st
         </div>
       )}
     </div>
-  );
-}
-
-/** "Found a job you like? Paste its link": reads the posting, then opens Add job with what was found, to be checked before saving. One line. */
-export function QuickAdd() {
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
-  const go = async () => {
-    const link = url.trim();
-    if (!link) {
-      notify("Paste a job link first", "error");
-      return;
-    }
-    setBusy(true);
-    try {
-      const found = await jobsApi.quickAdd(link);
-      stashPrefill(found);
-      navigate("/jobs/add");
-    } catch (e) {
-      notify(errorText(e, "Could not fetch that page"), "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Card className="p-3 sm:p-3">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!busy) void go();
-        }}
-        className="flex flex-wrap items-center gap-x-3 gap-y-2"
-      >
-        <label htmlFor="quickadd-url" className="text-theme-sm font-medium">
-          Found a job you like? Paste its link
-        </label>
-        <input
-          id="quickadd-url"
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://..."
-          aria-describedby="quickadd-hint"
-          className="min-h-11 min-w-0 flex-1 basis-48 rounded-lg border border-border bg-surface px-3 py-1.5 text-theme-sm sm:min-h-9"
-        />
-        <Button type="submit" disabled={busy} className="min-h-11 sm:min-h-9">
-          {busy ? "Looking…" : "Look it up"}
-        </Button>
-        <p id="quickadd-hint" className="basis-full text-theme-xs text-muted">
-          We read the title and description from the page and let you check them first. Nothing is saved until you say so.
-        </p>
-      </form>
-    </Card>
   );
 }
 
