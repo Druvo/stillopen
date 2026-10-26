@@ -304,7 +304,7 @@ describe("a job card", () => {
 const staffMe = (over: Partial<Me>): Me =>
   ({
     id: 1, name: "Pat", email: "pat@example.com", is_staff: true, greeting: "Good morning, Pat", site_title: "StillOpen", prep_enabled: false, assistant_enabled: false,
-    email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, ...over,
+    email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, usajobs_sources_dormant: false, ...over,
   }) as Me;
 
 describe("the staff-only banners", () => {
@@ -318,6 +318,12 @@ describe("the staff-only banners", () => {
     render(<StaffBanners me={staffMe({ jooble_sources_dormant: true })} />);
     expect(screen.getByText(/silently finds nothing on every search/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "jooble.org/api/about" }).getAttribute("href")).toBe("https://jooble.org/api/about");
+  });
+
+  it("nudges staff to add a USAJobs key when a site-wide source is dormant", () => {
+    render(<StaffBanners me={staffMe({ usajobs_sources_dormant: true })} />);
+    expect(screen.getByText(/no key \(or no registered email\)/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "developer.usajobs.gov/apirequest" }).getAttribute("href")).toBe("https://developer.usajobs.gov/apirequest");
   });
 
   it("shows nothing when no flag is set", () => {

@@ -50,6 +50,12 @@ class SiteConfigForm(forms.ModelForm):
         help_text="Free key from jooble.org/api/about. Leave blank to keep the saved key. The JOOBLE_API_KEY environment variable takes precedence.",
     )
 
+    usajobs_api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text="Free key from developer.usajobs.gov/apirequest. Leave blank to keep the saved key. The USAJOBS_API_KEY environment variable takes precedence.",
+    )
+
     # write-only secrets: blank keeps what is saved
     email_password = forms.CharField(
         required=False, widget=forms.PasswordInput(render_value=False),
@@ -77,6 +83,10 @@ class SiteConfigForm(forms.ModelForm):
     def clean_jooble_api_key(self):
         key = self.cleaned_data.get("jooble_api_key", "")
         return key or (self.instance.jooble_api_key if self.instance else "")
+
+    def clean_usajobs_api_key(self):
+        key = self.cleaned_data.get("usajobs_api_key", "")
+        return key or (self.instance.usajobs_api_key if self.instance else "")
 
     def clean_paperless_token(self):
         token = self.cleaned_data.get("paperless_token", "")
@@ -174,9 +184,11 @@ class SiteConfigAdmin(ModelAdmin):
             "Job search keys",
             {
                 "classes": ("tab",),
-                "fields": ("jooble_api_key",),
+                "fields": ("jooble_api_key", "usajobs_api_key", "usajobs_email"),
                 "description": "Optional. Jooble covers Bangladesh, Malaysia and the Gulf, where few job sites publish an open feed. "
-                "Without a key those sources are simply skipped.",
+                "USAJobs is the official US federal job board's own documented API -- unlike Jooble it also needs the email "
+                "address the key was requested with (USAJobs requires it on every request). Without a key those sources are "
+                "simply skipped.",
             },
         ),
         (

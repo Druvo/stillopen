@@ -167,4 +167,5 @@ export type Me = {
   legal_has_blanks: boolean;
   jooble_sources_dormant: boolean;
   preferences: Preferences;
+  usajobs_sources_dormant: boolean;
 };

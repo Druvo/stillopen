@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tracker', '0053_alter_jobsource_board_token_and_more'),
+        ('tracker', '0054_siteconfig_usajobs_api_key_siteconfig_usajobs_email_and_more'),
     ]
 
     operations = [
