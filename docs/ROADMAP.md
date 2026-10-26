@@ -304,6 +304,14 @@ the person's own target roles, needs the site's key to do anything, ships OFF by
 `SiteConfig` fields (`usajobs_api_key`, `usajobs_email`, both env-overridable) under Site configuration > Job
 search keys, and a dormant-source dashboard banner matching the existing Jooble one.
 
+### LibreTranslate job-description translation (built, 2026-10-26)
+
+A "Translate to English" button on a job's description, calling a LibreTranslate server (self-hostable,
+open-source, the `libretranslate/libretranslate` Docker image). Same discipline as LanguageTool: off by
+default, a URL is the opt-in, owner-scoped, rate-limited via `STILLOPEN_CHECKS_PER_HOUR`, result shown for
+reading only and never saved. `services/libretranslate.py`, `POST /api/v1/jobs/{id}/translate`,
+`translate_enabled` on `/me`.
+
 ### OpenCorporates (employer legitimacy check) -- checked, declined (2026-10-26)
 
 `Application.legitimacy` already exists as a free-text field, unused by any automated signal. OpenCorporates

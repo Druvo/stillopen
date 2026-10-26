@@ -243,6 +243,17 @@ class SiteConfig(PersonalSettings):
         "one). Switches on a 'Check writing' button on CVs and cover letters. Off (nothing sent anywhere) when blank. "
         "The LANGUAGETOOL_URL environment variable takes precedence.",
     )
+    libretranslate_url = models.CharField(
+        max_length=300, blank=True,
+        help_text="Base URL of a LibreTranslate server (self-hosted, e.g. the libretranslate/libretranslate Docker "
+        "image, or a public instance that accepts your key). Switches on a 'Translate to English' button on a job's "
+        "description. Off (nothing sent anywhere) when blank. The LIBRETRANSLATE_URL environment variable takes precedence.",
+    )
+    libretranslate_api_key = models.CharField(
+        max_length=200, blank=True,
+        help_text="Only needed if your LibreTranslate server requires one (most self-hosted instances don't). "
+        "The LIBRETRANSLATE_API_KEY environment variable takes precedence.",
+    )
     paperless_verify_tls = models.BooleanField(default=True)
     paperless_auto_upload = models.BooleanField(
         default=False, help_text="Upload documents to Paperless automatically when they are imported."
@@ -393,6 +404,14 @@ class SiteConfig(PersonalSettings):
     @property
     def effective_languagetool_url(self):
         return (os.environ.get("LANGUAGETOOL_URL", "").strip() or self.languagetool_url.strip()).rstrip("/")
+
+    @property
+    def effective_libretranslate_url(self):
+        return (os.environ.get("LIBRETRANSLATE_URL", "").strip() or self.libretranslate_url.strip()).rstrip("/")
+
+    @property
+    def effective_libretranslate_api_key(self):
+        return os.environ.get("LIBRETRANSLATE_API_KEY", "").strip() or self.libretranslate_api_key.strip()
 
     @property
     def effective_paperless_token(self):

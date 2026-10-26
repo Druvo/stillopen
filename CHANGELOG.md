@@ -18,6 +18,8 @@ supported version, so entries are grouped under **Unreleased** until the first t
   Labor's O*NET database (a real, CC-licensed, named-technology vocabulary), not generic word frequency --
   ESCO was tried for this earlier and rejected as a poor fit; O*NET live-checked well. Zero-token, works
   without an AI key.
+- Optional "Translate to English" button on a job's description, via LibreTranslate (self-hostable,
+  open-source). Off by default -- set `LIBRETRANSLATE_URL`. The result is shown for reading only, never saved.
 - CV downloads (DOCX and print/PDF) now offer a choice of three built-in looks -- Classic (unchanged), Modern
   (serif headings, a blue accent) and Compact (smaller, tighter spacing) -- font and colour variation only,
   still a plain single-column document so applicant-tracking systems can read it.
