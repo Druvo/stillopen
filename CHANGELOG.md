@@ -18,6 +18,9 @@ supported version, so entries are grouped under **Unreleased** until the first t
   Labor's O*NET database (a real, CC-licensed, named-technology vocabulary), not generic word frequency --
   ESCO was tried for this earlier and rejected as a poor fit; O*NET live-checked well. Zero-token, works
   without an AI key.
+- CV downloads (DOCX and print/PDF) now offer a choice of three built-in looks -- Classic (unchanged), Modern
+  (serif headings, a blue accent) and Compact (smaller, tighter spacing) -- font and colour variation only,
+  still a plain single-column document so applicant-tracking systems can read it.
 - A USAJobs source, off by default: the official, documented US federal job search API (needs a free key plus
   the email it was requested with -- Site configuration > Job search keys). A dashboard banner nudges admins
   when the source is enabled site-wide but missing one of those.

@@ -304,6 +304,17 @@ the person's own target roles, needs the site's key to do anything, ships OFF by
 `SiteConfig` fields (`usajobs_api_key`, `usajobs_email`, both env-overridable) under Site configuration > Job
 search keys, and a dormant-source dashboard banner matching the existing Jooble one.
 
+### OpenCorporates (employer legitimacy check) -- checked, declined (2026-10-26)
+
+`Application.legitimacy` already exists as a free-text field, unused by any automated signal. OpenCorporates
+(open company registry data, real and credible) was the obvious candidate to back it. Checked live:
+cross-checking a posting's employer against a real registry needs an API key, and the free tier is
+**200 requests/month, 50/day site-wide** -- far too small for a multi-user app where dozens of distinct
+employers show up per person per week. Worse, the free tier's own terms require the product the data is
+incorporated into to also be released under an open, share-alike licence with OpenCorporates attribution --
+a real legal condition on how this app is distributed, not just a usage cap. Declined for the same reason as
+ESCO/H-1B above: checked live, found genuinely too limited for this app's actual scale, not a forced shortcut.
+
 ### H-1B / visa-sponsor employer data -- checked, declined (2026-10-26)
 
 Two candidate sources, both checked live rather than assumed:

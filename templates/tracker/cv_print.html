@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ v.label|default:"CV" }}</title>
 <style>
-body{margin:0;background:#eee;color:#111;font:11pt/1.45 Calibri,"Segoe UI",Arial,sans-serif}
+body{margin:0;background:#eee;color:#111;font:{{ style.print_pt }}pt/{{ style.line_height }} {{ style.font }},"Segoe UI",Arial,sans-serif}
 .page{max-width:8.3in;margin:0 auto;background:#fff;padding:0.7in 0.8in}
+h1,h2,h3{font-family:{{ style.heading_font }},"Segoe UI",Arial,sans-serif;color:#{{ style.accent }}}
 h1{font-size:20pt;margin:0 0 4pt}
-h2{font-size:12pt;margin:14pt 0 4pt;padding-bottom:2pt;border-bottom:1px solid #999;text-transform:uppercase;letter-spacing:.04em}
+h2{font-size:12pt;margin:14pt 0 4pt;padding-bottom:2pt;border-bottom:1px solid #999;{% if style.upper_h2 %}text-transform:uppercase;{% endif %}letter-spacing:.04em}
 h3{font-size:11pt;margin:8pt 0 2pt}
 p{margin:2pt 0}
 ul{margin:2pt 0 2pt 16pt;padding:0}
