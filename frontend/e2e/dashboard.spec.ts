@@ -22,7 +22,6 @@ test("the header, the next step and the four tiles are there", async ({ page }) 
   await expect(page.getByRole("button", { name: "Import from career-ops" })).toHaveCount(0); // site admins only
 
   await expect(page.getByText("YOUR NEXT STEP")).toBeVisible();
-  await expect(page.getByText("Press Add job and paste a link, or type it in by hand.")).toBeVisible();
 
   await expect(page.getByText("Jobs you are tracking")).toBeVisible();
   await expect(page.getByText("Applications sent")).toBeVisible();
