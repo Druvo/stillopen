@@ -1,6 +1,6 @@
 "use client";
 
-import { QueryClient, type Query } from "@tanstack/react-query";
+import { QueryClient, useIsRestoring, type Query } from "@tanstack/react-query";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { PersistQueryClientProvider, persistQueryClientSave, type Persister } from "@tanstack/react-query-persist-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +14,7 @@ const NO_PERSISTER: Persister = { persistClient: () => undefined, restoreClient:
 function Identity({ uid, setUid, client, persister }: { uid: number | null; setUid: (id: number) => void; client: QueryClient; persister: Persister }) {
   const me = useMe();
   const id = me.data?.id ?? null;
+  const restoring = useIsRestoring();
   useEffect(() => {
     if (id === null || id === uid) return;
     if (uid !== null) client.clear(); // another person in this tab: nothing of the last one stays
@@ -22,10 +23,11 @@ function Identity({ uid, setUid, client, persister }: { uid: number | null; setU
   }, [id, uid, client, setUid]);
   useEffect(() => {
     // The id just became known: write the cache now, so the very next reload already has something to show.
-    if (uid !== null) {
+    // Never while the saved copy is still being read back: this child effect runs before the provider's restore, and saving an empty client then would overwrite it.
+    if (uid !== null && !restoring) {
       void persistQueryClientSave({ queryClient: client, persister, buster: cacheBuster(uid), dehydrateOptions: dehydrateOptions(uid) });
     }
-  }, [uid, client, persister]);
+  }, [uid, client, persister, restoring]);
   return null;
 }
 
@@ -44,12 +46,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultOptions: { queries: { staleTime: 30_000, gcTime: MAX_AGE_MS, refetchOnWindowFocus: false, retry: 1 } },
       }),
   );
-  const [persister] = useState<Persister>(() => {
-    const storage = tabStorage();
-    return storage ? createSyncStoragePersister({ storage, key: CACHE_KEY, throttleTime: 300, serialize: (c) => JSON.stringify(trimToLimit(c)) }) : NO_PERSISTER;
-  });
   const [uid, setUidState] = useState<number | null>(() => readUid(tabStorage()));
   const uidRef = useRef(uid);
+  const [persister] = useState<Persister>(() => {
+    const storage = tabStorage();
+    // The write is throttled, so a write queued before the person was known could land after the id was: the cache is stamped for whoever
+    // is known at the moment it is written, never with the buster it was queued under (a copy stamped for nobody is never restored).
+    return storage
+      ? createSyncStoragePersister({
+          storage,
+          key: CACHE_KEY,
+          throttleTime: 300,
+          serialize: (c) => JSON.stringify(trimToLimit({ ...c, buster: cacheBuster(uidRef.current) })),
+        })
+      : NO_PERSISTER;
+  });
   const setUid = useCallback((id: number) => {
     uidRef.current = id;
     setUidState(id);
