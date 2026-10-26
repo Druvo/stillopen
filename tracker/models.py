@@ -201,6 +201,11 @@ class SiteConfig(PersonalSettings):
         help_text="Allow the scheduled job search to email people who opted in (Profile > Job alerts). Needs email set up (Site configuration > Email) -- "
         "without it, emails only print to the server console. Run `manage.py scheduled_scan` on a schedule (e.g. daily cron).",
     )
+    weekly_digest_site_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow the weekly digest to email people who opted in (Profile > Job alerts). Needs email set up (Site configuration > Email) -- "
+        "without it, emails only print to the server console. Run `manage.py send_weekly_digest` on a schedule (e.g. weekly cron).",
+    )
 
     careerops_path = models.CharField(
         max_length=500,
@@ -242,6 +247,17 @@ class SiteConfig(PersonalSettings):
         "or https://api.languagetool.org for the public instance -- mind its rate limit and privacy if you use that "
         "one). Switches on a 'Check writing' button on CVs and cover letters. Off (nothing sent anywhere) when blank. "
         "The LANGUAGETOOL_URL environment variable takes precedence.",
+    )
+    libretranslate_url = models.CharField(
+        max_length=300, blank=True,
+        help_text="Base URL of a LibreTranslate server (self-hosted, e.g. the libretranslate/libretranslate Docker "
+        "image, or a public instance that accepts your key). Switches on a 'Translate to English' button on a job's "
+        "description. Off (nothing sent anywhere) when blank. The LIBRETRANSLATE_URL environment variable takes precedence.",
+    )
+    libretranslate_api_key = models.CharField(
+        max_length=200, blank=True,
+        help_text="Only needed if your LibreTranslate server requires one (most self-hosted instances don't). "
+        "The LIBRETRANSLATE_API_KEY environment variable takes precedence.",
     )
     paperless_verify_tls = models.BooleanField(default=True)
     paperless_auto_upload = models.BooleanField(
@@ -395,6 +411,14 @@ class SiteConfig(PersonalSettings):
         return (os.environ.get("LANGUAGETOOL_URL", "").strip() or self.languagetool_url.strip()).rstrip("/")
 
     @property
+    def effective_libretranslate_url(self):
+        return (os.environ.get("LIBRETRANSLATE_URL", "").strip() or self.libretranslate_url.strip()).rstrip("/")
+
+    @property
+    def effective_libretranslate_api_key(self):
+        return os.environ.get("LIBRETRANSLATE_API_KEY", "").strip() or self.libretranslate_api_key.strip()
+
+    @property
     def effective_paperless_token(self):
         return os.environ.get("PAPERLESS_TOKEN", "").strip() or self.paperless_token.strip()
 
@@ -443,6 +467,16 @@ class UserProfile(PersonalSettings):
     ui_preferences = models.JSONField(
         default=dict, blank=True, editable=False,
         help_text="How this person likes the app laid out (dashboard view, filters, sidebar, theme, text size). Saved so it follows them to every device; see services/preferences.py.",
+    )
+    weekly_digest_enabled = models.BooleanField(
+        default=False, verbose_name="Email me a weekly summary of how my search is going",
+        help_text="Applications sent, interviews, offers and follow-ups from the last 7 days -- the same plain "
+        "counts the Insights page shows, delivered once a week. Off until you turn it on. Run "
+        "`manage.py send_weekly_digest` on a schedule (e.g. a weekly cron).",
+    )
+    weekly_digest_sent_through = models.DateField(
+        null=True, blank=True, editable=False,
+        help_text="The Monday of the last week a digest was already sent for -- stops a cron run twice a week sending two emails.",
     )
     onboarding_done = models.BooleanField(
         default=False, editable=False,

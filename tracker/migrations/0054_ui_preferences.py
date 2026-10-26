@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tracker', '0055_siteconfig_languagetool_url'),
+        ('tracker', '0058_siteconfig_weekly_digest_site_enabled'),
     ]
 
     operations = [

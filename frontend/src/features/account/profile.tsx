@@ -126,6 +126,12 @@ function ProfileForm({ data, onSaved, saved, onEdit }: { data: ProfileData; onSa
           checked={values.scan_digest_enabled}
           onChange={(e) => set("scan_digest_enabled", e.target.checked)}
         />
+        <CheckField
+          label="Email me a weekly summary of how my search is going"
+          hint={`Applications sent, interviews, offers and follow-ups from the last 7 days. Off until you turn it on.${data.site.weekly_digest_site_enabled ? "" : " The site owner has not switched the weekly digest on yet, so nothing is sent for now."}`}
+          checked={values.weekly_digest_enabled}
+          onChange={(e) => set("weekly_digest_enabled", e.target.checked)}
+        />
       </Card>
 
       <Card>
