@@ -195,4 +195,5 @@ export type Me = {
   /** The site's public contact address, or "" when the site owner has not set one. */
   contact_email?: string;
   preferences: Preferences;
+  usajobs_sources_dormant: boolean;
 };

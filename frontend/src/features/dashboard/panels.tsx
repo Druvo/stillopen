@@ -64,6 +64,20 @@ export function StaffBanners({ me }: { me?: Me }) {
           .
         </Notice>
       )}
+      {me.usajobs_sources_dormant && (
+        <Notice>
+          A USAJobs source is enabled but has no key (or no registered email), so it silently finds nothing on
+          every search. Get a free key at{" "}
+          <a href="https://developer.usajobs.gov/apirequest" target="_blank" rel="noopener noreferrer" className="text-brand underline">
+            developer.usajobs.gov/apirequest
+          </a>{" "}
+          and paste both it and the email you requested it with under{" "}
+          <a href="/admin/tracker/siteconfig/" className="text-brand underline">
+            Site configuration &gt; Job search keys
+          </a>
+          .
+        </Notice>
+      )}
     </>
   );
 }

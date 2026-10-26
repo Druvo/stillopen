@@ -34,7 +34,7 @@ const job = (id: number, over: Partial<Job>): Job =>
   }) as Job;
 
 function setup(prefs: Partial<Preferences> = {}) {
-  me = { id: 1, name: "Al", email: "a@x", is_staff: false, greeting: "", site_title: "", prep_enabled: false, assistant_enabled: false, email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, timezone: "", site_timezone: "Asia/Dhaka", preferences: { ...DEFAULT_PREFERENCES, ...prefs } };
+  me = { id: 1, name: "Al", email: "a@x", is_staff: false, greeting: "", site_title: "", prep_enabled: false, assistant_enabled: false, email_unverified_signups: false, legal_has_blanks: false, jooble_sources_dormant: false, usajobs_sources_dormant: false, timezone: "", site_timezone: "Asia/Dhaka", preferences: { ...DEFAULT_PREFERENCES, ...prefs } };
   dashboard = {
     greeting: "Good morning, Al", buckets: [{ key: "new", label: "To apply", description: "", is_closed: false }, { key: "active", label: "Applied", description: "", is_closed: false }],
     statuses: [{ id: 1, name: "Saved", bucket_key: "new", color: "#000", counts_as_applied: false }, { id: 2, name: "Applied", bucket_key: "active", color: "#000", counts_as_applied: true }],

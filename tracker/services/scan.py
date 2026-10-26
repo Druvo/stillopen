@@ -34,6 +34,11 @@ hydration script rather than a plain JSON body, decoded here by a small generic 
 rather than a published API. Its own robots.txt does not disallow this path for generic bots. Also ships OFF
 by default, also an admin's own choice to add.
 
+`fetch_usajobs` is the opposite situation from bdjobs/bikroy: USAJOBS, the official US federal job board,
+publishes and supports a real, documented public Search API (developer.usajobs.gov) -- no robots.txt trade-off
+at all, just a free key (and the email it was requested with, which USAJOBS requires as the `User-Agent`
+header on every call). Ships OFF by default like the others, since it needs that key to do anything.
+
 A posting is matched against your own UserProfile.target_roles (simple case-insensitive phrase containment,
 the same zero-token approach career-ops' own title_filter uses) before anything is saved, and a posting whose
 URL you already track is skipped as a duplicate rather than re-added. A posting whose title misses every
@@ -589,7 +594,10 @@ KEYED_CONNECTORS = ("jooble", "adzuna")  # skipped silently until the site owner
 def site_keys() -> dict:
     """The site's search keys, read once on the caller's thread (worker threads must not touch the database)."""
     config = SiteConfig.load()
-    return {"jooble": config.effective_jooble_key, "adzuna_id": config.effective_adzuna_id, "adzuna_key": config.effective_adzuna_key}
+    return {
+        "jooble": config.effective_jooble_key, "adzuna_id": config.effective_adzuna_id, "adzuna_key": config.effective_adzuna_key,
+        "usajobs_key": config.effective_usajobs_key, "usajobs_email": config.effective_usajobs_email,
+    }
 
 
 def _as_keys(keys) -> dict:
@@ -604,6 +612,8 @@ def key_ready(connector: str, keys: dict) -> bool:
         return bool(keys.get("jooble"))
     if connector == "adzuna":
         return bool(keys.get("adzuna_id") and keys.get("adzuna_key"))
+    if connector == "usajobs":
+        return bool(keys.get("usajobs_key") and keys.get("usajobs_email"))
     return True
 
 
@@ -618,6 +628,8 @@ def search_codes(connector: str, token: str) -> set[str] | None:
         return {"SE"}
     if connector in ("bdjobs", "bikroy"):
         return {"BD"}
+    if connector == "usajobs":
+        return {"US"}
     if connector == "getonbrd" and token == "latam":
         return set(geo.REGIONS["latam"])
     return None
@@ -643,6 +655,8 @@ def _fetch_search(connector: str, token: str, roles: list[str] | None, keys: dic
         return fetch_bdjobs(token, roles)
     if connector == "bikroy":
         return fetch_bikroy(token, roles)
+    if connector == "usajobs":
+        return fetch_usajobs(token, roles, keys.get("usajobs_key", ""), keys.get("usajobs_email", ""))
     raise FetchError(f"Unknown connector: {connector}")
 
 
@@ -787,6 +801,58 @@ def fetch_bikroy(token: str, roles: list[str] | None = None) -> list[dict]:
                 "location": (a.get("region") or "").strip(),
                 "company": "",  # a classifieds board: the poster is a person, not reliably a named employer
                 "description": _blurb(a.get("details") or a.get("short_description") or ""),
+            })
+    return out
+
+
+USAJOBS_ROLES_PER_SEARCH = 3
+
+
+def fetch_usajobs(token: str, roles: list[str] | None = None, key: str = "", email: str = "") -> list[dict]:
+    """USAJOBS's own official, documented Search API (GET https://data.usajobs.gov/api/search?Keyword=...) --
+    unlike every other site-wide search connector here, this one IS a published, supported public API (see
+    developer.usajobs.gov), so there is no robots.txt trade-off to weigh: it is simply a connector with a key.
+
+    Needs a free key from developer.usajobs.gov/apirequest (no phone number, approved instantly) plus the email
+    address used to request it, which USAJOBS requires as the `User-Agent` header on every call alongside the
+    `Authorization-Key` header and a fixed `Host: data.usajobs.gov` header. No key, no email or no roles means
+    nothing to ask. Like Jooble/bdjobs/bikroy this is a search, not a list, so it is asked once per one person's
+    own target roles; `token` carries no meaning (one nationwide market, not a per-place board)."""
+    if not key or not email or not roles:
+        return []
+    import requests
+
+    from tracker.services.netguard import check_public_url
+
+    check_public_url("https://data.usajobs.gov/")
+    headers = {"Host": "data.usajobs.gov", "User-Agent": email, "Authorization-Key": key}
+    out, seen = [], set()
+    for role in roles[:USAJOBS_ROLES_PER_SEARCH]:
+        try:
+            resp = requests.get(
+                "https://data.usajobs.gov/api/search", params={"Keyword": role},
+                timeout=20, allow_redirects=False, headers=headers,
+            )
+        except requests.RequestException as exc:
+            raise FetchError(f"Request failed: {exc.__class__.__name__}") from exc
+        if resp.status_code in (401, 403):
+            raise FetchError("USAJobs did not accept the key. Check it in Site configuration.")
+        if resp.status_code != 200:
+            raise FetchError(f"HTTP {resp.status_code}")
+        items = ((resp.json() or {}).get("SearchResult") or {}).get("SearchResultItems") or []
+        for item in items:
+            d = item.get("MatchedObjectDescriptor") or {}
+            url = d.get("PositionURI") or ""
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            teaser = next((t.get("Content", "") for t in d.get("PositionFormattedDescription") or []), "")
+            out.append({
+                "title": (d.get("PositionTitle") or "").strip(),
+                "url": url,
+                "location": d.get("PositionLocationDisplay") or "",
+                "company": (d.get("OrganizationName") or d.get("DepartmentName") or "").strip(),
+                "description": _blurb(teaser or d.get("QualificationSummary") or ""),
             })
     return out
 
@@ -1003,6 +1069,7 @@ def _worker(run_id: int):
             run.done = count
 
         # Stage 1 starts as soon as the fast majority has answered; stage 2 adds what the slow hosts bring.
+        site_config = SiteConfig.load()  # read here: the fetch threads below must not touch the database
         answered, finish = _prefetch_staged(
             sources, roles, site_keys(), on_progress=reading,  # key read here: threads must not touch the database
             first_wait=settings.STILLOPEN_SCAN_FIRST_WAIT_SECONDS,

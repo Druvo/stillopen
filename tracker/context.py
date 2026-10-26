@@ -21,6 +21,11 @@ def staff_flags(config) -> dict:
             not config.effective_jooble_key
             and JobSource.objects.filter(owner__isnull=True, connector="jooble", enabled=True).exists()
         ),
+        # same for fetch_usajobs(), which needs both a key AND the registered email
+        "usajobs_sources_dormant": (
+            not (config.effective_usajobs_key and config.effective_usajobs_email)
+            and JobSource.objects.filter(owner__isnull=True, connector="usajobs", enabled=True).exists()
+        ),
     }
 
 

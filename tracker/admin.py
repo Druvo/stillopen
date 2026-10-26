@@ -55,6 +55,11 @@ class SiteConfigForm(forms.ModelForm):
         help_text="The key that goes with the app id (developer.adzuna.com > your dashboard). Stored encrypted and never shown again. "
         "Leave blank to keep the saved one. The ADZUNA_APP_KEY environment variable takes precedence.",
     )
+    usajobs_api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text="Free key from developer.usajobs.gov/apirequest. Leave blank to keep the saved key. The USAJOBS_API_KEY environment variable takes precedence.",
+    )
 
     # write-only secrets: blank keeps what is saved
     email_password = forms.CharField(
@@ -85,6 +90,10 @@ class SiteConfigForm(forms.ModelForm):
     def clean_jooble_api_key(self):
         key = self.cleaned_data.get("jooble_api_key", "")
         return key or (self.instance.jooble_api_key if self.instance else "")
+
+    def clean_usajobs_api_key(self):
+        key = self.cleaned_data.get("usajobs_api_key", "")
+        return key or (self.instance.usajobs_api_key if self.instance else "")
 
     def clean_paperless_token(self):
         token = self.cleaned_data.get("paperless_token", "")
@@ -187,14 +196,15 @@ class SiteConfigAdmin(ModelAdmin):
             "Job search keys",
             {
                 "classes": ("tab",),
-                "fields": ("jooble_api_key", "adzuna_app_id", "adzuna_app_key"),
+                "fields": ("jooble_api_key", "adzuna_app_id", "adzuna_app_key", "usajobs_api_key", "usajobs_email"),
                 "description": "Optional, and free. These switch on job searches by country, asked with each person's own target roles; "
                 "without a key those sources are simply skipped. <b>Adzuna</b> (developer.adzuna.com: register, then copy the app id and key "
                 "from your dashboard) covers 19 countries: UK, US, Canada, Australia, New Zealand, India, Singapore, South Africa, Brazil, "
                 "Mexico, Poland and most of western Europe. <b>Jooble</b> (jooble.org/api/about; approved by email) covers Bangladesh, Pakistan, "
                 "India, Malaysia, Singapore, Indonesia, the Philippines, Thailand, the Gulf, Egypt, Nigeria, South Africa, Brazil, Mexico, "
-                "Poland and Turkey. Run <code>python manage.py check_adzuna</code> or <code>check_jooble</code> to test a key. Adzuna's results "
-                "are shown with a \"Jobs by Adzuna\" credit and are never put on the public job board.",
+                "Poland and Turkey. <b>USAJobs</b> (developer.usajobs.gov/apirequest) is the official US federal job board's own API; it also "
+                "needs the email address the key was requested with. Run <code>python manage.py check_adzuna</code> or <code>check_jooble</code> "
+                "to test a key. Adzuna's results are shown with a \"Jobs by Adzuna\" credit and are never put on the public job board.",
             },
         ),
         (

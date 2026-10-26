@@ -7,6 +7,9 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 - Dashboard: a list with stage tabs is the default again (the board is one click away), filters hide behind a Filters button, a "Your search" card shows what drives your matches, and a layout you choose is remembered on your account for every device (view, tab, sort, filters, sidebar, theme, text size, density; set text size and density under Profile > Display). Opening the app is much faster: the job list now costs about 30 database queries instead of one per job (it was 187 for 45 jobs), answers are compressed and revalidated instead of re-sent, the per-source search log is only fetched when opened, and a reload paints from what the tab already had while it refreshes.
 - Your numbers (Insights, and a "This week" card on the dashboard): jobs found, checked and applied to each week, how good your matches are, replies and who has been waiting longest, where your jobs come from, kinds of work and countries, skills that keep coming up in fit checks, prep progress, and how many new postings match your roles on the boards this week. Plain counts from your own search, never predictions or comparisons with others.
+- A USAJobs source, off by default: the official, documented US federal job search API (needs a free key plus
+  the email it was requested with -- Site configuration > Job search keys). A dashboard banner nudges admins
+  when the source is enabled site-wide but missing one of those.
 - Insights: a new "Does a higher match score lead anywhere?" table groups your own applied jobs by match band
   and shows interview/offer counts and rates per band (`services/pipeline.py`'s `by_score`, `/api/v1/insights`,
   `frontend/src/features/pipeline/insights.tsx`). Plain counts from the person's own data, no prediction.

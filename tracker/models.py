@@ -284,6 +284,16 @@ class SiteConfig(PersonalSettings):
         "sources: 19 countries including the UK, US, India, Singapore, South Africa and Brazil. The ADZUNA_APP_ID environment variable takes precedence.",
     )
     adzuna_app_key_encrypted = models.CharField(max_length=500, blank=True)
+    usajobs_api_key = models.CharField(
+        max_length=200, blank=True,
+        help_text="Free key from developer.usajobs.gov/apirequest (instant, no phone number). Switches on the USAJobs "
+        "source: official, documented US federal job openings. The USAJOBS_API_KEY environment variable takes precedence.",
+    )
+    usajobs_email = models.EmailField(
+        max_length=200, blank=True,
+        help_text="The email address used to request the USAJobs key -- USAJobs requires it on every request, as the "
+        "User-Agent. The USAJOBS_EMAIL environment variable takes precedence.",
+    )
     paperless_verify_tls = models.BooleanField(default=True)
     paperless_auto_upload = models.BooleanField(
         default=False, help_text="Upload documents to Paperless automatically when they are imported."
@@ -433,6 +443,14 @@ class SiteConfig(PersonalSettings):
     @property
     def effective_adzuna_key(self):
         return os.environ.get("ADZUNA_APP_KEY", "").strip() or crypto.decrypt(self.adzuna_app_key_encrypted)
+
+    @property
+    def effective_usajobs_key(self):
+        return os.environ.get("USAJOBS_API_KEY", "").strip() or self.usajobs_api_key.strip()
+
+    @property
+    def effective_usajobs_email(self):
+        return os.environ.get("USAJOBS_EMAIL", "").strip() or self.usajobs_email.strip()
 
     @property
     def effective_paperless_token(self):
@@ -1267,6 +1285,7 @@ class JobSource(models.Model):
         ("getonbrd", "Get on Board (Latin America)"),
         ("bdjobs", "Bangladesh -- bdjobs.com (undocumented API, off by default -- see scan.py)"),
         ("bikroy", "Bangladesh -- bikroy.com Jobs (undocumented API, off by default -- see scan.py)"),
+        ("usajobs", "USAJobs -- official US federal jobs (needs a free key)"),
     ]
 
     name = models.CharField(max_length=120, help_text="Shown in the scan log. The company name for a single-company connector; a label like 'RemoteOK' for an aggregator.")
@@ -1279,9 +1298,9 @@ class JobSource(models.Model):
         "optional filter -- a RemoteOK tag (e.g. 'dev'), a We Work Remotely category slug (e.g. "
         "'remote-full-stack-programming-jobs'), or 'all' for no filter (Himalayas ignores this and always "
         "fetches its newest postings, since its public API has no working keyword filter to request narrower "
-        "than that). Jooble: a country code (bd, my, ae, sa, qa, kw, bh, om). bdjobs / bikroy: any value, e.g. "
-        "'bd' -- both are a sitewide search, not a per-company board, so the token carries no meaning. Letters, "
-        "digits, dot, dash and underscore only.",
+        "than that). Jooble: a country code (bd, my, ae, sa, qa, kw, bh, om). bdjobs / bikroy / usajobs: any "
+        "value, e.g. 'bd' -- all three are a sitewide search, not a per-company board, so the token carries no "
+        "meaning. Letters, digits, dot, dash and underscore only.",
         validators=[validate_board_token],
     )
     enabled = models.BooleanField(default=True)

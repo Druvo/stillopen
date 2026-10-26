@@ -67,6 +67,7 @@ def me(request):
         "legal_has_blanks": bool(flags.get("legal_needs_attention")),
         "no_search_keys": bool(flags.get("no_search_keys")),
         "jooble_sources_dormant": bool(flags.get("jooble_sources_dormant")),
+        "usajobs_sources_dormant": bool(flags.get("usajobs_sources_dormant")),
     }
 
 
