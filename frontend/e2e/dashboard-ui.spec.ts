@@ -134,25 +134,44 @@ test("the Your search card sums up what drives the matches and says where to cha
   await expect(page).toHaveURL(/\/app\/profile$/);
 });
 
+/**
+ * The saved copy of the answers is written a moment after a change to what the page holds, and the sign-in helper clears this tab's storage
+ * after the page has loaded, so a fixed sleep sometimes finds nothing. Make a harmless change (the view switch, put back as it was) and wait
+ * until the copy really is in storage.
+ */
+async function waitForSavedCopy(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: "Board", exact: true }).click();
+  await page.getByRole("button", { name: "List", exact: true }).click();
+  // The copy is written in throttled steps: wait for the one that holds the dashboard itself, not an earlier one with only who is signed in.
+  await expect
+    .poll(() => page.evaluate(() => (sessionStorage.getItem("stillopen-query-cache") ?? "").includes('"dashboard"')), { timeout: 10_000 })
+    .toBe(true);
+}
+
 test("a reload paints from the saved copy at once and refreshes behind it", async ({ page }) => {
   await signIn(page, "alice");
   await expect(page.locator("article")).toHaveCount(3);
-  await page.waitForTimeout(600); // the copy is written a moment after the answers arrive
+  await waitForSavedCopy(page);
+  // The fresh answer is held until the assertions are done, so this does not depend on how fast the machine is: whatever is on screen
+  // while the request is still out must come from the saved copy.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
   await page.route("**/api/v1/dashboard", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await held;
     await route.continue();
   });
   await page.reload();
-  await expect(page.locator("article")).toHaveCount(3, { timeout: 1500 }); // no blank "Loading" while the slow answer is on its way
+  await expect(page.locator("article")).toHaveCount(3); // no blank "Loading" while the answer is on its way
   await expect(page.getByText("Updating…")).toBeVisible();
+  release();
+  await expect(page.getByText("Updating…")).toHaveCount(0); // and the refresh finishes behind it
   await page.unrouteAll({ behavior: "wait" });
 });
 
 test("signing out removes what this tab kept", async ({ page }) => {
   await signIn(page, "alice");
   await expect(page.locator("article")).toHaveCount(3);
-  await page.waitForTimeout(600);
-  expect(await page.evaluate(() => sessionStorage.getItem("stillopen-query-cache"))).not.toBeNull();
+  await waitForSavedCopy(page);
   await page.getByRole("button", { name: "Your account" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/app/"));
