@@ -135,8 +135,9 @@ test.describe("titles, focus and messages", () => {
     await signIn(page, "alice");
     await expect(page.getByTestId("toasts-polite")).toHaveAttribute("aria-live", "polite");
     await expect(page.getByTestId("toasts-alert")).toHaveText("");
-    await page.getByRole("button", { name: "Look it up" }).click(); // nothing pasted: an error message
-    await expect(page.getByTestId("toasts-alert")).toContainText("Paste a job link first");
+    // The same event the app's own notify() sends: no screen has a button that raises an error on demand any more.
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("so-toast", { detail: { id: 9001, text: "Something went wrong", tone: "error" } })));
+    await expect(page.getByTestId("toasts-alert")).toContainText("Something went wrong");
   });
 
   test("a refused form says how many problems it has and moves to the first one", async ({ page }) => {
