@@ -12,7 +12,7 @@ import { dashboardApi, useMe } from "./api";
 import { Board } from "./board";
 import { FilterBar } from "./filters";
 import { JobCard, type CardExtras } from "./job-card";
-import { ComingUp, FollowupsDue, NextStepCard, QuickAdd, ScanCard, Spinner, StaffBanners, StatTiles } from "./panels";
+import { ComingUp, FollowupsDue, NextStepCard, ScanCard, Spinner, StaffBanners, StatTiles } from "./panels";
 import {
   applyMove, checkButtonText, DEFAULT_FILTERS, emptyKind, FILTERS_KEY, importMessage, initialFilters, scanButtonText, subtitle, visibleJobs, type Filters,
 } from "./logic";
@@ -292,7 +292,6 @@ export function Dashboard() {
         </p>
       )}
       {data.next_step && <NextStepCard step={data.next_step} onCard={goToCard} />}
-      <QuickAdd />
       <ScanCard scan={scanView} starting={scan.starting} />
       <ComingUp items={data.upcoming_interviews} />
       <FollowupsDue items={data.followups} onChanged={refresh} />
@@ -327,20 +326,20 @@ export function Dashboard() {
               <Link to="/profile" className="text-brand underline">
                 Profile
               </Link>
-              , paste a link above, or{" "}
+              , or{" "}
               <Link to="/jobs/add" className="text-brand underline">
-                add one by hand
+                add a job
               </Link>
               .
             </p>
           )}
           {empty === "no-jobs" && (
             <p>
-              No jobs yet. Paste a link above, or{" "}
+              No jobs yet.{" "}
               <Link to="/jobs/add" className="text-brand underline">
-                add one by hand
-              </Link>
-              .
+                Add a job
+              </Link>{" "}
+              to get started.
             </p>
           )}
           {empty === "no-matches" && (

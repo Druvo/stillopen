@@ -4,13 +4,11 @@ import { Loader2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Button, buttonClass, Card, Notice, Progress } from "@/components/ui";
 import { errorText } from "@/lib/api";
-import { Link, navigate } from "@/lib/router";
+import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import type { Dashboard, Followup, Me, NextStep, ScanStatus, UpcomingInterview } from "@/lib/types";
-import { jobsApi } from "@/features/jobs/api";
 import { dashboardApi } from "./api";
 import { entryText, interviewWhen, nextStepTarget, scanPercent, scanTitle, shortDate } from "./logic";
-import { stashPrefill } from "./prefill";
 
 export function Spinner() {
   return <Loader2 className="size-4 animate-spin" aria-hidden />;
@@ -88,57 +86,6 @@ export function NextStepCard({ step, onCard }: { step: NextStep; onCard: (id: st
           </a>
         )}
       </div>
-    </Card>
-  );
-}
-
-/** "Found a job you like? Paste its link": reads the posting, then opens Add job with what was found, to be checked before saving. */
-export function QuickAdd() {
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
-  const go = async () => {
-    const link = url.trim();
-    if (!link) {
-      notify("Paste a job link first", "error");
-      return;
-    }
-    setBusy(true);
-    try {
-      const found = await jobsApi.quickAdd(link);
-      stashPrefill(found);
-      navigate("/jobs/add");
-    } catch (e) {
-      notify(errorText(e, "Could not fetch that page"), "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Card>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!busy) void go();
-        }}
-      >
-        <label htmlFor="quickadd-url" className="mb-1 block text-theme-sm font-medium">
-          Found a job you like? Paste its link
-        </label>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            id="quickadd-url"
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://..."
-            className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-theme-sm"
-          />
-          <Button type="submit" disabled={busy}>
-            {busy ? "Looking…" : "Look it up"}
-          </Button>
-        </div>
-        <p className="mt-1 text-theme-xs text-muted">We read the title and description from the page and let you check them first. Nothing is saved until you say so.</p>
-      </form>
     </Card>
   );
 }

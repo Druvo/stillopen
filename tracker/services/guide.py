@@ -44,7 +44,7 @@ def next_step(profile, cards, has_areas: bool = True, searching: bool = False, p
     if not cards:
         return {
             "headline": "Add the first job you are curious about",
-            "body": "Paste a link below, or press Add job. We will tell you how well it fits you, and whether it is still open.",
+            "body": "Press Add job and paste a link, or type it in by hand. We will tell you how well it fits you, and whether it is still open.",
             "label": "Add a job", "url": "/app/jobs/add",
         }
     unchecked = [c for c in live if c["percent"] is None and (c["app"].description or c["app"].url)]
