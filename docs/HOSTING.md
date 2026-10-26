@@ -32,6 +32,10 @@ Without Docker: `pip install -r requirements-hosting.txt`, set `DATABASE_URL=pos
 3. Schedule the emails: `deploy/crontab.example` or `deploy/windows/schedule-stillopen.ps1`.
 4. Optional: a Jooble key for Bangladesh, Malaysia and the Gulf (`python manage.py check_jooble` proves it works).
 5. Put a TLS reverse proxy in front and set `ALLAUTH_TRUSTED_PROXY_COUNT=1` so the per-IP limits see visitors, not the proxy.
+6. Optional: error tracking. Set `GLITCHTIP_DSN` (or `SENTRY_DSN` -- GlitchTip, a self-hosted open-source
+   option, speaks the same protocol as Sentry) and `pip install -r requirements-errors.txt`. Off by default:
+   nothing is sent anywhere unless one of those is set. `send_default_pii` stays off -- job descriptions and
+   CV text are personal/untrusted data and are never attached to an error report.
 
 ## The public job board
 

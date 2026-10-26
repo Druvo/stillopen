@@ -80,6 +80,40 @@ export function Insights() {
             Interviews and offers count once you add them on the <Link to="/interviews" className="text-brand underline">Interviews</Link> and{" "}
             <Link to="/offers" className="text-brand underline">Offers</Link> pages.
           </p>
+          {f.by_score.length > 0 && (
+            <>
+              <h2 className="mb-2 mt-6 font-semibold">Does a higher match score lead anywhere?</h2>
+              <p className="mb-2 text-sm text-muted">Your own applications, grouped by the match band shown on the card when you applied. A band with one or two applications says little either way.</p>
+              <Card className="overflow-x-auto p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-muted">
+                      <th className="p-3 font-medium">Match band</th>
+                      <th className="p-3 text-right font-medium">Applied</th>
+                      <th className="p-3 text-right font-medium">Interviews</th>
+                      <th className="p-3 text-right font-medium">Offers</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {f.by_score.map((r) => (
+                      <tr key={r.label} className="border-b border-border last:border-0">
+                        <td className="p-3">{r.label}</td>
+                        <td className="p-3 text-right">{r.applied}</td>
+                        <td className="p-3 text-right">
+                          {r.interviews}
+                          {r.interview_rate !== null && <span className="text-muted"> ({r.interview_rate}%)</span>}
+                        </td>
+                        <td className="p-3 text-right">
+                          {r.offers}
+                          {r.offer_rate !== null && <span className="text-muted"> ({r.offer_rate}%)</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </>
+          )}
         </>
       )}
       <YourNumbers />
