@@ -29,6 +29,7 @@
     <div class="collapse navbar-collapse" id="public-nav">
       <ul class="navbar-nav me-auto ms-md-4">
         {% if config.public_board_enabled %}<li class="nav-item"><a class="nav-link" href="{% url 'openings' %}">Browse jobs</a></li>{% endif %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'tools_index' %}">Free tools</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'landing' %}#how">How it works</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'landing' %}#why">Why {{ config.site_title }}</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'landing' %}#faq">FAQ</a></li>
@@ -55,6 +56,7 @@
         <div class="fw-bold mb-2">Explore</div>
         <ul class="list-unstyled mb-0">
           {% if config.public_board_enabled %}<li><a href="{% url 'openings' %}">Browse jobs</a></li>{% endif %}
+          <li><a href="{% url 'tools_index' %}">Free tools</a></li>
           <li><a href="{% url 'landing' %}#how">How it works</a></li>
           <li><a href="{% url 'landing' %}#faq">FAQ</a></li>
           <li><a href="{% url 'landing' %}#open-source">Open source</a></li>

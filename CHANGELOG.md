@@ -18,6 +18,11 @@ supported version, so entries are grouped under **Unreleased** until the first t
   Labor's O*NET database (a real, CC-licensed, named-technology vocabulary), not generic word frequency --
   ESCO was tried for this earlier and rejected as a poor fit; O*NET live-checked well. Zero-token, works
   without an AI key.
+- Four free, no-sign-in tools at `/tools/`: a job-fit checker (the same free keyword match, paste a posting and
+  a CV), "is this job still open?" (the same liveness check, paste a link), an offer comparator (the same
+  per-currency comparison, never converted) and an RSS feed of the public job board. Nothing is saved; each is
+  rate-limited per IP and shares the sign-up form's bot-trap discipline (a honeypot field, a minimum fill time,
+  no CAPTCHA).
 - A weekly digest email (Profile > Job alerts): applications sent, interviews, offers and follow-ups from the
   last 7 days, the same plain counts the Insights page shows. Off at two levels like the scheduled search
   email -- a site admin switches it on (Site configuration > Dashboard), each person opts in separately. Run

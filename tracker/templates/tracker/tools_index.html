@@ -1,0 +1,37 @@
+{% extends "tracker/public_base.html" %}
+{% block title %}Free job search tools | {{ config.site_title }}{% endblock %}
+{% block description %}Free tools for job seekers: no account, nothing saved. Check how well your CV fits a job, whether a posting is still open, and compare two offers.{% endblock %}
+
+{% block main %}
+<section class="so-hero">
+  <div class="container-xl py-4 py-lg-5">
+    <span class="so-eyebrow">Free tools</span>
+    <h1 class="fw-bold mt-1 mb-2">Useful on their own, no account needed</h1>
+    <p class="so-lead mb-4">The same free, zero-token checks the signed-in app uses, open to anyone. Nothing you type here is saved.</p>
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <div class="card h-100"><div class="card-body d-flex flex-column">
+          <h2 class="h4">How well does this job fit me?</h2>
+          <p class="text-secondary flex-grow-1">Paste a job description and your CV. A quick keyword comparison, no AI, no sign-in.</p>
+          <a class="btn btn-primary" href="{% url 'tool_job_fit' %}">Check my fit</a>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card h-100"><div class="card-body d-flex flex-column">
+          <h2 class="h4">Is this job still open?</h2>
+          <p class="text-secondary flex-grow-1">Paste a link to a posting. We fetch the page and look for an apply control or an expiry notice.</p>
+          <a class="btn btn-primary" href="{% url 'tool_liveness' %}">Check a link</a>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card h-100"><div class="card-body d-flex flex-column">
+          <h2 class="h4">Compare two offers</h2>
+          <p class="text-secondary flex-grow-1">Base pay, bonus, equity and signing bonus, side by side. Different currencies are never converted or guessed at.</p>
+          <a class="btn btn-primary" href="{% url 'tool_offer_compare' %}">Compare offers</a>
+        </div></div>
+      </div>
+    </div>
+    {% if config.signup_open %}<p class="text-secondary mt-4 mb-0">Want these checks to happen automatically as you track a whole job search? <a href="{% url 'account_signup' %}">Create a free account</a>.</p>{% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -14,6 +14,80 @@ from .services.netguard import FetchError, check_public_url
 
 SIGNUP_SALT = "tracker.signup-form"
 SIGNUP_MAX_AGE = 2 * 24 * 3600  # a sign-up page left open longer than this has to be reloaded
+PUBLIC_TOOL_SALT = "tracker.public-tool"
+
+
+class HoneypotMixin(forms.Form):
+    """Same bot protection as the sign-up form, for the public tools nobody needs an account to use: a text box
+    real people never see, and a signed timestamp so a form submitted faster than a person could type it is refused."""
+
+    website = forms.CharField(required=False, label="Leave this empty", widget=forms.TextInput(attrs={"tabindex": "-1", "autocomplete": "off"}))
+    form_started = forms.CharField(required=False, widget=forms.HiddenInput)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            self.initial["form_started"] = signing.dumps(time.time(), salt=PUBLIC_TOOL_SALT)
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("website"):
+            raise forms.ValidationError("Something went wrong. Please reload the page and try again.")
+        minimum = settings.STILLOPEN_PUBLIC_TOOL_MIN_SECONDS
+        if minimum > 0:
+            try:
+                started = signing.loads(cleaned.get("form_started") or "", salt=PUBLIC_TOOL_SALT, max_age=SIGNUP_MAX_AGE)
+            except signing.BadSignature:
+                raise forms.ValidationError("This page expired. Please reload it and try again.") from None
+            if time.time() - started < minimum:
+                raise forms.ValidationError("That was very quick. Please check your details and press the button again.")
+        return cleaned
+
+
+class JobFitToolForm(HoneypotMixin):
+    description = forms.CharField(label="The job description", widget=forms.Textarea(attrs={"rows": 10}))
+    cv = forms.CharField(label="Your CV or a summary of your skills and experience", widget=forms.Textarea(attrs={"rows": 10}))
+
+
+class LivenessToolForm(HoneypotMixin):
+    url = forms.URLField(label="Link to the job posting", max_length=600)
+
+
+class OfferToolForm(HoneypotMixin):
+    PERIODS = Offer.PERIODS
+
+    a_label = forms.CharField(label="First offer's name", max_length=60, required=False, initial="Offer A")
+    a_base = forms.DecimalField(label="Base pay", min_value=0, max_digits=12, decimal_places=2)
+    a_period = forms.ChoiceField(label="Paid", choices=PERIODS, initial="year")
+    a_currency = forms.CharField(label="Currency", max_length=3, initial="USD")
+    a_bonus = forms.DecimalField(label="Yearly bonus", min_value=0, max_digits=12, decimal_places=2, required=False, initial=0)
+    a_equity = forms.DecimalField(label="Yearly value of shares or options", min_value=0, max_digits=12, decimal_places=2, required=False, initial=0)
+    a_signing = forms.DecimalField(label="One-off signing bonus", min_value=0, max_digits=12, decimal_places=2, required=False, initial=0)
+    a_other_benefits = forms.DecimalField(label="Other yearly benefits worth counting", min_value=0, max_digits=12, decimal_places=2, required=False, initial=0)
+
+    b_label = forms.CharField(label="Second offer's name", max_length=60, required=False, initial="Offer B")
+    b_base = forms.DecimalField(label="Base pay", min_value=0, max_digits=12, decimal_places=2)
+    b_period = forms.ChoiceField(label="Paid", choices=PERIODS, initial="year")
+    b_currency = forms.CharField(label="Currency", max_length=3, initial="USD")
+    b_bonus = forms.DecimalField(label="Yearly bonus", min_value=0, max_digits=12, decimal_places=2, required=False, initial=0)
+    b_equity = forms.DecimalField(label="Yearly value of shares or options", min_value=0, max_digits=12, decimal_places=2, required=False, initial=0)
+    b_signing = forms.DecimalField(label="One-off signing bonus", min_value=0, max_digits=12, decimal_places=2, required=False, initial=0)
+    b_other_benefits = forms.DecimalField(label="Other yearly benefits worth counting", min_value=0, max_digits=12, decimal_places=2, required=False, initial=0)
+
+    def offers(self) -> list[Offer]:
+        """Two unsaved Offer instances -- never written to the database, just reused for the same per-currency math.
+        `.label` is set as a plain attribute (not a model field) so the template can show each offer's own name."""
+        out = []
+        for side, default in (("a", "Offer A"), ("b", "Offer B")):
+            data = self.cleaned_data
+            offer = Offer(
+                base=data[f"{side}_base"], period=data[f"{side}_period"], currency=(data[f"{side}_currency"] or "USD").strip().upper()[:3],
+                bonus=data[f"{side}_bonus"] or 0, equity=data[f"{side}_equity"] or 0, signing=data[f"{side}_signing"] or 0,
+                other_benefits=data[f"{side}_other_benefits"] or 0,
+            )
+            offer.label = (data[f"{side}_label"] or "").strip() or default
+            out.append(offer)
+        return out
 
 
 class SignupForm(AllauthSignupForm):

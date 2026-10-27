@@ -456,6 +456,42 @@ class RobotsAndSitemap(PublicTestCase):
         self.assertNotIn("/openings/", self.client.get(reverse("sitemap")).content.decode())
 
 
+class OpeningsFeed(PublicTestCase):
+    def test_anyone_can_fetch_it_newest_first_with_a_credit_and_a_link_to_our_own_page(self):
+        src = source("remoteok", "Remote OK")
+        old = posting(src, title="Old Role", company="Acme", excerpt="Build old things.", first_days_ago=2, url="https://remoteok.com/1")
+        new = posting(src, title="New Role", company="Acme", excerpt="Build new things.", first_days_ago=0, url="https://remoteok.com/2")
+        xml = self.client.get(reverse("openings_feed")).content.decode()
+        self.assertIn("<rss", xml)
+        self.assertLess(xml.index("New Role"), xml.index("Old Role"))
+        self.assertIn(f"http://testserver/openings/{new.pk}/", xml)
+        self.assertNotIn("remoteok.com", xml)  # the feed links to our own credited page, not straight to the source
+        self.assertIn("Build new things.", xml)
+        self.assertIn("Remote OK", xml)
+
+    def test_hidden_and_stale_are_left_out(self):
+        posting(source(show_publicly=False), title="Hidden")
+        posting(source(), title="Stale", seen_days_ago=20)
+        xml = self.client.get(reverse("openings_feed")).content.decode()
+        self.assertNotIn("Hidden", xml)
+        self.assertNotIn("Stale", xml)
+
+    def test_same_filters_as_the_board(self):
+        posting(source(), title="Malaysia Role", country="MY")
+        posting(source(), title="Bangladesh Role", country="BD")
+        xml = self.client.get(reverse("openings_feed"), {"country": "MY"}).content.decode()
+        self.assertIn("Malaysia Role", xml)
+        self.assertNotIn("Bangladesh Role", xml)
+
+    def test_board_off_is_a_404(self):
+        SiteConfig.objects.filter(pk=1).update(public_board_enabled=False)
+        self.assertEqual(self.client.get(reverse("openings_feed")).status_code, 404)
+
+    def test_the_board_page_links_to_it(self):
+        html = self.client.get(reverse("openings")).content.decode()
+        self.assertIn('href="/openings/feed.rss"', html)
+
+
 class KeepingItFresh(PublicTestCase):
     def test_refresh_marks_what_is_still_listed_and_leaves_the_rest_to_expire(self):
         src = source("remoteok", "Remote OK")
