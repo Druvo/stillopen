@@ -4,6 +4,7 @@
 {% block description %}{% if country_name %}Open jobs in {{ country_name }}{% else %}Browse {{ total|intcomma }} open jobs from employers' career pages and remote job boards{% endif %}. Create a free account to see how well each one fits you.{% endblock %}
 {% block canonical %}{% if noindex %}{{ request.build_absolute_uri }}{% else %}{% url 'openings' as u %}{{ request.scheme }}://{{ request.get_host }}{{ u }}{% endif %}{% endblock %}
 {% block robots %}{% if noindex %}noindex,follow{% else %}index,follow{% endif %}{% endblock %}
+{% block extra_head %}<link rel="alternate" type="application/rss+xml" title="{{ config.site_title }} job openings" href="{% url 'openings_feed' %}{% if qs %}?{{ qs }}{% endif %}">{% endblock %}
 
 {% block main %}
 <section class="so-hero">
@@ -20,6 +21,9 @@
             <optgroup label="Other countries (none open right now)">{% for c in countries_without %}<option value="{{ c.code }}" {% if c.code == country %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</optgroup>
           </select></div>
         <div class="col-12 col-md-3 d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">Search</button>{% if filtered %}<a class="btn btn-outline-secondary" href="{% url 'openings' %}">Clear</a>{% endif %}</div>
+      </div>
+      <div class="mt-2">
+        <a class="small" href="{% url 'openings_feed' %}{% if qs %}?{{ qs }}{% endif %}">Subscribe to these results as RSS</a>
       </div>
       <div class="row g-2 align-items-end mt-1">
         <div class="col-6 col-md-3"><label class="form-label mb-1" for="type">Kind of job</label>

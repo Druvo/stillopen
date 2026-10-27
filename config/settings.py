@@ -287,6 +287,9 @@ STILLOPEN_EVALS_PER_HOUR = int(os.environ.get("STILLOPEN_EVALS_PER_HOUR", "30"))
 STILLOPEN_CHECKS_PER_HOUR = int(os.environ.get("STILLOPEN_CHECKS_PER_HOUR", "12"))
 STILLOPEN_SCANS_PER_HOUR = int(os.environ.get("STILLOPEN_SCANS_PER_HOUR", "6"))
 STILLOPEN_QUICKADD_PER_HOUR = int(os.environ.get("STILLOPEN_QUICKADD_PER_HOUR", "30"))
+# The public, no-sign-in tools (/tools/...): per-IP, since nobody is signed in to rate-limit by account.
+STILLOPEN_PUBLIC_TOOL_RATE_PER_HOUR = int(os.environ.get("STILLOPEN_PUBLIC_TOOL_RATE_PER_HOUR", "20"))
+STILLOPEN_PUBLIC_TOOL_MIN_SECONDS = int(os.environ.get("STILLOPEN_PUBLIC_TOOL_MIN_SECONDS", "2"))
 # How many of the candidate's own skill terms a posting's title+blurb must share to be added even when its
 # title doesn't literally contain one of their target-role phrases. Higher = fewer false positives.
 STILLOPEN_SKILL_MATCH_MIN_OVERLAP = int(os.environ.get("STILLOPEN_SKILL_MATCH_MIN_OVERLAP", "4"))
