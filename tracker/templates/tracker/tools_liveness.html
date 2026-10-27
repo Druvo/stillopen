@@ -1,0 +1,43 @@
+{% extends "tracker/public_base.html" %}
+{% load form_tags %}
+{% block title %}Is this job still open? | {{ config.site_title }}{% endblock %}
+{% block description %}Paste a job posting link to check whether it still looks open. No account, nothing saved.{% endblock %}
+
+{% block main %}
+<section class="so-hero">
+  <div class="container-xl py-4 py-lg-5" style="max-width:40rem">
+    <span class="so-eyebrow">Free tool</span>
+    <h1 class="fw-bold mt-1 mb-2">Is this job still open?</h1>
+    <p class="so-lead mb-4">We fetch the page and look for an apply control or an expiry notice. No account, nothing saved.</p>
+
+    {% if result %}
+    <div class="card mb-4"><div class="card-body">
+      {% if result.state == "active" %}<h2 class="h4 text-success mb-1">Looks open</h2>
+      {% elif result.state == "expired" %}<h2 class="h4 text-danger mb-1">Looks closed</h2>
+      {% else %}<h2 class="h4 text-warning mb-1">Not sure</h2>{% endif %}
+      <p class="mb-0">{{ result.detail }}</p>
+    </div></div>
+    {% endif %}
+
+    <div class="card"><div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form.visible_fields %}{% if field.name != "website" %}
+        <div class="mb-3">
+          <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+          {{ field|bootstrap_field }}
+          {{ field.errors }}
+        </div>
+        {% endif %}{% endfor %}
+        {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+        <div style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+          <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>{{ form.website }}
+        </div>
+        <button type="submit" class="btn btn-primary">Check the link</button>
+      </form>
+    </div></div>
+    <p class="text-secondary mt-3" style="font-size:.85rem">A guess, not a certainty -- some pages block automated checks, or load content in a way we cannot read. Always confirm with the employer before you assume a listing is gone.</p>
+  </div>
+</section>
+{% endblock %}

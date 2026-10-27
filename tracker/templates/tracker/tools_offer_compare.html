@@ -1,0 +1,71 @@
+{% extends "tracker/public_base.html" %}
+{% load form_tags %}
+{% block title %}Compare two job offers | {{ config.site_title }}{% endblock %}
+{% block description %}Enter two offers' numbers and compare them side by side. Different currencies are never converted or guessed at. No account, nothing saved.{% endblock %}
+
+{% block main %}
+<section class="so-hero">
+  <div class="container-xl py-4 py-lg-5" style="max-width:48rem">
+    <span class="so-eyebrow">Free tool</span>
+    <h1 class="fw-bold mt-1 mb-2">Compare two offers</h1>
+    <p class="so-lead mb-4">Plain numbers, side by side. No account, nothing saved -- and a different currency is never converted or guessed at: each currency gets its own comparison.</p>
+
+    {% if groups %}
+    <div class="mb-4">
+      {% for group in groups %}
+      <div class="card mb-3"><div class="card-body">
+        <h2 class="h5 mb-3">In {{ group.currency }}</h2>
+        <div class="table-responsive"><table class="table table-sm mb-0">
+          <thead><tr><th>Offer</th><th class="text-end">Yearly total</th><th class="text-end">First-year total</th><th class="text-end">Behind the best</th></tr></thead>
+          <tbody>
+          {% for row in group.rows %}
+            <tr{% if row.best %} class="table-success"{% endif %}>
+              <td>{{ row.offer.label }}</td>
+              <td class="text-end">{{ row.offer.yearly_total|floatformat:0 }}</td>
+              <td class="text-end">{{ row.offer.first_year_total|floatformat:0 }}</td>
+              <td class="text-end">{% if row.best %}Best{% else %}{{ row.behind|floatformat:0 }}{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table></div>
+      </div></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card"><div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="row g-4">
+          <div class="col-12 col-md-6">
+            <h2 class="h5">First offer</h2>
+            {% for field in form %}{% if field.name|slice:":2" == "a_" %}
+            <div class="mb-2">
+              <label for="{{ field.id_for_label }}" class="form-label mb-1">{{ field.label }}</label>
+              {{ field|bootstrap_field }}
+              {{ field.errors }}
+            </div>
+            {% endif %}{% endfor %}
+          </div>
+          <div class="col-12 col-md-6">
+            <h2 class="h5">Second offer</h2>
+            {% for field in form %}{% if field.name|slice:":2" == "b_" %}
+            <div class="mb-2">
+              <label for="{{ field.id_for_label }}" class="form-label mb-1">{{ field.label }}</label>
+              {{ field|bootstrap_field }}
+              {{ field.errors }}
+            </div>
+            {% endif %}{% endfor %}
+          </div>
+        </div>
+        {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+        <div style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+          <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>{{ form.website }}
+        </div>
+        <button type="submit" class="btn btn-primary mt-3">Compare</button>
+      </form>
+    </div></div>
+  </div>
+</section>
+{% endblock %}

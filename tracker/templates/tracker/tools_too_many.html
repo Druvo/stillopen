@@ -1,0 +1,13 @@
+{% extends "tracker/public_base.html" %}
+{% block title %}Too many requests | {{ config.site_title }}{% endblock %}
+{% block robots %}noindex,nofollow{% endblock %}
+
+{% block main %}
+<section class="so-hero">
+  <div class="container-xl py-5" style="max-width:36rem">
+    <h1 class="fw-bold mb-2">Too many requests</h1>
+    <p class="so-lead">This tool has a limit per visitor to keep it free and fast for everyone. Please try again in a little while.</p>
+    <a class="btn btn-outline-secondary" href="{% url 'tools_index' %}">Back to free tools</a>
+  </div>
+</section>
+{% endblock %}

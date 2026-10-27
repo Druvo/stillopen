@@ -17,6 +17,7 @@ from django.db.models import Count, Q
 from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.feedgenerator import Rss201rev2Feed
 from django.urls import reverse
 from django.views.decorators.cache import cache_page
 from django.views.decorators.http import require_GET
@@ -132,6 +133,60 @@ def openings(request):
     })
 
 
+FEED_LIMIT = 100
+
+
+@require_GET
+@public_cache
+def openings_feed(request):
+    """An RSS feed of the public job board, for anyone who would rather subscribe than visit. Same filters as
+    the board itself (q, country, remote, visa, relocation, type, level, within), same rule as everywhere else
+    on the public side: each item is a short excerpt plus a credit link to the opening's own page, never the
+    full posting text."""
+    config = SiteConfig.load()
+    if _board_off(config):
+        raise Http404("The public job board is switched off.")
+    f = _filters(request)
+    qs = public.public_postings()
+    for word in f["q"].split():
+        qs = qs.filter(Q(title__icontains=word) | Q(company__icontains=word) | Q(location__icontains=word))
+    if f["country"]:
+        qs = qs.filter(country=f["country"])
+    if f["remote"]:
+        qs = qs.filter(remote=True)
+    if f["visa"]:
+        qs = qs.filter(sponsorship="yes")
+    if f["relocation"]:
+        qs = qs.filter(relocation="yes")
+    if f["type"]:
+        qs = qs.filter(employment_type=f["type"])
+    if f["level"]:
+        qs = qs.filter(seniority=f["level"])
+    if f["within"]:
+        qs = qs.filter(first_seen_at__gte=timezone.now() - timedelta(days=int(f["within"])))
+    qs = qs.order_by("-first_seen_at", "-pk")[:FEED_LIMIT]
+
+    feed = Rss201rev2Feed(
+        title=f"{config.site_title} — job openings",
+        link=request.build_absolute_uri(reverse("openings")),
+        description="New job openings from public job boards and employer career pages, read by StillOpen.",
+        language="en",
+    )
+    for p in qs:
+        credit = public.credit_for(p)
+        where = public.location_label(p)
+        description = p.excerpt.strip() or "No description read from this posting."
+        description += f"\n\nWhere: {where}. Source: {credit['label']}."
+        feed.add_item(
+            title=f"{p.title} at {p.company}" if p.company else p.title,
+            link=request.build_absolute_uri(reverse("opening_detail", args=[p.pk, public.slug_for(p)])),
+            description=description,
+            pubdate=p.first_seen_at,
+            unique_id=request.build_absolute_uri(reverse("opening_detail_bare", args=[p.pk])),
+        )
+    return HttpResponse(feed.writeString("utf-8"), content_type="application/rss+xml; charset=utf-8")
+
+
 def paginator_total(page) -> int:
     return page.paginator.count
 
@@ -194,7 +249,7 @@ SITEMAP_LIMIT = 45000  # the protocol allows 50,000 per file
 @public_cache
 def sitemap(request):
     config = SiteConfig.load()
-    urls = [(request.build_absolute_uri(reverse(name)), None) for name in ("landing", "privacy", "terms")]
+    urls = [(request.build_absolute_uri(reverse(name)), None) for name in ("landing", "privacy", "terms", "tools_index", "tool_job_fit", "tool_liveness", "tool_offer_compare")]
     if config.public_board_enabled:
         urls.append((request.build_absolute_uri(reverse("openings")), None))
         if config.public_details_indexable:

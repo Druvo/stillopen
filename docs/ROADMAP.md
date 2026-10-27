@@ -304,6 +304,26 @@ the person's own target roles, needs the site's key to do anything, ships OFF by
 `SiteConfig` fields (`usajobs_api_key`, `usajobs_email`, both env-overridable) under Site configuration > Job
 search keys, and a dormant-source dashboard banner matching the existing Jooble one.
 
+### Free, no-sign-in tools + an RSS feed (built, 2026-10-27)
+
+Four public, candidate-friendly additions, none needing an account:
+
+- **Job-fit checker** (`/tools/job-fit/`) -- paste a job description and a CV, get the exact same free keyword
+  match (`services/ai.keyword_match`) the signed-in app falls back to without an AI key.
+- **"Is this job still open?"** (`/tools/is-it-still-open/`) -- paste a link, runs the same
+  `services/liveness.check_url` the app uses, inheriting whatever check mode (HTTP or the career-ops Node
+  checker) the admin has configured site-wide.
+- **Offer comparator** (`/tools/compare-offers/`) -- two unsaved `Offer` model instances built straight from the
+  form, reused through the exact same `services/pipeline.comparison()` the signed-in Offers page uses (grouped
+  per currency, never converted).
+- **RSS feed** (`/openings/feed.rss`) of the public job board, same filters as the board itself, each item
+  linking to the opening's own credited page rather than straight to the source.
+
+All three forms share a new `HoneypotMixin` (same bot-trap discipline as sign-up: a hidden field, a minimum
+fill time, no CAPTCHA) and are rate-limited per IP (`services/throttle.throttled_ip`/`client_ip`,
+`STILLOPEN_PUBLIC_TOOL_RATE_PER_HOUR`) since nobody is signed in to limit by account. Nothing typed into any of
+them is saved.
+
 ### Weekly digest email (built, 2026-10-26)
 
 A plain weekly summary (applications sent, interviews, offers, follow-ups due) email, mirroring the existing
