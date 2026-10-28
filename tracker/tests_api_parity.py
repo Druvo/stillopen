@@ -16,7 +16,7 @@ API_DIR = Path(__file__).resolve().parent / "api"
 # classic addresses that stay (file downloads, print page, data export, allauth, privacy/terms); anything else would be an app screen
 STAYS_CLASSIC = {
     "cv_download", "cv_print", "cover_download", "document_file", "export_data", "account_email", "account_change_password", "mfa_index",
-    "socialaccount_connections", "privacy", "terms",
+    "socialaccount_connections", "privacy", "terms", "job_documents_zip",
 }
 
 

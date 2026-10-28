@@ -72,6 +72,10 @@ def build(user) -> dict:
         "question_bank": [
             {"question": q.question, "answer": q.answer, "tags": q.tags} for q in user.bank_questions.all()
         ],
+        "came_up": [
+            {"for_job": f"{c.application.company} - {c.application.role}" if c.application_id else "", "question_key": c.question_key, "prep_question_id": c.prep_question_id}
+            for c in user.came_up.select_related("application")
+        ],
         "company_notes": [
             {"company": n.name, "notes": n.notes, "website": n.website, "careers": n.careers, "linkedin": n.linkedin, "watched": n.watched}
             for n in user.company_notes.all()
