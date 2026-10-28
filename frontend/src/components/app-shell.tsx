@@ -16,6 +16,7 @@ import { Toasts } from "@/lib/toast";
 import { useIsWide } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { NAV, ROUTES } from "@/routes";
+import { ScreenBoundary } from "./screen-boundary";
 import { Loading, PageHeader, ScreenSkeleton } from "./ui";
 
 // The layout (fixed sidebar that collapses on wide screens and slides in on small ones, a sticky header with search, theme
@@ -379,6 +380,7 @@ export function AppShell() {
           {path === null ? (
             <Loading />
           ) : (
+            <ScreenBoundary resetKey={path}>
             <Suspense fallback={<ScreenSkeleton />}>
               {screen ?? (
                 <>
@@ -389,6 +391,7 @@ export function AppShell() {
                 </>
               )}
             </Suspense>
+            </ScreenBoundary>
           )}
         </main>
       </div>
