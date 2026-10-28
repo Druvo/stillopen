@@ -9,7 +9,7 @@ from django.core.mail import send_mail
 from django.utils import timezone
 
 from tracker.models import Application, Interview, Offer, ScoreBand, SiteConfig
-from tracker.services import integrations, links, links, notifications, tracking, tz
+from tracker.services import integrations, links, notifications, tracking, tz
 from tracker.services.cards import band_for
 
 REMINDER_HOURS = 24
