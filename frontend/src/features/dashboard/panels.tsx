@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { Button, buttonClass, Notice, Progress } from "@/components/ui";
-import { errorText } from "@/lib/api";
+import { errorText, request } from "@/lib/api";
 import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import type { Dashboard, DraftWaiting, Followup, Me, NextStep, ScanStatus, SearchSummary, ComingUpItem } from "@/lib/types";
@@ -20,6 +20,22 @@ import { entryText, nextStepTarget, scanPercent, scanTitle, searchRows, shortDat
 
 export function Spinner() {
   return <Loader2 className="size-4 animate-spin" aria-hidden />;
+}
+
+/** Staff only, and only when the admin switched the check on: a newer release exists. Asking is the server's job (once in six hours, silently). */
+export function UpdateNotice({ me }: { me?: Me }) {
+  const on = !!me?.is_staff && !!me.update_check_enabled;
+  const query = useQuery({ queryKey: ["update-check"], queryFn: () => request<{ available: boolean; latest: string; url: string; current: string }>("GET", "/update-check"), enabled: on, staleTime: 60 * 60 * 1000 });
+  if (!on || !query.data?.available) return null;
+  return (
+    <Notice>
+      A newer version of StillOpen is available ({query.data.latest}; you are running {query.data.current}).{" "}
+      <a href={query.data.url} target="_blank" rel="noopener noreferrer" className="text-brand underline">
+        Read the release notes
+      </a>
+      .
+    </Notice>
+  );
 }
 
 /** The warnings only a site admin sees (the same ones the classic dashboard showed). */

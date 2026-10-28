@@ -34,7 +34,7 @@ FIELDS = [
 
 def _usage(user) -> dict:
     now = tz.now_for(user)
-    month = AIUsageEvent.objects.filter(owner=user, created_at__year=now.year, created_at__month=now.month)
+    month = AIUsageEvent.objects.filter(owner=user, ok=True, created_at__year=now.year, created_at__month=now.month)
     total = month.aggregate(input_tokens=Sum("input_tokens"), output_tokens=Sum("output_tokens"), cost_usd=Sum("cost_usd"), calls=Count("id"))
     return {
         "calls": total["calls"], "total_tokens": (total["input_tokens"] or 0) + (total["output_tokens"] or 0),

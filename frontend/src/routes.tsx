@@ -8,6 +8,7 @@ import * as account from "@/features/account/routes";
 import * as cv from "@/features/cv/routes";
 import * as help from "@/features/help/routes";
 import * as jobs from "@/features/jobs/routes";
+import * as notifications from "@/features/notifications/routes";
 import * as pipeline from "@/features/pipeline/routes";
 
 // The dashboard is what /app/ opens, so it comes with the first load. Every other screen is its own chunk, fetched when it is opened.
@@ -25,6 +26,7 @@ export const ROUTES: Route[] = [
   ...cv.ROUTES,
   ...pipeline.ROUTES,
   ...account.ROUTES,
+  ...notifications.ROUTES,
   ...help.ROUTES,
 ];
 

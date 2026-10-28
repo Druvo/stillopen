@@ -1,7 +1,7 @@
 "use client";
 
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, HelpCircle, Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Sun, UserRound, X } from "lucide-react";
+import { Bell, ChevronDown, HelpCircle, Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Sun, UserRound, X } from "lucide-react";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { focusableIn, trapTab } from "@/lib/a11y";
 import { csrfToken } from "@/lib/api";
@@ -17,6 +17,7 @@ import { useIsWide } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { NAV, ROUTES } from "@/routes";
 import { ScreenBoundary } from "./screen-boundary";
+import { NotificationBell } from "@/features/notifications/bell";
 import { Loading, PageHeader, ScreenSkeleton } from "./ui";
 
 // The layout (fixed sidebar that collapses on wide screens and slides in on small ones, a sticky header with search, theme
@@ -108,6 +109,11 @@ function UserMenu({ me }: { me?: Me }) {
           <li>
             <Link to="/profile/ai" onClick={() => setOpen(false)} className={item}>
               <Settings className="size-4 text-gray-500" aria-hidden /> AI settings
+            </Link>
+          </li>
+          <li>
+            <Link to="/notifications" onClick={() => setOpen(false)} className={item}>
+              <Bell className="size-4 text-gray-500" aria-hidden /> Notifications
             </Link>
           </li>
           <li>
@@ -372,6 +378,7 @@ export function AppShell() {
               <Sun className="hidden size-5 dark:block" aria-hidden />
               <Moon className="size-5 dark:hidden" aria-hidden />
             </button>
+            <NotificationBell />
             <UserMenu me={me.data} />
           </div>
         </header>

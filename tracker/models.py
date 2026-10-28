@@ -213,6 +213,14 @@ class SiteConfig(PersonalSettings):
         "without it, emails only print to the server console. Run `manage.py send_followup_emails` on a schedule (e.g. daily cron).",
     )
 
+    update_check_enabled = models.BooleanField(
+        default=False, verbose_name="Check GitHub for a newer release",
+        help_text="Off by default: this install never contacts anyone on its own. When ticked, at most once every six hours (and only when an admin "
+        "opens the dashboard) the server makes one plain GET request to https://api.github.com/repos/Druvo/stillopen/releases/latest, the public "
+        "releases list, and compares the newest release number with the one running (the VERSION file). Nothing about you, your people or this "
+        "install is sent. If it works, admins see a small notice with a link to the release notes; if it fails, nothing happens.",
+    )
+
     weekly_emails_enabled = models.BooleanField(
         default=False,
         help_text="Allow the weekly 'what to do this week' email to people who opted in (Profile > Emails). Needs email set up (Site configuration > Email). "
@@ -571,6 +579,10 @@ class UserProfile(PersonalSettings):
         help_text="One short email a week: what is due, what is coming up and the best new matches. Off until you turn it on.",
     )
     weekly_emailed_at = models.DateTimeField(null=True, blank=True, editable=False, help_text="When the last weekly email went out, so it is never sent twice in six days.")
+    notify_muted = models.JSONField(
+        default=list, blank=True, editable=False,
+        help_text="Kinds of in-app notice this person switched off (see services/notifications.py). Empty means all are on.",
+    )
     ui_preferences = models.JSONField(
         default=dict, blank=True, editable=False,
         help_text="How this person likes the app laid out (dashboard view, filters, sidebar, theme, text size). Saved so it follows them to every device; see services/preferences.py.",
@@ -1584,6 +1596,9 @@ class AIUsageEvent(models.Model):
     output_tokens = models.PositiveIntegerField(null=True, blank=True)
     cost_usd = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True)
     cost_is_estimate = models.BooleanField(default=True, help_text="False only when the provider itself reported the cost.")
+    model = models.CharField(max_length=80, blank=True, help_text="The model that answered, when known. Blank on older events.")
+    duration_ms = models.PositiveIntegerField(null=True, blank=True, help_text="How long the call took. Blank on older events.")
+    ok = models.BooleanField(default=True, help_text="False when the call failed (no answer came back).")
 
     class Meta:
         ordering = ["-created_at"]
@@ -1641,3 +1656,30 @@ class CoverLetterRevision(models.Model):
 
     class Meta:
         ordering = ["-id"]
+
+
+class Notification(models.Model):
+    """One short in-app notice for one person (the bell in the header). Made by code that already knows the event happened (a finished
+    search, a follow-up that fell due...), never by the person's own text. `link` is an internal app path only. `dedupe_key` makes a
+    producer safe to run again (the same deadline is announced once); `cleared` hides a notice without forgetting it was made, so
+    clearing does not bring it back. At most NOTIFICATION_CAP per person are kept, the oldest dropped."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    kind = models.CharField(max_length=20)
+    title = models.CharField(max_length=120)
+    text = models.CharField(max_length=300, blank=True)
+    link = models.CharField(max_length=200, blank=True)
+    dedupe_key = models.CharField(max_length=80, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    read_at = models.DateTimeField(null=True, blank=True)
+    cleared = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        indexes = [models.Index(fields=["owner", "-created_at"])]
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "dedupe_key"], condition=~models.Q(dedupe_key=""), name="uniq_notification_dedupe"),
+        ]
+
+    def __str__(self):
+        return f"{self.kind}: {self.title}"

@@ -9,6 +9,7 @@ from django.db import connections
 from django.utils import timezone
 
 from tracker.models import Application, ExpiredPhrase, LivenessRun, SiteConfig
+from tracker.services import notifications
 from tracker.services.netguard import FetchError, safe_get
 STALE_AFTER = timedelta(minutes=20)
 
@@ -92,6 +93,8 @@ def _worker(run_id: int):
             Application.objects.filter(pk=app.pk).update(
                 live_state=state, live_detail=detail[:300], live_checked_at=timezone.now()
             )
+            if state == "expired" and app.live_state != "expired":
+                notifications.job_closed(app)  # told once, when the check first finds it closed
             run.done += 1
             run.save(update_fields=["done"])
     except Exception as exc:  # noqa: BLE001 - recorded on the run

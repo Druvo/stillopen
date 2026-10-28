@@ -211,4 +211,8 @@ export type Me = {
   contact_email?: string;
   preferences: Preferences;
   usajobs_sources_dormant: boolean;
+  /** The running version (from the VERSION file). */
+  version?: string;
+  /** Site admins only: the admin ticked "Check GitHub for a newer release", so the dashboard may ask. */
+  update_check_enabled?: boolean;
 };

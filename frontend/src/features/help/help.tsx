@@ -92,6 +92,11 @@ export function HelpPage() {
           </div>
         </Disclosure>
       </Card>
+      {me.data?.version && (
+        <p className="mt-4 max-w-3xl text-theme-sm text-muted" data-testid="help-version">
+          StillOpen version {me.data.version}
+        </p>
+      )}
       {address && (
         <p className="mt-4 max-w-3xl text-theme-sm" data-testid="help-contact">
           {CONTACT_LINE}{" "}
