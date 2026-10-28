@@ -71,6 +71,8 @@ export type Job = {
   prep?: { id: number; percent: number } | null;
 };
 
+export type ArchivedJob = { id: number; company: string; role: string; status: string; archived_at: string | null; url: string };
+
 export type NextStep = { headline: string; body: string; label: string; url: string };
 
 export type ScanEntry = { source: string; connector: string; found: number; matched: number; added: number; duplicates: number; outside: number; error: string };
@@ -122,6 +124,8 @@ export type Dashboard = {
   statuses: StatusInfo[];
   band_labels: string[];
   jobs: Job[];
+  /** Jobs the person archived: kept, but not on the list or in its counts. */
+  archived?: ArchivedJob[];
   stats: { total: number; submitted: number; average_match: number | null; urgent: number };
   followups: Followup[];
   upcoming_interviews: UpcomingInterview[];
@@ -153,6 +157,7 @@ export type SortKey = "best" | "newest" | "oldest" | "company" | "deadline";
 export type TextSize = "normal" | "large" | "larger";
 export type Density = "comfortable" | "compact";
 export type Theme = "light" | "dark";
+export type CoverTone = "warm" | "direct" | "formal";
 
 /** The six saved filters; "" is "any". */
 export type PrefFilters = { fit: string; match: string; work: string; country: string; posting: string; found: string };
@@ -174,6 +179,8 @@ export type Preferences = {
   theme: Theme;
   text_size: TextSize;
   density: Density;
+  /** How the next cover letter should sound. */
+  cover_tone: CoverTone;
 };
 
 /** Any subset; `filters` is replaced as a whole. */

@@ -157,6 +157,15 @@ def _job(card, has_areas: bool, prep: dict | None = None) -> dict:
     }
 
 
+def _archived(user) -> list[dict]:
+    """The jobs the person archived, newest first: just enough to list them and bring one back (they are not on the dashboard or in its counts)."""
+    rows = Application.objects.filter(owner=user, archived_at__isnull=False).select_related("status").order_by("-archived_at", "-id")[:200]
+    return [
+        {"id": a.pk, "company": a.company, "role": a.role, "status": board.label_for(a.status.name), "archived_at": _iso(a.archived_at), "url": a.url}
+        for a in rows
+    ]
+
+
 @api.get("/dashboard", summary="Every job of the signed-in person, with the columns it can sit in")
 def dashboard(request):
     user = request.user
@@ -170,7 +179,7 @@ def dashboard(request):
     areas = list(user.search_areas.all())
     scan.maybe_auto_start(user)
     apps = list(
-        Application.objects.filter(owner=user)
+        Application.objects.filter(owner=user, archived_at__isnull=True)
         .select_related("status", "status__bucket", "source", "posting", "posting__source", "applied_cv")
         .prefetch_related("insights", "documents__kind", "cv_versions", "events")
     )
@@ -212,6 +221,7 @@ def dashboard(request):
         ],
         "band_labels": [b.label for b in bands],
         "jobs": [_job(c, has_areas, prep_progress) for c in cards],
+        "archived": _archived(user),
         "stats": {
             "total": len(cards),
             "submitted": len(submitted),

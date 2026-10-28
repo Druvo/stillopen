@@ -16,6 +16,9 @@ import { FitList } from "./edit-job";
 import { jobsApi, type ApplyData } from "./api";
 import { appliedMessage } from "./logic";
 import { ReplyPaste } from "./reply-paste";
+import MatchCard from "./match-card";
+import { COVER_TONES } from "./match-logic";
+import { usePreferences } from "@/lib/use-preferences";
 import { JobMail } from "@/features/google/mail";
 import { SendFromGmail } from "@/features/google/send";
 
@@ -47,6 +50,7 @@ function MakeButton({ label, busyLabel, make }: { label: string; busyLabel: stri
 
 function RecordForm({ id, data }: { id: number; data: ApplyData }) {
   const client = useQueryClient();
+  const { prefs, update } = usePreferences();
   const form = useSubmit();
   const [cv, setCv] = useState<string>(data.selected !== null ? String(data.selected) : "none");
   const [channel, setChannel] = useState(data.job.channel);
@@ -116,7 +120,22 @@ function RecordForm({ id, data }: { id: number; data: ApplyData }) {
         <span className="text-sm text-muted">Makes a new version from your own CV. You review it before it can be sent.</span>
       </div>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <MakeButton label="Write a cover letter" busyLabel="Writing…" make={() => coverApi.write(id).then((r) => ({ path: `/cover/${r.id}`, said: letterSaid(r) }))} />
+        <label className="text-sm">
+          <span className="mr-1">Tone</span>
+          <select
+            aria-label="Tone of the cover letter"
+            value={prefs.cover_tone}
+            onChange={(e) => update({ cover_tone: e.target.value as (typeof COVER_TONES)[number]["value"] })}
+            className="rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+          >
+            {COVER_TONES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <MakeButton label="Write a cover letter" busyLabel="Writing…" make={() => coverApi.write(id, prefs.cover_tone).then((r) => ({ path: `/cover/${r.id}`, said: letterSaid(r) }))} />
         <span className="text-sm text-muted">Short, from your own material, checked before you can use it.</span>
         {data.cover_letters.map((l) => (
           <Link key={l.id} to={`/cover/${l.id}`} className="text-sm text-brand underline">
@@ -215,6 +234,9 @@ export function ApplyAssistant({ id }: { id: number }) {
       <h2 className="mb-2 text-lg font-semibold">1. Before you apply</h2>
       <Card>
         <FitList checks={data.checks} empty="Nothing to check yet." />
+      </Card>
+      <Card className="mt-3">
+        <MatchCard jobId={id} />
       </Card>
       <RecordForm id={id} data={data} />
       <JobMail jobId={id} connected={data.google.connected} thread={data.google.thread} />

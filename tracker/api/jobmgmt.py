@@ -43,7 +43,7 @@ def remove_job(request, job_id: int):
 
 class BulkIn(Schema):
     ids: list[int]
-    action: str  # remove | status | preview | undo
+    action: str  # remove | status | preview | undo | archive | restore
     status_id: int | None = None
 
 
@@ -58,7 +58,7 @@ def bulk(request, payload: BulkIn):
         raise HttpError(400, "Pick at least one job.")
     if len(ids) > BULK_MAX:
         raise HttpError(400, f"Pick up to {BULK_MAX} jobs at a time.")
-    if payload.action not in ("remove", "status", "preview", "undo"):
+    if payload.action not in ("remove", "status", "preview", "undo", "archive", "restore"):
         raise HttpError(400, "That is not something we can do to several jobs.")
     apps = list(Application.objects.filter(owner=request.user, pk__in=ids).select_related("status", "owner"))
     if len(apps) != len(ids):  # any id that is not theirs (or does not exist): nothing at all happens
@@ -71,6 +71,10 @@ def bulk(request, payload: BulkIn):
         except tracking.TrackingError as exc:
             raise HttpError(400, str(exc))
         return {"ok": True, "removed": count}
+    if payload.action == "archive":
+        return {"ok": True, "archived": tracking.archive_jobs(request.user, ids)}
+    if payload.action == "restore":
+        return {"ok": True, "restored": tracking.restore_jobs(request.user, ids)}
     if payload.action == "undo":
         return {"ok": True, "undone": [a.pk for a in apps if board.undo_status(a)]}
     if payload.status_id is None:
@@ -78,6 +82,18 @@ def bulk(request, payload: BulkIn):
     status = get_object_or_404(Status.objects.select_related("bucket"), pk=payload.status_id)
     changed = [a.pk for a in apps if board.change_status(a, status)]
     return {"ok": True, "changed": changed, "status": _status_payload(status)}
+
+
+@router.post("/jobs/{job_id}/archive", summary="Archive a job: it leaves the dashboard and its counts, and can be restored")
+def archive_job(request, job_id: int):
+    app = owned_job(request, job_id)
+    return {"ok": True, "archived": tracking.archive_jobs(request.user, [app.pk])}
+
+
+@router.post("/jobs/{job_id}/restore", summary="Bring an archived job back to the dashboard")
+def restore_job(request, job_id: int):
+    app = owned_job(request, job_id)
+    return {"ok": True, "restored": tracking.restore_jobs(request.user, [app.pk])}
 
 
 @router.post("/jobs/{job_id}/status/undo", summary="Undo the last status change of a job (within a few minutes)")

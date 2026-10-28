@@ -7,7 +7,7 @@ import unicodedata
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import ProtectedError, RestrictedError
+from django.db.models import ProtectedError, Q, RestrictedError
 from django.utils import timezone
 
 from tracker.models import Application, Event, KnowledgeSource, Posting, SiteConfig, Status
@@ -176,6 +176,31 @@ def remove_jobs(owner, ids) -> int:
     except (ProtectedError, RestrictedError):
         raise TrackingError("This job is still in use, so it could not be removed. Nothing was changed.")
     return count
+
+
+def counted_in_stats() -> Q:
+    """A job counts in the person's numbers unless it was archived without ever being applied to (an archived application still happened)."""
+    return Q(archived_at__isnull=True) | Q(applied_date__isnull=False) | Q(status__counts_as_applied=True)
+
+
+def archive_jobs(owner, ids) -> list[int]:
+    """Archive these jobs of `owner` (the caller has already checked every id is theirs): they leave the dashboard and its counts but stay, with
+    their status and everything else untouched. Returns the ids that changed (one already archived is left alone)."""
+    now = timezone.now()
+    fresh = list(Application.objects.filter(owner=owner, pk__in=list(ids), archived_at__isnull=True).values_list("pk", flat=True))
+    if fresh:
+        Application.objects.filter(pk__in=fresh).update(archived_at=now)
+        Event.objects.bulk_create([Event(application_id=pk, kind="note", text="Archived") for pk in fresh])
+    return fresh
+
+
+def restore_jobs(owner, ids) -> list[int]:
+    """Bring archived jobs of `owner` back to the dashboard exactly as they were. Returns the ids that changed."""
+    archived = list(Application.objects.filter(owner=owner, pk__in=list(ids), archived_at__isnull=False).values_list("pk", flat=True))
+    if archived:
+        Application.objects.filter(pk__in=archived).update(archived_at=None)
+        Event.objects.bulk_create([Event(application_id=pk, kind="note", text="Restored from the archive") for pk in archived])
+    return archived
 
 
 def add_posting(owner, posting: Posting, allow_duplicate: bool = False) -> tuple[Application, bool]:

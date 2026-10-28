@@ -81,6 +81,6 @@ export const coverApi = {
   save: (id: number, content: string) => request<Cover>("POST", `/cover/${id}/save`, { content }),
   approve: (id: number) => request<{ ok: true; exportable: boolean }>("POST", `/cover/${id}/approve`),
   remove: (id: number) => request<{ ok: true }>("DELETE", `/cover/${id}`),
-  write: (jobId: number) => request<Made>("POST", `/jobs/${jobId}/cover-letter`, { mode: "auto" }),
+  write: (jobId: number, tone?: string) => request<Made>("POST", `/jobs/${jobId}/cover-letter`, tone ? { mode: "auto", tone } : { mode: "auto" }),
   writingCheck: (id: number) => request<WritingCheckResult>("POST", `/cover/${id}/writing-check`),
 };

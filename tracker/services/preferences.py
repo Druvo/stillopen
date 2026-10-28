@@ -19,6 +19,7 @@ DEFAULTS = {
     "theme": "light",
     "text_size": "normal",
     "density": "comfortable",
+    "cover_tone": "warm",  # how the next cover letter should sound
 }
 
 CHOICES = {
@@ -28,6 +29,7 @@ CHOICES = {
     "theme": ("light", "dark"),
     "text_size": ("normal", "large", "larger"),
     "density": ("comfortable", "compact"),
+    "cover_tone": ("warm", "direct", "formal"),
 }
 BOOLEANS = ("filters_open", "ai_prompt_dismissed", "tz_prompt_dismissed", "hide_weak")
 FILTER_KEYS = tuple(DEFAULTS["filters"])

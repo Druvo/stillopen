@@ -16,6 +16,7 @@ import { notify } from "@/lib/toast";
 import { notForMeStatus } from "@/features/dashboard/jobmgmt";
 import { jobsApi, type Check, type JobDetails } from "./api";
 import { HistoryPanel } from "./history";
+import MatchCard from "./match-card";
 import { removedMessage } from "./jobmgmt";
 import { RemoveDialog } from "./remove";
 
@@ -129,6 +130,10 @@ export function EditJob({ id }: { id: number }) {
             This job was found through <CreditLink credit={data.credit} />.
           </p>
         )}
+      </Card>
+
+      <Card className="mb-4">
+        <MatchCard jobId={id} />
       </Card>
 
       <PostingSummaryPanel jobId={id} hasDescription={!!values.description?.trim()} />

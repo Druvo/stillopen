@@ -12,7 +12,7 @@ import { selectedText, statusLabel } from "./jobmgmt";
  * Everything is a real button or a keyboard-friendly menu; the count is announced as it changes.
  */
 export function SelectionBar({
-  count, total, allChecked, onToggleAll, statuses, canNotForMe, onNotForMe, onSetStatus, onRemove, onCancel, busy,
+  count, total, allChecked, onToggleAll, statuses, canNotForMe, onNotForMe, onSetStatus, onArchive, onRemove, onCancel, busy,
 }: {
   count: number;
   /** How many jobs the list holds (the chosen tab with its filters). */
@@ -23,6 +23,7 @@ export function SelectionBar({
   canNotForMe: boolean;
   onNotForMe: () => void;
   onSetStatus: (statusId: number) => void;
+  onArchive: () => void;
   onRemove: () => void;
   onCancel: () => void;
   busy: boolean;
@@ -51,6 +52,9 @@ export function SelectionBar({
         ) : (
           <ActionMenu label="Set status for the chosen jobs" text="Set status…" variant="chevron" items={items} />
         )}
+        <Button variant="outline" onClick={onArchive} disabled={none} className="min-h-11 sm:min-h-9">
+          Archive
+        </Button>
         <Button variant="danger" onClick={onRemove} disabled={none} className="min-h-11 sm:min-h-9">
           Remove…
         </Button>

@@ -22,7 +22,8 @@ import {
   activeFilterCount, applyMove, checkButtonText, emptyKind, filtersFromPrefs, headerLine, hiddenWeakCount, importMessage, isFiltered, patchFromFilters, resultsText, scanButtonText, stageChips,
   visibleJobs, type Filters,
 } from "./logic";
-import { allSelected, movedText, notForMeStatus, pruneSelection, removedText, selectAllIn, statusLabel, toggleId, undoText, weakLine } from "./jobmgmt";
+import { allSelected, archivedText, movedText, notForMeStatus, pruneSelection, removedText, selectAllIn, statusLabel, toggleId, undoText, weakLine } from "./jobmgmt";
+import { ArchivedSection } from "./archived";
 import { SelectionBar, UndoBar } from "./selection";
 import { comingUpItems } from "./coming-up";
 import { AiKeyPrompt, AsideCard, ComingUpBody, DraftsBody, FollowupsBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, YourSearchBody } from "./panels";
@@ -253,6 +254,29 @@ export function Dashboard() {
       setBulkBusy(false);
     }
   };
+  const archive = async (ids: number[]) => {
+    setBulkBusy(true);
+    try {
+      const done = ids.length === 1 ? await jobsApi.archive(ids[0]) : await jobsApi.bulkArchive(ids);
+      const role = ids.length === 1 ? data.jobs.find((j) => j.id === ids[0])?.role : undefined;
+      setMessage(archivedText(done.archived.length, role));
+      leaveSelecting();
+      await afterChange();
+    } catch (e) {
+      setMessage(errorText(e, "That did not work. Nothing was changed."));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+  const restore = async (id: number) => {
+    try {
+      await jobsApi.restore(id);
+      setMessage("Brought it back to your list.");
+      await afterChange();
+    } catch (e) {
+      setMessage(errorText(e, "That did not work. Please try again."));
+    }
+  };
   const askRemove = (ids: number[], name = "") => setRemoving({ ids, name });
   const removeOne = (job: Job) => askRemove([job.id], `${job.role} at ${job.company}`);
   const notForMeOne = (job: Job) => {
@@ -267,7 +291,7 @@ export function Dashboard() {
   const filtered = isFiltered(filters);
   const extras: CardExtras = {
     judgeLabel: data.judge_label, prepEnabled: data.prep_enabled, paperlessUrl: data.paperless_on ? data.paperless_url : "", refresh,
-    notForMe: notForMe ? notForMeOne : undefined, remove: removeOne,
+    notForMe: notForMe ? notForMeOne : undefined, remove: removeOne, archive: (job) => void archive([job.id]),
   };
   const common = { statuses: data.statuses, extras, onMove, onCheckFit, checkingId };
   const scanView = scan.current;
@@ -436,6 +460,7 @@ export function Dashboard() {
               canNotForMe={!!notForMe}
               onNotForMe={() => notForMe && void bulkMove(notForMe.id)}
               onSetStatus={(id) => void bulkMove(id)}
+              onArchive={() => void archive([...selectedIds])}
               onRemove={() => askRemove([...selectedIds])}
               onCancel={leaveSelecting}
               busy={bulkBusy}
@@ -531,6 +556,7 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+      <ArchivedSection items={data.archived ?? []} onRestore={restore} />
       {undo && <UndoBar key={undo.key} text={undo.text} onUndo={doUndo} onDismiss={() => setUndo(null)} busy={undoing} />}
       {removing && (
         <RemoveDialog

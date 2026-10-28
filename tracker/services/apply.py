@@ -116,7 +116,7 @@ def record(app: Application, version: CVVersion | None, channel: str, note: str,
 def due_followups(owner, today: date | None = None):
     today = today or tz.today_for(owner)
     return (
-        Application.objects.filter(owner=owner, follow_up_date__isnull=False, follow_up_date__lte=today, status__is_terminal=False)
+        Application.objects.filter(owner=owner, follow_up_date__isnull=False, follow_up_date__lte=today, status__is_terminal=False, archived_at__isnull=True)
         .select_related("status", "applied_cv")
         .order_by("follow_up_date")
     )

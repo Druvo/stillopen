@@ -34,7 +34,7 @@ def coming_up(user, days: int = COMING_UP_DAYS, today: date | None = None, now: 
             "kind": "interview", "date": local.date().isoformat(), "when": i.scheduled_at.isoformat(), "label": i.get_kind_display(),
             "company": i.application.company, "role": i.application.role, "job_id": i.application_id, "_sort": local.replace(tzinfo=None),
         })
-    for a in Application.objects.filter(owner=user, deadline__gte=today, deadline__lte=last, status__is_terminal=False):
+    for a in Application.objects.filter(owner=user, deadline__gte=today, deadline__lte=last, status__is_terminal=False, archived_at__isnull=True):
         items.append({
             "kind": "deadline", "date": a.deadline.isoformat(), "when": a.deadline.isoformat(), "label": KIND_WORDS["deadline"],
             "company": a.company, "role": a.role, "job_id": a.pk, "_sort": datetime.combine(a.deadline, time.min),
@@ -57,7 +57,7 @@ def new_strong_matches(user, today: date, limit: int = 5, days: int = WEEK_DAYS)
     threshold = bands[0].min_percent if bands else STRONG_DEFAULT_PERCENT
     since = today - timedelta(days=days - 1)
     rows = []
-    for app in Application.objects.filter(owner=user, found_date__gte=since, status__is_terminal=False).select_related("status"):
+    for app in Application.objects.filter(owner=user, found_date__gte=since, status__is_terminal=False, archived_at__isnull=True).select_related("status"):
         percent = app.match_percent(config.score_scale)
         if percent is not None and percent >= threshold:
             rows.append((percent, app))

@@ -9,7 +9,7 @@ from django.core.mail import send_mail
 from django.utils import timezone
 
 from tracker.models import Application, Interview, Offer, ScoreBand, SiteConfig
-from tracker.services import integrations, links, tz
+from tracker.services import integrations, links, tracking, tz
 from tracker.services.cards import band_for
 
 REMINDER_HOURS = 24
@@ -146,7 +146,7 @@ def rejection_patterns(owner) -> list[dict]:
 def funnel(owner) -> dict:
     """Plain counts for one person: how far their applications get, and what seems to work. Never a prediction."""
     apps = list(
-        Application.objects.filter(owner=owner).select_related("status")
+        Application.objects.filter(owner=owner).filter(tracking.counted_in_stats()).select_related("status")
         .prefetch_related("interviews", "offers")
     )
     applied = [a for a in apps if a.applied_date or a.status.counts_as_applied]
