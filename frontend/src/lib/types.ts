@@ -52,6 +52,7 @@ export type Job = {
   has_cv: boolean;
   cv: CvBadge | null;
   repost: Repost | null;
+  apply_address: string;
   skill_matched: boolean;
   tech_skills: TechSkill[];
   evaluated: boolean;

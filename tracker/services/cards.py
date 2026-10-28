@@ -35,6 +35,7 @@ def card_for(app, config, bands, areas=None, profile=None, candidate_text=None):
         "fit_level": fit_service.summary_level(fit),
         "fit_text": " ".join(f["text"] for f in fit if f["level"] != "ok") or " ".join(f["text"] for f in fit),
         "repost": scan.repost_signal(app.posting) if app.posting_id else None,
+        "apply_address": scan.clean_apply_address(app.posting.apply_address) if app.posting_id else "",
         "skill_matched": any(e.kind == "note" and "skill match" in e.text for e in app.events.all()),
         "tech_skills": techskills.recognized(app.description, candidate_text or ""),
     }

@@ -1221,6 +1221,7 @@ class JobSource(models.Model):
         ("bdjobs", "Bangladesh -- bdjobs.com (undocumented API, off by default -- see scan.py)"),
         ("bikroy", "Bangladesh -- bikroy.com Jobs (undocumented API, off by default -- see scan.py)"),
         ("usajobs", "USAJobs -- official US federal jobs (needs a free key)"),
+        ("hnhiring", "Startups -- Hacker News 'Who is hiring?' (off by default)"),
     ]
 
     name = models.CharField(max_length=120, help_text="Shown in the scan log. The company name for a single-company connector; a label like 'RemoteOK' for an aggregator.")
@@ -1329,6 +1330,7 @@ class Posting(models.Model):
     location = models.CharField(max_length=160, blank=True)
     country = models.CharField(max_length=2, blank=True, db_index=True, help_text="Two-letter country when the location names exactly one.")
     remote = models.BooleanField(default=False, help_text="The location or title says remote or worldwide.")
+    apply_address = models.CharField(max_length=300, blank=True, help_text="An email or link the posting itself publishes for applying (Hacker News posts do). Shown as a plain link; the app never sends anything to it.")
     excerpt = models.TextField(blank=True, help_text="The first few lines of the posting, for the public board. The full text stays at the employer.")
     sponsorship = models.CharField(max_length=3, blank=True, db_index=True, help_text="'yes' only when the posting says the employer sponsors visas; 'no' when it says it cannot; blank = not stated.")
     relocation = models.CharField(max_length=3, blank=True, help_text="'yes' when the posting offers relocation help, 'no' when it says none; blank = not stated.")

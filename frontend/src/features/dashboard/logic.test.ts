@@ -17,7 +17,7 @@ function job(over: Partial<Job>): Job {
     id: 1, company: "Acme", role: "Dev", url: "", status_id: 1, bucket_key: "new", percent: null, band: null, decision: "", risk: "", summary: "", next_action: "",
     notes: "", source: "", advertised_pay: "", location: "", country: "", country_name: "", arrangement: "", found_date: "2026-10-01", applied_date: null,
     applied_channel: "", applied_cv: null, follow_up_date: null, counts_as_applied: false, deadline: null, days_left: null, urgent: false, overdue: false,
-    live_state: "unknown", live_detail: "", strengths: [], gaps: [], fit_level: "", fit_text: "", fit_badge: null, has_cv: false, cv: null, repost: null,
+    live_state: "unknown", live_detail: "", strengths: [], gaps: [], fit_level: "", fit_text: "", fit_badge: null, has_cv: false, cv: null, repost: null, apply_address: "",
     skill_matched: false, tech_skills: [], evaluated: false, ai_evaluated: false, ai_method: "", has_description: false, documents: [], ...over,
   };
 }

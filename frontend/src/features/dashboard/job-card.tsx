@@ -9,7 +9,7 @@ import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import type { Job, StatusInfo } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { applyHref, cn } from "@/lib/utils";
 import { dashboardApi } from "./api";
 import { appliedParts, cvBadgeText, deadlineText, FIT_BADGE_TEXT, livingBadge, paperlessDocumentUrl, repostTitle, SKILL_MATCH_TITLE, shortDate, truncate } from "./logic";
 
@@ -283,6 +283,11 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, d
             {job.url && (
               <a href={job.url} target="_blank" rel="noopener noreferrer" className={LINK}>
                 View the posting
+              </a>
+            )}
+            {applyHref(job.apply_address) && (
+              <a href={applyHref(job.apply_address)} target="_blank" rel="noopener noreferrer" className={LINK} title="The address this posting publishes for applying. We never send anything for you.">
+                Apply address: {job.apply_address}
               </a>
             )}
             <Link to={`/jobs/${job.id}/edit`} className={LINK}>

@@ -39,6 +39,11 @@ publishes and supports a real, documented public Search API (developer.usajobs.g
 at all, just a free key (and the email it was requested with, which USAJOBS requires as the `User-Agent`
 header on every call). Ships OFF by default like the others, since it needs that key to do anything.
 
+`fetch_hnhiring` reads Hacker News' monthly "Who is hiring?" threads (startups; each comment is one posting, with the apply email or
+link the post itself publishes). Also OFF by default and never public. Checked and declined: YC's job listing (Work at a Startup /
+ycombinator.com/jobs). Its robots.txt allows crawling, but its Terms of Use forbid scraping the Site and its content, and its pages
+answer a plain script with HTTP 406, so no connector was built; HN's own thread carries many YC companies anyway.
+
 A posting is matched against your own UserProfile.target_roles (simple case-insensitive phrase containment,
 the same zero-token approach career-ops' own title_filter uses) before anything is saved, and a posting whose
 URL you already track is skipped as a duplicate rather than re-added. A posting whose title misses every
@@ -182,14 +187,14 @@ def record_sightings(source: JobSource, postings: list[dict], seen_date=None) ->
             title_key=title_key(f"{company} :: {p['title']}"), location=location,
             country=next(iter(codes)) if len(codes) == 1 else "",
             remote=bool(_REMOTE_WORDS.search(f"{location} {p['title']}")),
-            excerpt=excerpt_of(p.get("description", "")),
+            excerpt=excerpt_of(p.get("description", "")), apply_address=clean_apply_address(p.get("apply", "")),
             **_terms_of(p["title"], p.get("description", "")),
         ))
     for i in range(0, len(rows), 500):
         Posting.objects.bulk_create(
             rows[i:i + 500], update_conflicts=True, unique_fields=["source", "url"],
             update_fields=["title", "company", "title_key", "location", "country", "remote", "excerpt",
-                           "sponsorship", "relocation", "employment_type", "seniority", "last_seen_at"],
+                           "apply_address", "sponsorship", "relocation", "employment_type", "seniority", "last_seen_at"],
         )
     ids = {}
     ordered = list(urls)
@@ -750,6 +755,159 @@ def fetch_usajobs(token: str, roles: list[str] | None = None, key: str = "", ema
                 "company": (d.get("OrganizationName") or d.get("DepartmentName") or "").strip(),
                 "description": _blurb(teaser or d.get("QualificationSummary") or ""),
             })
+    return out
+
+
+# --- Hacker News "Who is hiring?" -------------------------------------------------------------------------------
+HN_MAX_POSTINGS = 500          # most postings kept from both threads together
+HN_MAX_BYTES = 8_000_000       # hard limit on one thread's answer; a bigger one is refused, not parsed
+HN_LINE_CHARS = 400            # a longer line is cut (a comment can be one enormous line)
+HN_TEXT_CHARS = 6000           # most of one comment that is ever read
+_HN_STORY_TITLE = re.compile(r"^ask hn: who is hiring\?", re.I)
+_HN_DROP_BLOCKS = re.compile(r"<\s*(script|style)\b.*?<\s*/\s*\1\s*>", re.I | re.S)
+_HN_BREAKS = re.compile(r"<\s*(?:p|br|pre|li|div)\b[^>]*>", re.I)
+_ANY_TAG = re.compile(r"<[^>]*>")
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+_HREF = re.compile(r"""href\s*=\s*["']([^"']{1,500})["']""", re.I)
+_APPLY_URL = re.compile(r"/(jobs?|careers?|apply|hiring|join|openings?|positions?)\b|lever\.co|greenhouse\.io|ashbyhq\.com|workable\.com|recruitee\.com|smartrecruiters\.com|wellfound\.com|workatastartup\.com", re.I)
+_APPLY_LINE = re.compile(r"appl|send|e-?mail|contact|resume|cv\b|reach", re.I)
+_HN_ROLE = re.compile(
+    r"\b(engineer|engineers|developer|developers|designer|manager|scientist|analyst|architect|devops|sre|founding|cto|"
+    r"researcher|recruiter|writer|marketer|marketing|sales|product|support|operations|security|lead|director|head of|"
+    r"intern|programmer|administrator|consultant|specialist|ml|ai)\b", re.I)
+_HN_REMOTE = re.compile(r"\bremote\b|on-?site|\bhybrid\b", re.I)
+_HN_NOISE = re.compile(r"full[- ]?time|part[- ]?time|\bcontract|\bintern(ship)?s?\b|\bvisa\b|equity|[$€£]\s?\d|\bsalary\b|\d\s?k\b|\bseries [a-z]\b|\bseed\b|\bstaff\b|\bpeople\b|employees", re.I)
+_HN_SITE = re.compile(r"(?:https?://)?[\w.-]+\.[a-z]{2,}(?:/\S*)?", re.I)
+
+
+def hn_plain(raw: str) -> str:
+    """Plain text from one Hacker News comment (HTML written by strangers). Scripts and styles are dropped with their contents, every
+    tag is removed (twice: once as written, once after entities are undone, so escaped markup cannot come back as tags), control
+    characters go, and a single enormous line is cut. The result is only ever shown as text, never as markup."""
+    text = _HN_DROP_BLOCKS.sub(" ", raw or "")
+    text = _HN_BREAKS.sub("\n", text)
+    text = _ANY_TAG.sub("", text)
+    text = html.unescape(text)
+    text = _ANY_TAG.sub("", _HN_DROP_BLOCKS.sub(" ", text))
+    text = re.sub(r"[\x00-\x08\x0b-\x1f\x7f‪-‮⁦-⁩]", "", text)
+    lines = [re.sub(r"[ \t ]+", " ", ln).strip()[:HN_LINE_CHARS] for ln in text.split("\n")]
+    return "\n".join(ln for ln in lines if ln)[:HN_TEXT_CHARS]
+
+
+def clean_apply_address(value: str) -> str:
+    """The address a posting itself publishes for applying: a bare email or an http(s) link, else blank. Anything with spaces, quotes or
+    angle brackets is refused (never guessed, never repaired). Shown as a plain link; the app never sends anything to it."""
+    v = (value or "").strip()
+    if not v or len(v) > 300 or re.search(r"[\s\"'<>\\]", v):
+        return ""
+    if _EMAIL.fullmatch(v):
+        return v
+    return v if re.match(r"https?://[^/\s]+\.[^/\s]+", v, re.I) else ""
+
+
+def _hn_apply_address(raw: str, plain: str) -> str:
+    """An email or apply link the comment itself publishes. Best effort: an email on a line about applying wins, then any email, then
+    the first link that looks like a jobs page. Obfuscated addresses ("jobs [at] x.com") are not decoded: unknown stays blank."""
+    for ln in plain.split("\n"):
+        if _APPLY_LINE.search(ln):
+            m = _EMAIL.search(ln)
+            if m and clean_apply_address(m.group()):
+                return m.group()
+    m = _EMAIL.search(plain)
+    if m and clean_apply_address(m.group()):
+        return m.group()
+    for href in _HREF.findall(raw or ""):
+        href = html.unescape(href).strip()
+        if _APPLY_URL.search(href) and clean_apply_address(href):
+            return href
+    return ""
+
+
+def parse_hn_comment(raw: str) -> dict | None:
+    """One top-level "Who is hiring?" comment as a posting dict, or None when it does not read like a job post. By convention the first
+    line is `Company | Role | Location | REMOTE | ...`; each part is sorted by what it looks like and a part that fits nothing is
+    left out rather than guessed at. `title` is never empty (a post naming no role is called "Open role (see the post)")."""
+    plain = hn_plain(raw)
+    if not plain:
+        return None
+    header = plain.split("\n", 1)[0]
+    parts = [p.strip() for p in header.split("|") if p.strip()]
+    if len(parts) < 2 and not _HN_ROLE.search(header):
+        return None
+    company = re.sub(r"\s*\(\s*https?://[^)]*\)", "", parts[0] if len(parts) > 1 else "").strip()[:120]
+    if company and " " not in company and "." in company and _HN_SITE.fullmatch(company):
+        company = company.split("//")[-1].split("/")[0].removeprefix("www.").split(".")[0].capitalize()
+    roles, places = [], []
+    for part in parts[1:] if len(parts) > 1 else parts:
+        if _HN_REMOTE.search(part):
+            places.append(part[:60])
+        elif _HN_SITE.fullmatch(part) or _HN_NOISE.search(part):
+            continue
+        elif _HN_ROLE.search(part):
+            roles.append(part[:120])
+        elif len(part) <= 50 and len(part.split()) <= 6:
+            places.append(part)
+    return {
+        "title": (" / ".join(roles[:3]) or "Open role (see the post)")[:200],
+        "company": company,
+        "location": ", ".join(places[:3])[:160],
+        "description": plain,
+        "apply": _hn_apply_address(raw, plain),
+    }
+
+
+def _hn_json(url: str) -> dict:
+    resp = safe_get(url, timeout=30)
+    if resp.status_code != 200:
+        raise FetchError(f"HTTP {resp.status_code}")
+    if len(resp.content) > HN_MAX_BYTES:
+        raise FetchError("Hacker News answered with far more data than expected, so it was not read.")
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise FetchError("Hacker News did not return JSON.") from exc
+
+
+def fetch_hnhiring(token: str) -> list[dict]:
+    """Hacker News' monthly "Ask HN: Who is hiring?" threads, read through the public Algolia HN Search API (hn.algolia.com/api/v1, the
+    API Hacker News itself links for searching; no key). `token` is ignored. Aggregator: each top-level comment is one posting, and
+    companies are mostly startups. Zero-token; two small requests per thread.
+
+    The newest "Who is hiring?" posts by the `whoishiring` account are found, and only comments from the current and the previous
+    calendar month are kept. A comment is untrusted text: it is stripped to plain text (`hn_plain`), cut to a few KB, and company, role,
+    place and apply address are read from its first line and body only when they are plainly there. A posting's link is the comment's
+    own Hacker News page (the unchanged original); the apply address, when the post publishes one, is shown as a plain link and nothing is
+    ever sent. Capped at HN_MAX_POSTINGS, one answer at most HN_MAX_BYTES.
+
+    Checked 2026-10-28: news.ycombinator.com/robots.txt asks `Crawl-delay: 30` but only disallows action URLs (vote, reply...); this
+    reads the Algolia API host instead, one story search plus one item request per thread, cached by the scan for a while. Ships OFF by
+    default (an admin adds it) and is never shown on the public board."""
+    now = timezone.now()
+    first_this = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    first_prev = (first_this - timedelta(days=1)).replace(day=1)
+    since = int(first_prev.timestamp())
+    found = _hn_json("https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=6")
+    threads = [h for h in found.get("hits", []) if _HN_STORY_TITLE.match(h.get("title") or "") and int(h.get("created_at_i") or 0) >= since][:2]
+    out, seen = [], set()
+    for hit in threads:
+        story_id = str(hit.get("objectID") or "")
+        if not story_id.isdigit():
+            continue
+        thread = _hn_json(f"https://hn.algolia.com/api/v1/items/{story_id}")
+        for c in thread.get("children") or []:
+            if len(out) >= HN_MAX_POSTINGS:
+                return out
+            if not isinstance(c, dict) or not c.get("text") or not str(c.get("id") or "").isdigit() or int(c.get("created_at_i") or 0) < since:
+                continue
+            posting = parse_hn_comment(c["text"])
+            if not posting:
+                continue
+            key = _job_key(posting["company"], posting["title"])
+            if key in seen:
+                continue
+            seen.add(key)
+            posting["url"] = f"https://news.ycombinator.com/item?id={c['id']}"
+            out.append(posting)
     return out
 
 

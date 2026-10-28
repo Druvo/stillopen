@@ -134,6 +134,7 @@ def _job(card, has_areas: bool) -> dict:
         "has_cv": cv is not None,
         "cv": {"id": cv.pk, "label": f"CV v{cv.pk}", "flagged": cv.flagged, "approved": cv.approved} if cv else None,
         "repost": _repost(card["repost"]),
+        "apply_address": card["apply_address"],
         "skill_matched": card["skill_matched"],
         "tech_skills": card["tech_skills"],
         "evaluated": app.ai_evaluated_at is not None or app.score is not None,

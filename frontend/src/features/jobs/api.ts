@@ -24,6 +24,7 @@ export type PostingRow = {
   first_seen: string;
   last_seen: string;
   repost: { distinct_urls: number; distinct_dates: number } | null;
+  apply_address: string;
   tracked: boolean;
   job_id: number | null;
 };

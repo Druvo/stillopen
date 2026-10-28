@@ -5,6 +5,10 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Startups hiring: a new admin opt-in source reads Hacker News' monthly "Who is hiring?" threads (startups, current and
+  previous month). Each post shows the apply email or link it publishes itself, as a plain link on the job card and
+  All postings; nothing is ever sent for you. YC's job list was checked and not added (its terms forbid scraping).
+
 - Optional shared cache: set `REDIS_URL` and `pip install -r requirements-redis.txt` so per-person rate limits
   and the search-source cache are shared across every process/machine instead of split per worker. Unset,
   nothing changes. Fixed two Playwright e2e specs left broken by the earlier quick-add-bar removal (CI on

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
+import { applyHref } from "@/lib/utils";
 import { jobsApi, type PostingRow } from "./api";
 import { postingsQuery, readPostingsQuery, repostHint } from "./logic";
 
@@ -104,6 +105,15 @@ export function Postings() {
                   <p className="text-sm text-muted">
                     {p.company || "Company not named"} · {p.source.name} ({p.source.connector}){p.location ? ` · ${p.location}` : ""} · first seen {p.first_seen}, last seen {p.last_seen}
                   </p>
+                  {applyHref(p.apply_address) && (
+                    <p className="mt-1 text-sm">
+                      Apply address:{" "}
+                      <a href={applyHref(p.apply_address)} target="_blank" rel="noopener noreferrer" className="text-brand underline">
+                        {p.apply_address}
+                      </a>{" "}
+                      <span className="text-xs text-muted">(the post publishes this; we never send anything for you)</span>
+                    </p>
+                  )}
                   {p.repost && (
                     <>
                       <span title={repostHint(p.repost)}>
