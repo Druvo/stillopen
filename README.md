@@ -25,6 +25,8 @@ docker compose -f docker-compose.selfhost.yml up -d --build
 docker compose -f docker-compose.selfhost.yml exec stillopen python manage.py createsuperuser
 ```
 
+Other ways to install (plain Docker, from source, an Ubuntu service, CapRover/Coolify/Dokploy): [docs/INSTALL.md](docs/INSTALL.md).
+
 Open <http://localhost:8000>. Full guide (email, HTTPS, backups, updates): [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md). Running it as a shared service for many people: [docs/HOSTING.md](docs/HOSTING.md).
 
 ## Use it from Claude Code or any AI assistant
@@ -33,7 +35,7 @@ People can make a personal token under **Profile > Connect an AI assistant** and
 
 ## Project
 
-[Self-hosting](docs/SELF-HOSTING.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Changelog](CHANGELOG.md) · [License (Apache-2.0)](LICENSE)
+[Install](docs/INSTALL.md) · [Self-hosting](docs/SELF-HOSTING.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Changelog](CHANGELOG.md) · [License (Apache-2.0)](LICENSE)
 
 ## What it is
 

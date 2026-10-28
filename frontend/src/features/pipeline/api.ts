@@ -43,12 +43,18 @@ type Ok = { ok: true };
 /** Saving an interview or an offer says which status the job could move to, if it is not there yet (the person decides). */
 export type Saved = { id: number; suggest_status: { id: number; name: string; label: string } | null };
 
+export type CalendarLink = { enabled: boolean; url: string; created_at: string | null; last_used_at: string | null };
+
 export const pipelineApi = {
   interviews: () => request<InterviewList>("GET", "/interviews"),
   addInterview: (v: InterviewValues) => request<Saved>("POST", "/interviews", v),
   editInterview: (id: number, v: InterviewValues) => request<Saved>("PATCH", `/interviews/${id}`, v),
   interviewOutcome: (id: number, outcome: string) => request<Ok>("POST", `/interviews/${id}/outcome`, { outcome }),
   deleteInterview: (id: number) => request<Ok>("DELETE", `/interviews/${id}`),
+
+  calendarLink: () => request<CalendarLink>("GET", "/calendar-link"),
+  makeCalendarLink: () => request<CalendarLink>("POST", "/calendar-link"),
+  stopCalendarLink: () => request<CalendarLink>("DELETE", "/calendar-link"),
 
   contacts: () => request<ContactList>("GET", "/contacts"),
   addContact: (v: ContactValues) => request<{ id: number }>("POST", "/contacts", v),

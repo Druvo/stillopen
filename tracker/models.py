@@ -1158,6 +1158,62 @@ class ApiToken(models.Model):
         return "Active"
 
 
+class CalendarFeed(models.Model):
+    """The private link a calendar app subscribes to (/calendar/<token>.ics): one per person, read-only.
+
+    Only a SHA-256 hash is used to find the row; the link itself is kept encrypted (tracker/crypto.py) so the person can copy it again
+    from the Interviews screen. Making a new link replaces this row's token, so the old one stops working at once."""
+
+    PREFIX = "cal_"
+
+    owner = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="calendar_feed")
+    token_hash = models.CharField(max_length=64, unique=True)
+    token_encrypted = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"calendar link for {self.owner}"
+
+    @staticmethod
+    def digest(raw: str) -> str:
+        import hashlib
+
+        return hashlib.sha256(raw.encode()).hexdigest()
+
+    @classmethod
+    def issue(cls, owner):
+        """Make (or replace) the person's link. Returns (record, raw token)."""
+        import secrets
+
+        from .crypto import encrypt
+
+        raw = cls.PREFIX + secrets.token_urlsafe(32)
+        record, _ = cls.objects.update_or_create(
+            owner=owner, defaults={"token_hash": cls.digest(raw), "token_encrypted": encrypt(raw), "created_at": timezone.now(), "last_used_at": None},
+        )
+        return record, raw
+
+    @classmethod
+    def lookup(cls, raw: str):
+        """The feed for `raw` when the token is genuine and its owner is active, else None."""
+        import hmac
+
+        if not raw or not raw.startswith(cls.PREFIX) or len(raw) > 100:
+            return None
+        digest = cls.digest(raw)
+        record = cls.objects.select_related("owner").filter(token_hash=digest).first()
+        if record is None or not hmac.compare_digest(record.token_hash, digest) or not record.owner.is_active:
+            return None
+        return record
+
+    @property
+    def token(self) -> str:
+        from .crypto import decrypt
+
+        return decrypt(self.token_encrypted)
+
+
 class Offer(models.Model):
     """A job offer, kept in plain numbers so offers can be set side by side. Amounts are per year unless the base is monthly."""
 

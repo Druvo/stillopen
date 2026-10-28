@@ -235,7 +235,7 @@ def robots_txt(request):
         "Allow: /",
         "Disallow: /app/", "Disallow: /dashboard/", "Disallow: /accounts/", "Disallow: /admin/", "Disallow: /api/", "Disallow: /profile/", "Disallow: /jobs/",
         "Disallow: /cv/", "Disallow: /cover/", "Disallow: /knowledge/", "Disallow: /interviews/", "Disallow: /contacts/", "Disallow: /offers/",
-        "Disallow: /insights/", "Disallow: /sources/", "Disallow: /postings/", "Disallow: /welcome/", "Disallow: /referrals/", "Disallow: /documents/",
+        "Disallow: /insights/", "Disallow: /sources/", "Disallow: /postings/", "Disallow: /welcome/", "Disallow: /referrals/", "Disallow: /documents/", "Disallow: /calendar/",
         "",
         f"Sitemap: {request.build_absolute_uri(reverse('sitemap'))}",
     ]

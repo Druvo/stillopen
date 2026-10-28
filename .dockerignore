@@ -13,6 +13,7 @@ paperless
 logs
 docs
 deploy
+!deploy/docker-entrypoint.sh
 .claude
 frontend/node_modules
 frontend/.next
