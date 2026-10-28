@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 // Browser tests run against the real thing: Django serving the built export (`pnpm build` first) on a throwaway database.
 // They use the Chrome that is already installed (no browser download). E2E_PYTHON picks the interpreter (default: python).
-const port = 8777;
+const port = Number(process.env.E2E_PORT) || 8777;
 const python = process.env.E2E_PYTHON || "python";
 const db = join(mkdtempSync(join(tmpdir(), "stillopen-e2e-")), "e2e.sqlite3");
 

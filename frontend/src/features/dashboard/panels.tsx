@@ -6,7 +6,7 @@ import { Button, buttonClass, Card, Notice, Progress } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";
-import type { Dashboard, Followup, Me, NextStep, ScanStatus, UpcomingInterview } from "@/lib/types";
+import type { Dashboard, DraftWaiting, Followup, Me, NextStep, ScanStatus, UpcomingInterview } from "@/lib/types";
 import { dashboardApi } from "./api";
 import { entryText, interviewWhen, nextStepTarget, scanPercent, scanTitle, shortDate } from "./logic";
 
@@ -205,6 +205,47 @@ export function FollowupsDue({ items, onChanged }: { items: Followup[]; onChange
                 In 3 days
               </Button>
             </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/** CV drafts the scheduled search prepared. They are never approved for the person: open one to check it, or discard it. */
+export function DraftsWaiting({ items, onChanged }: { items: DraftWaiting[]; onChanged: () => Promise<unknown> | void }) {
+  const [busy, setBusy] = useState<number | null>(null);
+  if (items.length === 0) return null;
+  const discard = async (d: DraftWaiting) => {
+    if (!window.confirm(`Discard the draft CV for ${d.company}? Your own CV is not touched.`)) return;
+    setBusy(d.id);
+    try {
+      await dashboardApi.discardDraft(d.id);
+      notify(`Discarded the draft for ${d.company}.`);
+      await onChanged();
+    } catch (e) {
+      notify(errorText(e, "That did not work. Please try again."), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <Card>
+      <strong className="text-theme-sm">Drafts waiting for you</strong>
+      <p className="text-theme-sm text-muted">We prepared these CVs after your last search. Open one to check it, then approve it or discard it. Nothing is sent for you.</p>
+      <ul className="mt-2 space-y-2">
+        {items.map((d) => (
+          <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 text-theme-sm">
+            <span className="min-w-0">
+              {d.company} — {d.role}{" "}
+              <span className="text-muted">({d.flagged_count === 0 ? "nothing flagged" : `flagged claims: ${d.flagged_count}`})</span>{" "}
+              <Link to={`/cv/${d.id}`} className="text-brand underline">
+                Open draft
+              </Link>
+            </span>
+            <Button variant="outline" small disabled={busy === d.id} onClick={() => discard(d)}>
+              Discard
+            </Button>
           </li>
         ))}
       </ul>

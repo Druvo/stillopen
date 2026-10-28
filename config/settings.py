@@ -307,6 +307,8 @@ STILLOPEN_PUBLIC_AUTO_REFRESH = os.environ.get("STILLOPEN_PUBLIC_AUTO_REFRESH", 
 STILLOPEN_PUBLIC_CACHE_SECONDS = int(os.environ.get("STILLOPEN_PUBLIC_CACHE_SECONDS", "0" if RUNNING_TESTS else "300"))
 STILLOPEN_PUBLIC_PAGE_SIZE = int(os.environ.get("STILLOPEN_PUBLIC_PAGE_SIZE", "30"))
 STILLOPEN_SCAN_MAX_NEW = int(os.environ.get("STILLOPEN_SCAN_MAX_NEW", "40"))
+# Most tailored CV drafts one scheduled search prepares for one person ("Draft ahead", Profile > Job alerts).
+STILLOPEN_DRAFT_AHEAD_MAX = int(os.environ.get("STILLOPEN_DRAFT_AHEAD_MAX", "3"))
 STILLOPEN_AUTO_SCAN = os.environ.get("STILLOPEN_AUTO_SCAN", "0" if RUNNING_TESTS else "1") == "1"
 STILLOPEN_SEED_SOURCES = os.environ.get("STILLOPEN_SEED_SOURCES", "0" if RUNNING_TESTS else "1") == "1"
 # Company job boards one person may add for their own searches, and how many they may add per hour.

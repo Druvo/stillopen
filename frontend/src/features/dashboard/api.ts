@@ -11,6 +11,7 @@ export const dashboardApi = {
   importTracker: () => request<ImportResult>("POST", "/import"),
   followupDone: (jobId: number) => request<{ ok: true }>("POST", `/jobs/${jobId}/followup/done`),
   followupSnooze: (jobId: number, days = 3) => request<{ ok: true; follow_up_date: string }>("POST", `/jobs/${jobId}/followup/snooze`, { days }),
+  discardDraft: (cvId: number) => request<{ ok: true }>("DELETE", `/cv/${cvId}`),
   sendToPaperless: (documentId: number) => request<PaperlessResult>("POST", `/documents/files/${documentId}/paperless`),
 };
 

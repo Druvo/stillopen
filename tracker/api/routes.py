@@ -179,6 +179,12 @@ def dashboard(request):
         prep_due=quiz.due_plans(user) if config.prep_enabled else None,
     )
     checked = [c["app"].live_checked_at for c in cards if c["app"].live_checked_at]
+    # Drafts the scheduled search prepared (Draft ahead) that the person has not approved or discarded; read from the
+    # versions already prefetched on each job, so this adds no queries.
+    drafts = sorted(
+        ((c["app"], v) for c in cards for v in c["app"].cv_versions.all() if v.draft_ahead and v.kind == "tailored" and not v.approved),
+        key=lambda pair: (pair[1].created_at, pair[1].pk), reverse=True,
+    )
     paperless_on = user.is_staff and config.paperless_enabled and bool(config.effective_paperless_url)
     return {
         "greeting": guide.greeting(user, timezone.localtime()),
@@ -208,6 +214,13 @@ def dashboard(request):
                 "company": i.application.company, "role": i.application.role, "job_id": i.application_id,
             }
             for i in upcoming_interviews(user)
+        ],
+        "drafts": [
+            {
+                "id": v.pk, "job_id": a.pk, "company": a.company, "role": a.role,
+                "flagged_count": len(v.check_report or []), "created_at": _iso(v.created_at),
+            }
+            for a, v in drafts[:10]
         ],
         "next_step": next_step,
         "can_scan": JobSource.for_user(user, enabled=True).exists(),

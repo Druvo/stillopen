@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Job, Me, ScanStatus } from "@/lib/types";
 import { FilterBar } from "./filters";
 import { DEFAULT_FILTERS } from "./logic";
-import { NextStepCard, ScanCard, StaffBanners, StatTiles } from "./panels";
+import { DraftsWaiting, NextStepCard, ScanCard, StaffBanners, StatTiles } from "./panels";
 
 afterEach(cleanup);
 
@@ -143,5 +143,22 @@ describe("the staff-only banners", () => {
     expect(screen.queryByText(/jooble.org\/api\/about/)).toBeNull();
     expect(screen.queryByText(/EMAIL_HOST/)).toBeNull();
     expect(screen.queryByText(/bracketed parts/)).toBeNull();
+  });
+});
+
+describe("drafts waiting for you", () => {
+  const draft = { id: 7, job_id: 3, company: "Hooli", role: "Backend Engineer", flagged_count: 2, created_at: null };
+
+  it("lists each draft with its flagged count and a link to open it", () => {
+    render(<DraftsWaiting items={[draft, { ...draft, id: 8, company: "Initech", flagged_count: 0 }]} onChanged={() => undefined} />);
+    expect(screen.getByText("Drafts waiting for you")).toBeTruthy();
+    expect(screen.getByText("(flagged claims: 2)")).toBeTruthy();
+    expect(screen.getByText("(nothing flagged)")).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: "Open draft" })[0].getAttribute("href")).toContain("/cv/7");
+  });
+
+  it("is not there when nothing is waiting", () => {
+    const { container } = render(<DraftsWaiting items={[]} onChanged={() => undefined} />);
+    expect(container.textContent).toBe("");
   });
 });

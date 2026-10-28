@@ -23,6 +23,11 @@ supported version, so entries are grouped under **Unreleased** until the first t
   per-currency comparison, never converted) and an RSS feed of the public job board. Nothing is saved; each is
   rate-limited per IP and shares the sign-up form's bot-trap discipline (a honeypot field, a minimum fill time,
   no CAPTCHA).
+- "Draft ahead" (Profile > Job alerts): after a scheduled search, optionally prepares tailored CV drafts for the best
+  new matches (top score band, at most `STILLOPEN_DRAFT_AHEAD_MAX`, default 3, per run) with the person's own AI
+  settings. Drafts go through the normal tailoring and fact check, are never approved, exported or sent for them,
+  and wait on the dashboard ("Drafts waiting for you") to open, approve or discard; the job-alert email mentions them
+  in one line. Off at two levels: `SiteConfig.draft_ahead_site_enabled` and each person's own switch.
 - A weekly digest email (Profile > Job alerts): applications sent, interviews, offers and follow-ups from the
   last 7 days, the same plain counts the Insights page shows. Off at two levels like the scheduled search
   email -- a site admin switches it on (Site configuration > Dashboard), each person opts in separately. Run

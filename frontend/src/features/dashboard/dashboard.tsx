@@ -12,7 +12,7 @@ import { dashboardApi, useMe } from "./api";
 import { Board } from "./board";
 import { FilterBar } from "./filters";
 import { JobCard, type CardExtras } from "./job-card";
-import { ComingUp, FollowupsDue, NextStepCard, ScanCard, Spinner, StaffBanners, StatTiles } from "./panels";
+import { ComingUp, DraftsWaiting, FollowupsDue, NextStepCard, ScanCard, Spinner, StaffBanners, StatTiles } from "./panels";
 import {
   applyMove, checkButtonText, DEFAULT_FILTERS, emptyKind, FILTERS_KEY, importMessage, initialFilters, scanButtonText, subtitle, visibleJobs, type Filters,
 } from "./logic";
@@ -295,6 +295,7 @@ export function Dashboard() {
       <ScanCard scan={scanView} starting={scan.starting} />
       <ComingUp items={data.upcoming_interviews} />
       <FollowupsDue items={data.followups} onChanged={refresh} />
+      <DraftsWaiting items={data.drafts ?? []} onChanged={refresh} />
       <StatTiles data={data} />
 
       <FilterBar filters={filters} set={setFilter} reset={resetFilters} jobs={data.jobs} buckets={data.buckets} bandLabels={data.band_labels} shown={jobs.length} />

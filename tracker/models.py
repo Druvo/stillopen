@@ -207,6 +207,13 @@ class SiteConfig(PersonalSettings):
         "without it, emails only print to the server console. Run `manage.py send_weekly_digest` on a schedule (e.g. weekly cron).",
     )
 
+    draft_ahead_site_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow the scheduled job search to also prepare tailored CV drafts for the best new matches of people who opted in "
+        "(Profile > Job alerts). Each draft uses that person's own AI settings and waits for their review; nothing is approved, downloaded "
+        "or sent for them. Capped per run by STILLOPEN_DRAFT_AHEAD_MAX (default 3).",
+    )
+
     careerops_path = models.CharField(
         max_length=500,
         blank=True,
@@ -463,6 +470,11 @@ class UserProfile(PersonalSettings):
     scan_digest_enabled = models.BooleanField(
         default=False, verbose_name="Search for new jobs for me and email me what is found",
         help_text="Runs your saved search on a schedule and emails one short list of new matches. Off until you turn it on.",
+    )
+    draft_ahead_enabled = models.BooleanField(
+        default=False, verbose_name="Also prepare tailored CV drafts for my best new matches",
+        help_text="After a scheduled search, writes a draft CV for the top new matches using your own AI settings. Drafts wait on your "
+        "dashboard for you to check; nothing is approved, downloaded or sent for you. Off until you turn it on.",
     )
     weekly_digest_enabled = models.BooleanField(
         default=False, verbose_name="Email me a weekly summary of how my search is going",
@@ -854,6 +866,7 @@ class CVVersion(models.Model):
     check_report = models.JSONField(default=list, blank=True, help_text="Claims the fact check could not find in the person's own material.")
     approved = models.BooleanField(default=False, help_text="The person has reviewed any flagged items and accepts this version.")
     approved_at = models.DateTimeField(null=True, blank=True)
+    draft_ahead = models.BooleanField(default=False, editable=False, help_text="Prepared automatically after a scheduled search; shown as a draft waiting for review until approved or discarded.")
     notes = models.CharField(max_length=300, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

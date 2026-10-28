@@ -80,6 +80,8 @@ export type ScanStatus = Progress & {
 
 export type Followup = { id: number; company: string; role: string; follow_up_date: string; applied_date: string | null };
 
+export type DraftWaiting = { id: number; job_id: number; company: string; role: string; flagged_count: number; created_at: string | null };
+
 export type UpcomingInterview = { id: number; when: string; kind: string; company: string; role: string; job_id: number };
 
 export type Dashboard = {
@@ -91,6 +93,7 @@ export type Dashboard = {
   stats: { total: number; submitted: number; average_match: number | null; urgent: number };
   followups: Followup[];
   upcoming_interviews: UpcomingInterview[];
+  drafts: DraftWaiting[];
   next_step: NextStep | null;
   can_scan: boolean;
   checked_at: string | null;
