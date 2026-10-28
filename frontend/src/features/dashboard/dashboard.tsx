@@ -8,6 +8,7 @@ import { api, errorText } from "@/lib/api";
 import { usePreferences } from "@/lib/use-preferences";
 import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";
+import { takeScanRequest } from "@/lib/scan-request";
 import type { Dashboard as DashboardData, Job, Progress, ScanStatus, ViewMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { jobsApi } from "@/features/jobs/api";
@@ -26,7 +27,8 @@ import { allSelected, archivedText, movedText, notForMeStatus, pruneSelection, r
 import { ArchivedSection } from "./archived";
 import { SelectionBar, UndoBar } from "./selection";
 import { comingUpItems } from "./coming-up";
-import { AiKeyPrompt, AsideCard, ComingUpBody, DraftsBody, FollowupsBody, WorthBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, UpdateNotice, YourSearchBody } from "./panels";
+import { checklistSteps, showChecklist } from "./checklist";
+import { AiKeyPrompt, ChecklistCard, AsideCard, ComingUpBody, DraftsBody, FollowupsBody, WorthBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, UpdateNotice, YourSearchBody } from "./panels";
 import { StageTabs, TAB_PANEL_ID, tabId, Toolbar } from "./toolbar";
 import { useRun } from "./use-run";
 import { TimezonePrompt } from "./timezone-prompt";
@@ -68,6 +70,13 @@ export function Dashboard() {
 
   const scan = useRun<ScanStatus>({ read: dashboardApi.scanStatus, start: dashboardApi.startScan, initial: data?.scan, onFinished: refresh, onAdded: refresh });
   const liveness = useRun<Progress>({ read: api.livenessStatus, start: api.startLiveness, readOnMount: true, onFinished: refresh });
+
+  // "Search for jobs now" from the palette: taken once, as soon as the dashboard has its answer.
+  useEffect(() => {
+    if (!data || !takeScanRequest()) return;
+    if (data.can_scan && !scan.running && !scan.starting) scan.begin();
+    else if (!data.can_scan) notify("Searching for jobs is not turned on for your account.", "info");
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onSearch = (e: Event) => setQ(String((e as CustomEvent<string>).detail ?? ""));
@@ -344,6 +353,7 @@ export function Dashboard() {
 
   const announce = resultsText(jobs.length, activeTab.count, activeTab.label, view, filtered);
   const hasFollowups = data.followups.length > 0;
+  const steps = checklistSteps(data);
 
   return (
     <div className="so-stack">
@@ -387,6 +397,7 @@ export function Dashboard() {
 
       <div className="grid gap-[var(--stack-gap)] xl:grid-cols-[minmax(0,1fr)_20rem]">
         <aside aria-label="Next steps and your search" className="so-stack xl:col-start-2 xl:row-start-1">
+          {showChecklist(steps, prefs.checklist_dismissed) && <ChecklistCard steps={steps} onDismiss={() => update({ checklist_dismissed: true })} />}
           {data.next_step && (
             <AsideCard title="Your next step" defaultOpen accent>
               <NextStepBody step={data.next_step} onCard={goToCard} />

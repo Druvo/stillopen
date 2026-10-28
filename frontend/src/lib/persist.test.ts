@@ -1,6 +1,6 @@
 import type { PersistedClient } from "@tanstack/react-query-persist-client";
-import { describe, expect, it } from "vitest";
-import { APP_BUSTER, CACHE_KEY, cacheBuster, clearPersistedStorage, readUid, shouldPersistKey, trimToLimit, UID_KEY, writeUid } from "./persist";
+import { afterEach, describe, expect, it } from "vitest";
+import { APP_BUSTER, CACHE_KEY, cacheBuster, clearPersistedStorage, guardedStorage, readUid, resetStorageEnded, shouldPersistKey, trimToLimit, UID_KEY, writeUid } from "./persist";
 
 const store = () => {
   const data = new Map<string, string>();
@@ -27,7 +27,28 @@ describe("the cache key per person", () => {
   });
 });
 
+afterEach(() => resetStorageEnded());
+
 describe("clearing", () => {
+  it("refuses any write after sign-out, so a queued cache save cannot bring the data back", () => {
+    const s = store();
+    const guarded = guardedStorage(s as unknown as Storage)!;
+    guarded.setItem(CACHE_KEY, "before");
+    expect(s.data.get(CACHE_KEY)).toBe("before");
+    clearPersistedStorage(s);
+    guarded.setItem(CACHE_KEY, "late write");
+    writeUid(s, 9);
+    expect([...s.data.keys()]).toEqual([]);
+  });
+
+  it("also removes a half-made CV and a pasted job", () => {
+    const s = store();
+    s.data.set("stillopen-cv-builder-draft", "{}");
+    s.data.set("stillopen-quickadd-prefill", "{}");
+    clearPersistedStorage(s);
+    expect(s.data.size).toBe(0);
+  });
+
   it("removes the cache and whose it was (sign-out, or the session ended)", () => {
     const s = store();
     s.data.set(CACHE_KEY, "{}");

@@ -16,13 +16,13 @@ STRONG_DEFAULT_PERCENT = 70
 KIND_WORDS = {"interview": "Interview", "deadline": "Apply by", "offer": "Reply to the offer by"}
 
 
-def coming_up(user, days: int = COMING_UP_DAYS, today: date | None = None, now: datetime | None = None) -> list[dict]:
+def coming_up(user, days: int = COMING_UP_DAYS, today: date | None = None, now: datetime | None = None, zone=None) -> list[dict]:
     """Interviews, job deadlines and offer reply-by dates in the next `days` days, soonest first.
 
     Each item: {kind: "interview" | "deadline" | "offer", date (YYYY-MM-DD, the person's own calendar), when (ISO date, or ISO time for an
     interview), label, company, role, job_id}. Deadlines of jobs at a terminal status (closed, rejected...) are left out, and so are
     offers that were already accepted or declined."""
-    zone = tz.zone_for(user)
+    zone = zone or tz.zone_for(user)  # a caller that already knows the person's zone passes it
     now = now or timezone.now()
     today = today or now.astimezone(zone).date()
     last = today + timedelta(days=days)

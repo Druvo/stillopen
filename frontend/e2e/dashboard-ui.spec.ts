@@ -175,7 +175,11 @@ test("signing out removes what this tab kept", async ({ page }) => {
   await page.getByRole("button", { name: "Your account" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/app/"));
-  expect(await page.evaluate(() => sessionStorage.getItem("stillopen-query-cache"))).toBeNull();
+  // A cache write that was queued just before the sign-out (it is saved in throttled steps) must not land after it: look again a moment later.
+  for (const wait of [0, 700]) {
+    await page.waitForTimeout(wait);
+    expect(await page.evaluate(() => [sessionStorage.getItem("stillopen-query-cache"), sessionStorage.getItem("stillopen-cache-uid")])).toEqual([null, null]);
+  }
 });
 
 test("at 375 px the layout has no sideways scroll, and the side cards fold", async ({ page }) => {

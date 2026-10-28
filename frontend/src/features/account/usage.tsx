@@ -1,5 +1,6 @@
 "use client";
 
+import { dayTimeText } from "@/lib/dates";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { Bar, Chart } from "@/features/stats/charts";
@@ -111,7 +112,7 @@ export function UsagePage() {
                 <tbody>
                   {u.recent.map((r) => (
                     <tr key={r.id} className="border-t border-border">
-                      <td className="py-1 pr-3 whitespace-nowrap">{new Date(r.at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                      <td className="py-1 pr-3 whitespace-nowrap">{dayTimeText(r.at)}</td>
                       <td className="pr-3">{r.purpose}</td>
                       <td className="pr-3">{r.model || r.provider}</td>
                       <td className="pr-3 tabular-nums">{n(r.input_tokens)} / {n(r.output_tokens)}</td>

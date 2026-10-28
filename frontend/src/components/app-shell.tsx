@@ -1,12 +1,13 @@
 "use client";
 
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronDown, HelpCircle, Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Sun, UserRound, X } from "lucide-react";
-import { Suspense, useEffect, useId, useRef, useState } from "react";
+import { Bell, ChevronDown, HelpCircle, Keyboard, Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Sun, UserRound, X } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import { focusableIn, trapTab } from "@/lib/a11y";
 import { csrfToken } from "@/lib/api";
 import { useMe } from "@/lib/me";
 import { applyDisplay } from "@/lib/preferences";
+import { readKey } from "@/lib/palette";
 import { clearPersistedStorage, tabStorage } from "@/lib/persist";
 import { useFlushPreferencesOnLeave, usePreferences } from "@/lib/use-preferences";
 import type { Me } from "@/lib/types";
@@ -19,6 +20,11 @@ import { NAV, ROUTES } from "@/routes";
 import { ScreenBoundary } from "./screen-boundary";
 import { NotificationBell } from "@/features/notifications/bell";
 import { Loading, PageHeader, ScreenSkeleton } from "./ui";
+
+const loadOverlays = () => import("./overlays");
+const CommandPalette = lazy(() => loadOverlays().then((m) => ({ default: m.CommandPalette })));
+const ShortcutsDialog = lazy(() => loadOverlays().then((m) => ({ default: m.ShortcutsDialog })));
+type Overlay = "palette" | "shortcuts" | null;
 
 // The layout (fixed sidebar that collapses on wide screens and slides in on small ones, a sticky header with search, theme
 // switch and a user menu) follows TailAdmin free Next.js dashboard, MIT. See frontend/THIRD_PARTY.md.
@@ -35,7 +41,7 @@ function initials(me?: Me) {
   return source.trim().slice(0, 1).toUpperCase();
 }
 
-function UserMenu({ me }: { me?: Me }) {
+function UserMenu({ me, onShortcuts }: { me?: Me; onShortcuts: () => void }) {
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -121,6 +127,18 @@ function UserMenu({ me }: { me?: Me }) {
               <HelpCircle className="size-4 text-gray-500" aria-hidden /> Help
             </Link>
           </li>
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onShortcuts();
+              }}
+              className={item}
+            >
+              <Keyboard className="size-4 text-gray-500" aria-hidden /> Keyboard shortcuts
+            </button>
+          </li>
           {me?.is_staff && (
             <li>
               <a href="/admin/" className={item}>
@@ -153,16 +171,6 @@ function UserMenu({ me }: { me?: Me }) {
 
 function SearchBox() {
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        input.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
   return (
     <form
       role="search"
@@ -183,7 +191,7 @@ function SearchBox() {
           placeholder="Search your jobs…"
           className="h-11 w-full rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-14 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-500 focus:border-brand-500 lg:w-80 xl:w-105 dark:border-gray-800 dark:bg-white/3 dark:text-white/90 dark:placeholder:text-white/50"
         />
-        <kbd aria-hidden className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-lg border border-gray-200 bg-gray-50 px-1.5 py-1 text-xs text-gray-500 lg:inline-flex dark:border-gray-800 dark:bg-white/3 dark:text-gray-400">⌘ K</kbd>
+        <kbd aria-hidden title="Press / or Ctrl K to jump to any screen" className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-lg border border-gray-200 bg-gray-50 px-1.5 py-1 text-xs text-gray-500 lg:inline-flex dark:border-gray-800 dark:bg-white/3 dark:text-gray-400">⌘ K</kbd>
       </div>
     </form>
   );
@@ -216,6 +224,8 @@ export function AppShell() {
   const { prefs, update, known } = usePreferences();
   const [hovered, setHovered] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [overlay, setOverlay] = useState<Overlay>(null);
+  const closeOverlay = useCallback(() => setOverlay(null), []);
   const isWide = useIsWide();
   const expanded = prefs.sidebar === "expanded";
   const aside = useRef<HTMLElement>(null);
@@ -267,6 +277,38 @@ export function AppShell() {
       document.body.style.overflow = scroll;
     };
   }, [drawer]);
+
+  // Fetched a moment after the page is up (not part of the first load), so the first keys typed after "/" are not lost to a download.
+  useEffect(() => {
+    const t = window.setTimeout(() => void loadOverlays(), 1500);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  // Shortcuts: / or Ctrl/Cmd+K jumps, ? lists them, "g" then a letter goes to a screen. Never while typing in a field or with a dialog open.
+  const overlayOpen = overlay !== null;
+  useEffect(() => {
+    let waiting = false;
+    let timer = 0;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      const step = readKey(e, waiting, overlayOpen || drawer);
+      waiting = false;
+      window.clearTimeout(timer);
+      if (!step) return;
+      e.preventDefault();
+      if (step.open) setOverlay(step.open);
+      else if (step.go) navigate(step.go);
+      else if (step.waitForGo) {
+        waiting = true;
+        timer = window.setTimeout(() => (waiting = false), 1500);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.clearTimeout(timer);
+    };
+  }, [overlayOpen, drawer]);
 
   const title = me.data?.site_title || "StillOpen";
   useScreenAnnouncer(main, path, title);
@@ -367,7 +409,15 @@ export function AppShell() {
             {title}
           </Link>
           <SearchBox />
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={() => setOverlay("palette")}
+            aria-label="Search and jump to a screen"
+            className="ml-auto flex size-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 md:hidden dark:text-gray-400 dark:hover:bg-white/5"
+          >
+            <Search className="size-5" aria-hidden />
+          </button>
+          <div className="flex items-center gap-2 max-md:ml-0 md:ml-auto sm:gap-3">
             <UpdatingNote />
             <button
               type="button"
@@ -379,7 +429,7 @@ export function AppShell() {
               <Moon className="size-5 dark:hidden" aria-hidden />
             </button>
             <NotificationBell />
-            <UserMenu me={me.data} />
+            <UserMenu me={me.data} onShortcuts={() => setOverlay("shortcuts")} />
           </div>
         </header>
 
@@ -402,6 +452,10 @@ export function AppShell() {
           )}
         </main>
       </div>
+      <Suspense fallback={null}>
+        {overlay === "palette" && <CommandPalette onClose={closeOverlay} />}
+        {overlay === "shortcuts" && <ShortcutsDialog onClose={closeOverlay} />}
+      </Suspense>
       <Toasts />
     </div>
   );

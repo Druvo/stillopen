@@ -1455,7 +1455,7 @@ def send_scan_digest(owner, run: ScanRun) -> bool:
     return True
 
 
-def maybe_auto_start(owner) -> ScanRun | None:
+def maybe_auto_start(owner, profile=None) -> ScanRun | None:
     """Search on the person's behalf when they open their dashboard and their last search is older than
     `SiteConfig.auto_scan_hours` (0 turns it off). No button, no cron, no AI: jobs are simply there. Runs only for
     someone who has said what they want (a target role or a CV), never twice at once, and never more often than that
@@ -1465,7 +1465,7 @@ def maybe_auto_start(owner) -> ScanRun | None:
     hours = SiteConfig.load().auto_scan_hours
     if hours <= 0:
         return None
-    profile = UserProfile.for_user(owner)
+    profile = profile or UserProfile.for_user(owner)
     if not (profile.target_roles.strip() or (profile.profile_cv or "").strip()):
         return None
     if not searchable_sources(owner).exists():

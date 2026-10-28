@@ -10,8 +10,6 @@ import { notify } from "@/lib/toast";
 import type { Dashboard, DraftWaiting, Followup, Me, NextStep, ScanStatus, SearchSummary, ComingUpItem, WorthItem } from "@/lib/types";
 import { useIsWide } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
-import { jobsApi } from "@/features/jobs/api";
-import { duplicateMessage } from "@/features/jobs/jobmgmt";
 import type { Stats } from "@/features/stats/api";
 import { cardTiles } from "@/features/stats/logic";
 import { dashboardApi } from "./api";
@@ -481,5 +479,37 @@ export function StatTiles({ data }: { data: Pick<Dashboard, "stats" | "urgent_da
       <Tile value={stats.average_match === null ? "–" : `${stats.average_match}%`} label={stats.average_match === null ? "Average fit (check a job first)" : "Average fit"} />
       <Tile value={stats.urgent} label={`Closing within ${data.urgent_days} days`} />
     </dl>
+  );
+}
+
+/** The "Getting started" card: what is done and what to do next, with a way to close it for good. */
+export function ChecklistCard({ steps, onDismiss }: { steps: { key: string; label: string; done: boolean; to: string; cta: string }[]; onDismiss: () => void }) {
+  const done = steps.filter((s) => s.done).length;
+  return (
+    <AsideCard title="Getting started" defaultOpen hint={<span className="text-theme-xs font-normal text-muted">{done} of {steps.length} done</span>}>
+      <Progress value={Math.round((done / steps.length) * 100)} label="Getting started progress" />
+      <ul className="mt-3 space-y-1">
+        {steps.map((s) => (
+          <li key={s.key} className="flex min-h-11 items-center gap-2 text-theme-sm sm:min-h-9">
+            <span aria-hidden className={cn("flex size-5 shrink-0 items-center justify-center rounded-full border text-xs", s.done ? "border-good bg-good/10 text-good" : "border-border")}>
+              {s.done ? "✓" : ""}
+            </span>
+            {s.done ? (
+              <span className="text-muted line-through">
+                {s.label}
+                <span className="sr-only"> (done)</span>
+              </span>
+            ) : (
+              <Link to={s.to} className="text-brand underline">
+                {s.label}
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+      <Button variant="ghost" small className="mt-2" onClick={onDismiss}>
+        Hide this checklist
+      </Button>
+    </AsideCard>
   );
 }

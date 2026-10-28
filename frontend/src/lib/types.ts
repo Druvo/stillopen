@@ -175,6 +175,8 @@ export type Preferences = {
   ai_prompt_dismissed: boolean;
   /** The person said "not now" to the suggestion to use this device's time zone. */
   tz_prompt_dismissed: boolean;
+  /** The person closed the "Getting started" checklist on the dashboard. */
+  checklist_dismissed: boolean;
   /** Leave out jobs whose match is under 40% (a job that has not been checked yet is always shown). */
   hide_weak: boolean;
   filters: PrefFilters;

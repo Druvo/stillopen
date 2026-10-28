@@ -20,8 +20,14 @@ export function StageTabs({ tabs, active, onChange }: { tabs: Tab[]; active: str
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // keep the chosen tab in view in the scrolling row (a phone shows only some of them)
-    const el = list.current?.querySelector<HTMLElement>('[aria-selected="true"]');
-    el?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    // Only the row is scrolled, sideways: scrollIntoView would also scroll the whole page down to the tabs on a phone, on every first load.
+    const box = list.current;
+    const el = box?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!box || !el) return;
+    const b = box.getBoundingClientRect();
+    const t = el.getBoundingClientRect();
+    if (t.left < b.left) box.scrollLeft -= b.left - t.left + 8;
+    else if (t.right > b.right) box.scrollLeft += t.right - b.right + 8;
   }, [active]);
   const index = Math.max(0, tabs.findIndex((t) => t.key === active));
   const onKeyDown = (event: React.KeyboardEvent) => {

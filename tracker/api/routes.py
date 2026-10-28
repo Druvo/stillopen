@@ -171,15 +171,15 @@ def _archived(user) -> list[dict]:
 @api.get("/dashboard", summary="Every job of the signed-in person, with the columns it can sit in")
 def dashboard(request):
     user = request.user
-    config = SiteConfig.for_user(user)
     profile = UserProfile.for_user(user)
+    config = SiteConfig.for_user(user, profile=profile)
     now = tz.now_for(user)  # the person's own clock, so "today", deadlines and the greeting turn over at their midnight
     today = now.date()
     bands = list(ScoreBand.objects.all())
     buckets = list(Bucket.objects.all())
     statuses = list(Status.objects.select_related("bucket"))
     areas = list(user.search_areas.all())
-    scan.maybe_auto_start(user)
+    scan.maybe_auto_start(user, profile=profile)
     apps = list(
         Application.objects.filter(owner=user, archived_at__isnull=True)
         .select_related("status", "status__bucket", "source", "posting", "posting__source", "applied_cv")
@@ -222,7 +222,7 @@ def dashboard(request):
         for a in followup_apps
     ]
     notifications.sync_dashboard(user, cards, followups)  # the bell: each deadline and follow-up is announced once
-    coming = weekly.coming_up(user, today=today, now=now)
+    coming = weekly.coming_up(user, today=today, now=now, zone=now.tzinfo)
     worth = dashviz.worth_a_look(
         [c["app"] for c in cards], followup_apps, coming, drafts, preferences.read(profile)["quiet_days"], today, now.tzinfo,
     )
@@ -297,7 +297,7 @@ def _search_summary(profile, config, areas) -> dict:
         "remote": profile.get_remote_preference_display(),
         "salary_floor": profile.salary_floor.strip(),
         "alerts_on": bool(profile.scan_digest_enabled),
-        "alerts_available": bool(SiteConfig.load().scan_emails_enabled),
+        "alerts_available": bool(config.scan_emails_enabled),
         "has_cv": bool(profile.profile_cv.strip()),
         "ai": "keyword" if config.ai_provider == "none" else config.get_ai_provider_display(),
     }

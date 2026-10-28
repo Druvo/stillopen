@@ -1,5 +1,6 @@
 "use client";
 
+import { dayText } from "@/lib/dates";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { CreditLink } from "@/components/credit";
@@ -136,7 +137,7 @@ export function Postings() {
                 <div className="min-w-0">
                   <h2 className="font-semibold">{p.title}</h2>
                   <p className="text-sm text-muted">
-                    {p.company || "Company not named"} · {p.source.name} ({p.source.connector}){p.location ? ` · ${p.location}` : ""} · first seen {p.first_seen}, last seen {p.last_seen}
+                    {p.company || "Company not named"} · {p.source.name} ({p.source.connector}){p.location ? ` · ${p.location}` : ""} · first seen {dayText(p.first_seen)}, last seen {dayText(p.last_seen)}
                   </p>
                   {p.credit && (
                     <p className="text-xs text-muted">

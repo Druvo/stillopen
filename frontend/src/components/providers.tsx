@@ -5,7 +5,7 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { PersistQueryClientProvider, persistQueryClientSave, type Persister } from "@tanstack/react-query-persist-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMe } from "@/lib/me";
-import { cacheBuster, CACHE_KEY, MAX_AGE_MS, readUid, shouldPersistKey, tabStorage, trimToLimit, writeUid } from "@/lib/persist";
+import { cacheBuster, CACHE_KEY, guardedStorage, MAX_AGE_MS, readUid, shouldPersistKey, tabStorage, trimToLimit, writeUid } from "@/lib/persist";
 
 /** The build-time render has no browser: a persister that keeps nothing. */
 const NO_PERSISTER: Persister = { persistClient: () => undefined, restoreClient: async () => undefined, removeClient: () => undefined };
@@ -46,10 +46,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultOptions: { queries: { staleTime: 30_000, gcTime: MAX_AGE_MS, refetchOnWindowFocus: false, retry: 1 } },
       }),
   );
+  const [loadedAt] = useState(() => Date.now());
   const [uid, setUidState] = useState<number | null>(() => readUid(tabStorage()));
   const uidRef = useRef(uid);
   const [persister] = useState<Persister>(() => {
-    const storage = tabStorage();
+    const storage = guardedStorage(tabStorage());
     // The write is throttled, so a write queued before the person was known could land after the id was: the cache is stamped for whoever
     // is known at the moment it is written, never with the buster it was queued under (a copy stamped for nobody is never restored).
     return storage
@@ -80,7 +81,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       client={client}
       persistOptions={persistOptions}
       // What was painted from the saved copy is out of date by definition: fetch the current answers behind it (without cancelling a fetch already going).
-      onSuccess={() => void client.invalidateQueries(undefined, { cancelRefetch: false })}
+      // Only what came from the saved copy: an answer fetched since this page loaded is already current, and asking again would be a repeat request.
+      onSuccess={() => void client.invalidateQueries({ predicate: (q) => q.state.dataUpdatedAt < loadedAt }, { cancelRefetch: false })}
     >
       <Identity uid={uid} setUid={setUid} client={client} persister={persister} />
       {children}

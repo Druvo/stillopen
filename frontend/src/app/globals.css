@@ -195,6 +195,11 @@ input[type="radio"] {
   flex-shrink: 0;
   accent-color: var(--brand);
 }
+/* A long option (a source's name, a CV version's label) must never push the page sideways. */
+select {
+  max-width: 100%;
+  min-width: 0;
+}
 @media (max-width: 639.98px) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="range"]),
   select,

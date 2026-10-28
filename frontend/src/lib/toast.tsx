@@ -52,7 +52,7 @@ export function Toasts() {
     const onToast = (e: Event) => {
       const toast = (e as CustomEvent<Toast>).detail;
       setItems((list) => [...list.slice(-2), toast]);
-      window.setTimeout(() => setItems((list) => list.filter((t) => t.id !== toast.id)), toast.tone === "error" ? 9000 : 6000);
+      window.setTimeout(() => setItems((list) => list.filter((t) => t.id !== toast.id)), toast.tone === "error" ? 20000 : 6000);
     };
     const onSay = (e: Event) => setSaid((s) => ({ text: (e as CustomEvent<string>).detail, n: s.n + 1 }));
     window.addEventListener(EVENT, onToast);

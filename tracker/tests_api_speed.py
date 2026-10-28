@@ -170,7 +170,7 @@ class SavedPreferences(TestCase):
     def test_every_bad_value_is_refused_with_a_plain_message_and_nothing_is_saved(self):
         bad = (
             {"view": "grid"}, {"sort": "random"}, {"theme": "blue"}, {"text_size": "huge"}, {"density": "tiny"}, {"sidebar": "hidden"},
-            {"filters_open": "yes"}, {"ai_prompt_dismissed": "no"}, {"filters": {"nope": "x"}}, {"filters": {"fit": "x" * 61}}, {"filters": ["a"]}, {"tab": "no-such-stage"}, {"colour": "red"},
+            {"filters_open": "yes"}, {"ai_prompt_dismissed": "no"}, {"checklist_dismissed": "yes"}, {"filters": {"nope": "x"}}, {"filters": {"fit": "x" * 61}}, {"filters": ["a"]}, {"tab": "no-such-stage"}, {"colour": "red"},
         )
         for body in bad:
             r = self.put(body)
@@ -233,6 +233,13 @@ class AskForAKeyFirst(TestCase):
 
     def test_a_new_person_is_asked(self):
         self.assertTrue(self.show())
+
+    def test_the_getting_started_checklist_can_be_closed_and_is_remembered_per_person(self):
+        self.assertFalse(self.client.get(f"{BASE}/preferences").json()["checklist_dismissed"])
+        r = self.client.put(f"{BASE}/preferences", data=json.dumps({"checklist_dismissed": True}), content_type="application/json")
+        self.assertTrue(r.json()["checklist_dismissed"])
+        self.client.force_login(person("bob"))
+        self.assertFalse(self.client.get(f"{BASE}/preferences").json()["checklist_dismissed"])
 
     def test_not_now_is_remembered_and_belongs_to_that_person_only(self):
         r = self.client.put(f"{BASE}/preferences", data=json.dumps({"ai_prompt_dismissed": True}), content_type="application/json")

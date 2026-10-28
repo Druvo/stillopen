@@ -11,6 +11,9 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- UI/UX polish pass (audit in `docs/design/ux-audit.md`): `?` keyboard-shortcuts help, `/` and Ctrl/Cmd+K jump-to palette (every screen, Add job, Search for jobs now, light/dark; a header button on phones), `g` then a letter go-to keys, a dismissible "Getting started" checklist on the dashboard (`checklist_dismissed` preference); one date format everywhere; no sideways scroll on Postings and CV compare at 375 px; the dashboard no longer opens scrolled down on a phone; errors stay on screen 20 s.
+- Sign-out now always leaves nothing of the person in the tab's storage (a queued cache write could land after the clearing); first load no longer repeats requests; the dashboard answers in 40 queries instead of 45.
+
 - CV import: "Start from a CV you already have" in the builder reads a PDF, Word, Markdown or text file (5 MB, real type checked, macros/embedded files refused, time limit) and sorts it into review cards (Accept / Edit / Skip per section) with plain rules or, optionally, the person's own AI (only words found in the file survive). Nothing is saved until the builder is finished.
 - Live CV preview (builder and CV page): the exact print page for the chosen look, in a no-permission sandboxed frame.
 - "Download CV and cover letter (zip)" per job: DOCX, plain text and Markdown; refuses anything flagged and unapproved.

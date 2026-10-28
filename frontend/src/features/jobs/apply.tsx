@@ -1,5 +1,6 @@
 "use client";
 
+import { dayText } from "@/lib/dates";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { CheckField, FormError, SelectField, TextField, useSubmit } from "@/components/form";
@@ -86,7 +87,7 @@ function RecordForm({ id, data }: { id: number; data: ApplyData }) {
                   <span>
                     {v.label} <Badge>v{v.id}</Badge>
                     <span className="block text-sm font-normal text-muted">
-                      {v.kind_label} · {v.created}
+                      {v.kind_label} · {dayText(v.created)}
                       {v.flagged ? " · you approved the flagged claims" : ""}
                     </span>
                   </span>
@@ -227,7 +228,7 @@ export function ApplyAssistant({ id }: { id: number }) {
       <p className="mb-4 text-sm text-muted">StillOpen does not apply for you. Check the list, choose the CV, apply on the employer&apos;s site, then record it here so you always know what you sent.</p>
       {data.job.applied && (
         <p className="mb-3 text-sm">
-          <Badge tone="good">Applied</Badge> {data.job.applied_date && `on ${data.job.applied_date}`}
+          <Badge tone="good">Applied</Badge> {data.job.applied_date && `on ${dayText(data.job.applied_date)}`}
           {data.job.follow_up_date && ` · follow up on ${data.job.follow_up_date}`}
         </p>
       )}

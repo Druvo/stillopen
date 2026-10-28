@@ -170,6 +170,8 @@ class DashboardPayload(TestCase):
             data = self.get()
         self.assertEqual(len(data["jobs"]), 30)
         self.assertLessEqual(len(many), len(few) + 2, "the dashboard must not run queries per job")
+        # The absolute cost too: it crept from 29 to 45 over several merges before the repeated profile/zone reads were removed.
+        self.assertLessEqual(len(many), 45, f"the dashboard now runs {len(many)} queries; find what added them before raising this")
 
 
 class ScanProgress(TestCase):

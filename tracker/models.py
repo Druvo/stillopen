@@ -424,10 +424,12 @@ class SiteConfig(PersonalSettings):
         return obj
 
     @classmethod
-    def for_user(cls, user):
-        """Site settings overlaid with this person's own AI, RAG and CV settings. Read-only; never saved."""
+    def for_user(cls, user, profile=None):
+        """Site settings overlaid with this person's own AI, RAG and CV settings. Read-only; never saved.
+
+        A caller that already holds the person's profile passes it, so a request does not read it again."""
         config = cls.load()
-        profile = UserProfile.for_user(user)
+        profile = profile or UserProfile.for_user(user)
         for name in PER_USER_FIELDS:
             setattr(config, name, getattr(profile, name))
         config.profile_preferences = profile.preferences_text()
@@ -619,6 +621,7 @@ class UserProfile(PersonalSettings):
     @classmethod
     def for_user(cls, user):
         profile, _ = cls.objects.get_or_create(user=user)
+        profile.user = user  # already in hand: reading profile.user later (preferences_text, ...) must not ask the database again
         return profile
 
     def preferences_text(self) -> str:

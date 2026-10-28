@@ -1,3 +1,4 @@
+import { dayText } from "@/lib/dates";
 import type { Area, AreaValues, Preset } from "./api";
 
 /** Add the value to the list if it is missing, take it out if it is there (a group of tick boxes). */
@@ -66,7 +67,7 @@ export function lastUsed(iso: string | null, now: Date = new Date()): string {
 }
 
 export function formatDate(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "Never";
+  return iso ? dayText(iso) : "Never";
 }
 
 /** The delete button stays off until the typed text is exactly the username (the server checks again). */

@@ -1,5 +1,6 @@
 "use client";
 
+import { dayTimeText } from "@/lib/dates";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { TextAreaField, TextField } from "@/components/form";
@@ -8,7 +9,7 @@ import { errorText } from "@/lib/api";
 import { notify } from "@/lib/toast";
 import { googleApi, type MailItem } from "./api";
 
-const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const when = (iso: string) => dayTimeText(iso);
 
 /**
  * Replies next to the job: the saved conversation as a small timeline (React escapes every snippet), a manual "Check for replies", a draft

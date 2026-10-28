@@ -13,6 +13,7 @@ DEFAULTS = {
     "filters_open": False,
     "tz_prompt_dismissed": False,  # the person said "not now" to the suggestion to use this device's time zone
     "ai_prompt_dismissed": False,  # the person said "not now" to the card asking for a Google AI Studio key
+    "checklist_dismissed": False,  # the person closed the "Getting started" checklist on the dashboard
     "hide_weak": False,  # leave out jobs whose match is under 40% (a job with no match yet is always shown)
     "filters": {"fit": "", "match": "", "work": "", "country": "", "posting": "", "found": ""},
     "sidebar": "expanded",
@@ -39,7 +40,7 @@ CHOICES = {
     "cover_tone": ("warm", "direct", "formal"),
     "insights_period": ("30", "90", "all"),
 }
-BOOLEANS = ("filters_open", "ai_prompt_dismissed", "tz_prompt_dismissed", "hide_weak")
+BOOLEANS = ("filters_open", "ai_prompt_dismissed", "tz_prompt_dismissed", "checklist_dismissed", "hide_weak")
 FILTER_KEYS = tuple(DEFAULTS["filters"])
 FILTER_MAX = 60
 

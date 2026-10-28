@@ -9,6 +9,7 @@ export const DEFAULT_PREFS = {
   sort: "best",
   filters_open: false,
   ai_prompt_dismissed: false,
+  checklist_dismissed: false,
   filters: { fit: "", match: "", work: "", country: "", posting: "", found: "" },
   sidebar: "expanded",
   theme: "light",

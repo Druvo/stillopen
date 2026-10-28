@@ -1,5 +1,6 @@
 "use client";
 
+import { dayText, dayTimeText } from "@/lib/dates";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, lazy, Suspense, useState } from "react";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
@@ -15,7 +16,7 @@ import { diffSummary, findingText, parseBlocks, parseInline, type Finding } from
 import { applySuggestion, readinessTone } from "./quality";
 import { CV_TEMPLATES, DownloadAll, PreviewDialog } from "./preview";
 
-const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const when = (iso: string) => dayTimeText(iso);
 
 /** A CV or letter as plain React text: headings, bullets, bold, italic and web links. Nothing in it can become markup. */
 function Document({ text }: { text: string }) {
@@ -61,7 +62,7 @@ function Findings({ items, thing, approved, approvedAt, onApprove, busy }: { ite
     return (
       <Notice tone="success">
         You approved this {thing}
-        {approvedAt ? ` on ${new Date(approvedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}` : ""} after reviewing {items.length} flagged item{items.length === 1 ? "" : "s"}.
+        {approvedAt ? ` on ${dayText(approvedAt)}` : ""} after reviewing {items.length} flagged item{items.length === 1 ? "" : "s"}.
       </Notice>
     );
   }
@@ -465,7 +466,7 @@ export function CvDiff({ id }: { id: number }) {
         </p>
       )}
       {data.choices.length > 0 && (
-        <div className="mb-3 flex items-center gap-2 text-sm">
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
           <label htmlFor="against">Compare v{id} with</label>
           <select
             id="against"
