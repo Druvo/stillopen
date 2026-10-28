@@ -12,6 +12,8 @@ for many people, public job board rules) see [HOSTING.md](HOSTING.md).
 - **You can read every line.** The code is public; nothing is hidden in a service you cannot inspect.
 - **No third parties in the page.** No tracking, no ads, no external fonts or scripts. The only outside requests the server makes are the ones you can see below.
 
+Short on time? [INSTALL.md](INSTALL.md) lists every way to install: Docker Compose, plain Docker, from source, an Ubuntu service, CapRover/Coolify/Dokploy.
+
 ## What you need
 
 - Either **Docker** (recommended) or **Python 3.12+**.

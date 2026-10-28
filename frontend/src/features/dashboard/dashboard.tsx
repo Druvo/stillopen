@@ -25,7 +25,7 @@ import {
 import { allSelected, movedText, notForMeStatus, pruneSelection, removedText, selectAllIn, statusLabel, toggleId, undoText, weakLine } from "./jobmgmt";
 import { SelectionBar, UndoBar } from "./selection";
 import { comingUpItems } from "./coming-up";
-import { AiKeyPrompt, AsideCard, ComingUpBody, FollowupsBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, YourSearchBody } from "./panels";
+import { AiKeyPrompt, AsideCard, ComingUpBody, DraftsBody, FollowupsBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, YourSearchBody } from "./panels";
 import { StageTabs, TAB_PANEL_ID, tabId, Toolbar } from "./toolbar";
 import { useRun } from "./use-run";
 import { TimezonePrompt } from "./timezone-prompt";
@@ -368,6 +368,11 @@ export function Dashboard() {
           {hasFollowups && (
             <AsideCard title="Time to follow up" defaultOpen>
               <FollowupsBody items={data.followups} onChanged={refresh} />
+            </AsideCard>
+          )}
+          {(data.drafts ?? []).length > 0 && (
+            <AsideCard title="Drafts waiting for you" defaultOpen>
+              <DraftsBody items={data.drafts ?? []} onChanged={refresh} />
             </AsideCard>
           )}
           {comingUp.length > 0 && (

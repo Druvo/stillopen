@@ -321,6 +321,8 @@ STILLOPEN_PUBLIC_AUTO_REFRESH = os.environ.get("STILLOPEN_PUBLIC_AUTO_REFRESH", 
 STILLOPEN_PUBLIC_CACHE_SECONDS = int(os.environ.get("STILLOPEN_PUBLIC_CACHE_SECONDS", "0" if RUNNING_TESTS else "300"))
 STILLOPEN_PUBLIC_PAGE_SIZE = int(os.environ.get("STILLOPEN_PUBLIC_PAGE_SIZE", "30"))
 STILLOPEN_SCAN_MAX_NEW = int(os.environ.get("STILLOPEN_SCAN_MAX_NEW", "40"))
+# Most tailored CV drafts one scheduled search prepares for one person ("Draft ahead", Profile > Job alerts).
+STILLOPEN_DRAFT_AHEAD_MAX = int(os.environ.get("STILLOPEN_DRAFT_AHEAD_MAX", "3"))
 STILLOPEN_AUTO_SCAN = os.environ.get("STILLOPEN_AUTO_SCAN", "0" if RUNNING_TESTS else "1") == "1"
 STILLOPEN_SEED_SOURCES = os.environ.get("STILLOPEN_SEED_SOURCES", "0" if RUNNING_TESTS else "1") == "1"
 # Company job boards one person may add for their own searches, and how many they may add per hour.
@@ -330,6 +332,10 @@ STILLOPEN_MAX_API_TOKENS = int(os.environ.get("STILLOPEN_MAX_API_TOKENS", "10"))
 STILLOPEN_TOKEN_ISSUES_PER_HOUR = int(os.environ.get("STILLOPEN_TOKEN_ISSUES_PER_HOUR", "10"))
 STILLOPEN_MCP_CALLS_PER_MINUTE = int(os.environ.get("STILLOPEN_MCP_CALLS_PER_MINUTE", "120"))
 STILLOPEN_MCP_BAD_TOKENS_PER_MINUTE = int(os.environ.get("STILLOPEN_MCP_BAD_TOKENS_PER_MINUTE", "20"))
+# Private calendar link (/calendar/<token>.ics): reads per visitor address per hour, wrong-token tries per hour, new links per person per hour.
+STILLOPEN_CALENDAR_FEED_PER_HOUR = int(os.environ.get("STILLOPEN_CALENDAR_FEED_PER_HOUR", "120"))
+STILLOPEN_CALENDAR_FEED_BAD_PER_HOUR = int(os.environ.get("STILLOPEN_CALENDAR_FEED_BAD_PER_HOUR", "20"))
+STILLOPEN_CALENDAR_LINKS_PER_HOUR = int(os.environ.get("STILLOPEN_CALENDAR_LINKS_PER_HOUR", "10"))
 STILLOPEN_SOURCE_ADDS_PER_HOUR = int(os.environ.get("STILLOPEN_SOURCE_ADDS_PER_HOUR", "20"))
 STILLOPEN_MAX_PIPELINE = int(os.environ.get("STILLOPEN_MAX_PIPELINE", "500"))
 STILLOPEN_MAX_CV_VERSIONS = int(os.environ.get("STILLOPEN_MAX_CV_VERSIONS", "200"))

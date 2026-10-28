@@ -14,7 +14,7 @@ import { dashboardApi } from "./api";
 import { FilterPanel } from "./filters";
 import { JobCard, type CardExtras } from "./job-card";
 import { DEFAULT_FILTERS } from "./logic";
-import { AsideCard, LastSearchBody, NextStepBody, StaffBanners, StatTiles, YourSearchBody } from "./panels";
+import { AsideCard, DraftsBody, LastSearchBody, NextStepBody, StaffBanners, StatTiles, YourSearchBody } from "./panels";
 import { StageTabs, Toolbar, type Tab } from "./toolbar";
 
 afterEach(() => {
@@ -338,4 +338,16 @@ describe("the staff-only banners", () => {
     expect(screen.queryByText(/EMAIL_HOST/)).toBeNull();
     expect(screen.queryByText(/bracketed parts/)).toBeNull();
   });
+});
+
+describe("drafts waiting for you (card body)", () => {
+  const draft = { id: 7, job_id: 3, company: "Hooli", role: "Backend Engineer", flagged_count: 2, created_at: null };
+
+  it("lists each draft with its flagged count and a link to open it", () => {
+    render(<DraftsBody items={[draft, { ...draft, id: 8, company: "Initech", flagged_count: 0 }]} onChanged={() => undefined} />);
+    expect(screen.getByText("(flagged claims: 2)")).toBeTruthy();
+    expect(screen.getByText("(nothing flagged)")).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: "Open draft" })[0].getAttribute("href")).toContain("/cv/7");
+  });
+
 });

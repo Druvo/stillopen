@@ -259,6 +259,13 @@ class SiteConfig(PersonalSettings):
         "without it, emails only print to the server console. Run `manage.py send_weekly_digest` on a schedule (e.g. weekly cron).",
     )
 
+    draft_ahead_site_enabled = models.BooleanField(
+        default=False,
+        help_text="Allow the scheduled job search to also prepare tailored CV drafts for the best new matches of people who opted in "
+        "(Profile > Job alerts). Each draft uses that person's own AI settings and waits for their review; nothing is approved, downloaded "
+        "or sent for them. Capped per run by STILLOPEN_DRAFT_AHEAD_MAX (default 3).",
+    )
+
     careerops_path = models.CharField(
         max_length=500,
         blank=True,
@@ -553,6 +560,11 @@ class UserProfile(PersonalSettings):
     ui_preferences = models.JSONField(
         default=dict, blank=True, editable=False,
         help_text="How this person likes the app laid out (dashboard view, filters, sidebar, theme, text size). Saved so it follows them to every device; see services/preferences.py.",
+    )
+    draft_ahead_enabled = models.BooleanField(
+        default=False, verbose_name="Also prepare tailored CV drafts for my best new matches",
+        help_text="After a scheduled search, writes a draft CV for the top new matches using your own AI settings. Drafts wait on your "
+        "dashboard for you to check; nothing is approved, downloaded or sent for you. Off until you turn it on.",
     )
     weekly_digest_enabled = models.BooleanField(
         default=False, verbose_name="Email me a weekly summary of how my search is going",
@@ -948,6 +960,7 @@ class CVVersion(models.Model):
     check_report = models.JSONField(default=list, blank=True, help_text="Claims the fact check could not find in the person's own material.")
     approved = models.BooleanField(default=False, help_text="The person has reviewed any flagged items and accepts this version.")
     approved_at = models.DateTimeField(null=True, blank=True)
+    draft_ahead = models.BooleanField(default=False, editable=False, help_text="Prepared automatically after a scheduled search; shown as a draft waiting for review until approved or discarded.")
     notes = models.CharField(max_length=300, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -1145,6 +1158,62 @@ class ApiToken(models.Model):
         return "Active"
 
 
+class CalendarFeed(models.Model):
+    """The private link a calendar app subscribes to (/calendar/<token>.ics): one per person, read-only.
+
+    Only a SHA-256 hash is used to find the row; the link itself is kept encrypted (tracker/crypto.py) so the person can copy it again
+    from the Interviews screen. Making a new link replaces this row's token, so the old one stops working at once."""
+
+    PREFIX = "cal_"
+
+    owner = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="calendar_feed")
+    token_hash = models.CharField(max_length=64, unique=True)
+    token_encrypted = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"calendar link for {self.owner}"
+
+    @staticmethod
+    def digest(raw: str) -> str:
+        import hashlib
+
+        return hashlib.sha256(raw.encode()).hexdigest()
+
+    @classmethod
+    def issue(cls, owner):
+        """Make (or replace) the person's link. Returns (record, raw token)."""
+        import secrets
+
+        from .crypto import encrypt
+
+        raw = cls.PREFIX + secrets.token_urlsafe(32)
+        record, _ = cls.objects.update_or_create(
+            owner=owner, defaults={"token_hash": cls.digest(raw), "token_encrypted": encrypt(raw), "created_at": timezone.now(), "last_used_at": None},
+        )
+        return record, raw
+
+    @classmethod
+    def lookup(cls, raw: str):
+        """The feed for `raw` when the token is genuine and its owner is active, else None."""
+        import hmac
+
+        if not raw or not raw.startswith(cls.PREFIX) or len(raw) > 100:
+            return None
+        digest = cls.digest(raw)
+        record = cls.objects.select_related("owner").filter(token_hash=digest).first()
+        if record is None or not hmac.compare_digest(record.token_hash, digest) or not record.owner.is_active:
+            return None
+        return record
+
+    @property
+    def token(self) -> str:
+        from .crypto import decrypt
+
+        return decrypt(self.token_encrypted)
+
+
 class Offer(models.Model):
     """A job offer, kept in plain numbers so offers can be set side by side. Amounts are per year unless the base is monthly."""
 
@@ -1331,6 +1400,7 @@ class JobSource(models.Model):
         ("bdjobs", "Bangladesh -- bdjobs.com (undocumented API, off by default -- see scan.py)"),
         ("bikroy", "Bangladesh -- bikroy.com Jobs (undocumented API, off by default -- see scan.py)"),
         ("usajobs", "USAJobs -- official US federal jobs (needs a free key)"),
+        ("hnhiring", "Startups -- Hacker News 'Who is hiring?' (off by default)"),
     ]
 
     name = models.CharField(max_length=120, help_text="Shown in the scan log. The company name for a single-company connector; a label like 'RemoteOK' for an aggregator.")
@@ -1439,6 +1509,7 @@ class Posting(models.Model):
     location = models.CharField(max_length=160, blank=True)
     country = models.CharField(max_length=2, blank=True, db_index=True, help_text="Two-letter country when the location names exactly one.")
     remote = models.BooleanField(default=False, help_text="The location or title says remote or worldwide.")
+    apply_address = models.CharField(max_length=300, blank=True, help_text="An email or link the posting itself publishes for applying (Hacker News posts do). Shown as a plain link; the app never sends anything to it.")
     excerpt = models.TextField(blank=True, help_text="The first few lines of the posting, for the public board. The full text stays at the employer.")
     sponsorship = models.CharField(max_length=3, blank=True, db_index=True, help_text="'yes' only when the posting says the employer sponsors visas; 'no' when it says it cannot; blank = not stated.")
     relocation = models.CharField(max_length=3, blank=True, help_text="'yes' when the posting offers relocation help, 'no' when it says none; blank = not stated.")

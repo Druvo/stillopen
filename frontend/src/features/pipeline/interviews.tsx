@@ -9,6 +9,7 @@ import { notify } from "@/lib/toast";
 import { pipelineApi, type Interview, type InterviewList, type InterviewValues } from "./api";
 import { InterviewPrepSection } from "@/features/assist/interview-prep";
 import { MessageDraft } from "@/features/assist/message-draft";
+import { CalendarLinkCard } from "./calendar-link";
 import { jobFromSearch, whenLabel } from "./logic";
 import { SuggestMove, type Suggestion } from "./suggest";
 
@@ -200,6 +201,7 @@ export function Interviews() {
               </Button>
             )}
           </Card>
+          <CalendarLinkCard />
         </aside>
       </div>
     </>

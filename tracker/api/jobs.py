@@ -181,7 +181,7 @@ def list_postings(request, q: str = "", source: str = "", page: int = 1):
                 "id": p.pk, "title": p.title, "company": p.company, "location": p.location, "url": p.url,
                 "source": {"id": p.source_id, "name": p.source.name, "connector": p.source.get_connector_display()},
                 "first_seen": p.first_seen_at.date().isoformat(), "last_seen": p.last_seen_at.date().isoformat(),
-                "credit": adzuna.credit_for(p), "repost": _repost(p), "tracked": p.url in tracked, "job_id": tracked.get(p.url),
+                "credit": adzuna.credit_for(p), "apply_address": scan.clean_apply_address(p.apply_address), "repost": _repost(p), "tracked": p.url in tracked, "job_id": tracked.get(p.url),
             }
             for p in paged
         ],

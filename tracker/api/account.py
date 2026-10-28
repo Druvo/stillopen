@@ -59,7 +59,7 @@ def _profile_json(user) -> dict:
             "target_roles": profile.target_roles, "home_country": initial.get("home_country", ""), "employment_types": profile.employment_types,
             "seniority_levels": profile.seniority_levels, "industries": profile.industries, "languages": profile.languages,
             "notice_period": profile.notice_period, "salary_floor": profile.salary_floor, "deal_breakers": profile.deal_breakers,
-            "about": profile.about, "profile_cv": profile.profile_cv, "scan_digest_enabled": profile.scan_digest_enabled,
+            "about": profile.about, "profile_cv": profile.profile_cv, "scan_digest_enabled": profile.scan_digest_enabled, "draft_ahead_enabled": profile.draft_ahead_enabled,
             "timezone": profile.timezone,
             "email_followups": profile.email_followups, "email_interviews": profile.email_interviews, "email_weekly": profile.email_weekly,
             "weekly_digest_enabled": profile.weekly_digest_enabled,
@@ -74,7 +74,7 @@ def _profile_json(user) -> dict:
         "max_areas": forms.MAX_AREAS,
         "site": {
             "scan_emails_enabled": site.scan_emails_enabled, "followup_emails_enabled": site.followup_emails_enabled,
-            "weekly_emails_enabled": site.weekly_emails_enabled, "weekly_digest_site_enabled": site.weekly_digest_site_enabled, "assistant_enabled": site.mcp_remote_enabled,
+            "weekly_emails_enabled": site.weekly_emails_enabled, "weekly_digest_site_enabled": site.weekly_digest_site_enabled, "draft_ahead_site_enabled": site.draft_ahead_site_enabled, "assistant_enabled": site.mcp_remote_enabled,
             "timezone": settings.TIME_ZONE,
         },
         "account": {

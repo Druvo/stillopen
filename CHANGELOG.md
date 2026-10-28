@@ -7,6 +7,18 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 - Dashboard: a list with stage tabs is the default again (the board is one click away), filters hide behind a Filters button, a "Your search" card shows what drives your matches, and a layout you choose is remembered on your account for every device (view, tab, sort, filters, sidebar, theme, text size, density; set text size and density under Profile > Display). Opening the app is much faster: the job list now costs about 30 database queries instead of one per job (it was 187 for 45 jobs), answers are compressed and revalidated instead of re-sent, the per-source search log is only fetched when opened, and a reload paints from what the tab already had while it refreshes.
 - Your numbers (Insights, and a "This week" card on the dashboard): jobs found, checked and applied to each week, how good your matches are, replies and who has been waiting longest, where your jobs come from, kinds of work and countries, skills that keep coming up in fit checks, prep progress, and how many new postings match your roles on the boards this week. Plain counts from your own search, never predictions or comparisons with others.
+- Startups hiring: a new admin opt-in source reads Hacker News' monthly "Who is hiring?" threads (startups, current and
+  previous month). Each post shows the apply email or link it publishes itself, as a plain link on the job card and
+  All postings; nothing is ever sent for you. YC's job list was checked and not added (its terms forbid scraping).
+- A private calendar link (Interviews screen > "Show these dates in your calendar"): subscribe Google, Apple or Outlook
+  Calendar to `/calendar/<token>.ics` and upcoming interviews, follow-up days and apply-by days appear there. Read-only, dates plus
+  company and role only (never notes, job text, meeting links or contacts), rate-limited per address, "Make a new link" revokes the old one
+  at once, "Turn off" deletes it. Tunable with `STILLOPEN_CALENDAR_FEED_PER_HOUR`, `STILLOPEN_CALENDAR_FEED_BAD_PER_HOUR`,
+  `STILLOPEN_CALENDAR_LINKS_PER_HOUR`.
+- Container image: the `Dockerfile` now has an entrypoint that makes a secret key and migrates on start, a health check and image labels;
+  `.github/workflows/image.yml` builds on pull requests and pushes `ghcr.io/<owner>/<repo>` on `v*` tags. New `docs/INSTALL.md`
+  covers Docker Compose, plain Docker, from source, an Ubuntu service and CapRover/Coolify/Dokploy.
+
 - Optional shared cache: set `REDIS_URL` and `pip install -r requirements-redis.txt` so per-person rate limits
   and the search-source cache are shared across every process/machine instead of split per worker. Unset,
   nothing changes. Fixed two Playwright e2e specs left broken by the earlier quick-add-bar removal (CI on
@@ -25,6 +37,11 @@ supported version, so entries are grouped under **Unreleased** until the first t
   per-currency comparison, never converted) and an RSS feed of the public job board. Nothing is saved; each is
   rate-limited per IP and shares the sign-up form's bot-trap discipline (a honeypot field, a minimum fill time,
   no CAPTCHA).
+- "Draft ahead" (Profile > Job alerts): after a scheduled search, optionally prepares tailored CV drafts for the best
+  new matches (top score band, at most `STILLOPEN_DRAFT_AHEAD_MAX`, default 3, per run) with the person's own AI
+  settings. Drafts go through the normal tailoring and fact check, are never approved, exported or sent for them,
+  and wait on the dashboard ("Drafts waiting for you") to open, approve or discard; the job-alert email mentions them
+  in one line. Off at two levels: `SiteConfig.draft_ahead_site_enabled` and each person's own switch.
 - A weekly digest email (Profile > Job alerts): applications sent, interviews, offers and follow-ups from the
   last 7 days, the same plain counts the Insights page shows. Off at two levels like the scheduled search
   email -- a site admin switches it on (Site configuration > Dashboard), each person opts in separately. Run

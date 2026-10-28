@@ -69,10 +69,23 @@ def description(interview) -> str:
     return "\n".join(lines)
 
 
-def event_lines(interview, now: dt.datetime | None = None) -> list[str]:
-    """The VEVENT (with its two VALARMs) for one interview, unfolded."""
+def event_lines(interview, now: dt.datetime | None = None, *, private: bool = False) -> list[str]:
+    """The VEVENT (with its two VALARMs) for one interview, unfolded. `private=True` is for the subscribable link: the kind, company and
+    role only -- never the notes, the place or a meeting link, because anyone holding that address can read it."""
     start = interview.scheduled_at
     end = start + dt.timedelta(minutes=duration_minutes(interview))
+    if private:
+        app = interview.application
+        title = f"{app.company} - {app.role}" if app.company else app.role
+        lines = [
+            "BEGIN:VEVENT", f"UID:interview-{interview.pk}@stillopen", f"DTSTAMP:{utc_stamp(now or timezone.now())}",
+            f"DTSTART:{utc_stamp(start)}", f"DTEND:{utc_stamp(end)}", f"SUMMARY:{escape_text(interview.get_kind_display() + ': ' + title)}",
+            "STATUS:CONFIRMED", "TRANSP:OPAQUE",
+        ]
+        for trigger, text in ALARMS:
+            lines += ["BEGIN:VALARM", "ACTION:DISPLAY", f"DESCRIPTION:{escape_text(text)}", f"TRIGGER:{trigger}", "END:VALARM"]
+        lines.append("END:VEVENT")
+        return lines
     lines = [
         "BEGIN:VEVENT",
         f"UID:interview-{interview.pk}@stillopen",
@@ -91,10 +104,26 @@ def event_lines(interview, now: dt.datetime | None = None) -> list[str]:
     return lines
 
 
-def calendar(interviews, name: str = "StillOpen interviews", now: dt.datetime | None = None) -> str:
-    """A whole VCALENDAR for the given interviews (possibly none), CRLF-terminated and folded."""
+def day_event_lines(uid: str, text: str, day: dt.date, now: dt.datetime | None = None) -> list[str]:
+    """An all-day VEVENT (a follow-up day, an apply-by day), shown as free time so it never blocks the calendar."""
+    return [
+        "BEGIN:VEVENT", f"UID:{uid}", f"DTSTAMP:{utc_stamp(now or timezone.now())}",
+        f"DTSTART;VALUE=DATE:{day:%Y%m%d}", f"DTEND;VALUE=DATE:{day + dt.timedelta(days=1):%Y%m%d}", "TRANSP:TRANSPARENT",
+        f"SUMMARY:{escape_text(text)}", "END:VEVENT",
+    ]
+
+
+def wrap(name: str, events: list[list[str]], *, subscribed: bool = False) -> str:
+    """A whole VCALENDAR around already-built VEVENT blocks, CRLF-terminated and folded. `subscribed` asks calendar apps to re-read every 6 hours."""
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:{PRODID}", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", f"X-WR-CALNAME:{escape_text(name)}"]
-    for interview in interviews:
-        lines += event_lines(interview, now)
+    if subscribed:
+        lines += ["REFRESH-INTERVAL;VALUE=DURATION:PT6H", "X-PUBLISHED-TTL:PT6H"]
+    for block in events:
+        lines += block
     lines.append("END:VCALENDAR")
     return CRLF.join(fold_line(line) for line in lines) + CRLF
+
+
+def calendar(interviews, name: str = "StillOpen interviews", now: dt.datetime | None = None) -> str:
+    """A whole VCALENDAR for the given interviews (possibly none), CRLF-terminated and folded."""
+    return wrap(name, [event_lines(interview, now) for interview in interviews])

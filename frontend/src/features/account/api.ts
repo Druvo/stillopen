@@ -11,14 +11,14 @@ export type AreaValues = Omit<Area, "id" | "description" | "min_salary"> & { min
 
 export type ProfileValues = {
   target_roles: string; home_country: string; employment_types: string[]; seniority_levels: string[]; industries: string; languages: string; notice_period: string;
-  salary_floor: string; deal_breakers: string; about: string; profile_cv: string; scan_digest_enabled: boolean; timezone: string; weekly_digest_enabled: boolean;
+  salary_floor: string; deal_breakers: string; about: string; profile_cv: string; scan_digest_enabled: boolean; draft_ahead_enabled: boolean; timezone: string; weekly_digest_enabled: boolean;
   email_followups?: boolean; email_interviews?: boolean; email_weekly?: boolean;
 };
 export type ProfileData = {
   profile: ProfileValues;
   choices: { employment_types: Choice[]; seniority_levels: Choice[]; salary_periods: Choice[]; timezones: string[] };
   areas: Area[]; max_areas: number;
-  site: { scan_emails_enabled: boolean; followup_emails_enabled?: boolean; weekly_emails_enabled?: boolean; weekly_digest_site_enabled: boolean; assistant_enabled: boolean; timezone: string };
+  site: { scan_emails_enabled: boolean; followup_emails_enabled?: boolean; weekly_emails_enabled?: boolean; weekly_digest_site_enabled: boolean; draft_ahead_site_enabled: boolean; assistant_enabled: boolean; timezone: string };
   account: {
     username: string; email: string; email_verified?: boolean; is_staff: boolean; can_delete: boolean; google: boolean;
     counts: { jobs: number; cv_versions: number; documents: number; search_areas: number };
