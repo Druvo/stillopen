@@ -5,6 +5,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 **Release flow.** Work is listed under **Unreleased**. To release: move the entries into a new `## X.Y.Z - YYYY-MM-DD` section, update `VERSION`, commit, then
 `git tag vX.Y.Z && git push --tags`. The release workflow publishes that section as the GitHub release notes and the image workflow builds the container
 image. Details, version rules and rollback: [docs/RELEASING.md](docs/RELEASING.md). Until the first tag, `main` is the supported version.
+All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). There are no numbered releases yet; `main` is the
+supported version, so entries are grouped under **Unreleased** until the first tag.
+- Interview and company depth: a hiring-process timeline per job (stages in order, outcome incl. no-show, "Round 2 of 4, passed", only *suggests* a status), interviewers linked to your contacts, "This came up" ticks with a tally on prep questions, a personal question bank (tags, search, links to jobs/stages) and company pages (jobs, contacts, interviews, offers, notes, https links kept as text, watch star).
 
 ## [Unreleased]
 

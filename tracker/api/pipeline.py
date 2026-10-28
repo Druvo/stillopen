@@ -11,7 +11,7 @@ from ninja.errors import HttpError
 
 from ..forms import ContactForm, InterviewForm, OfferForm, ReferralForm
 from ..models import Application, Contact, Interview, Offer, Referral
-from ..services import board, gcal, googleconnect, pipeline
+from ..services import board, gcal, googleconnect, interviewdepth, pipeline
 from .common import owned, validate_form
 
 router = Router()
@@ -58,6 +58,8 @@ def _interview(item: Interview, now) -> dict:
         "kind": item.kind, "kind_label": item.get_kind_display(), "where": item.where, "notes": item.notes,
         "outcome": item.outcome, "outcome_label": item.get_outcome_display(),
         "upcoming": item.outcome == "pending" and item.scheduled_at >= now,
+        "custom_label": item.custom_label, "stage_name": item.stage_name,
+        "interviewers": [{"id": c.pk, "name": c.name} for c in item.contacts.all()],
     }
 
 
@@ -65,6 +67,7 @@ def _interview_current(item: Interview) -> dict:
     return {
         "application": item.application_id, "scheduled_at": timezone.localtime(item.scheduled_at).strftime(LOCAL_FORMAT),
         "kind": item.kind, "where": item.where, "notes": item.notes,
+        "custom_label": item.custom_label, "contacts": [c.pk for c in item.contacts.all()],
     }
 
 
@@ -75,13 +78,14 @@ def _google(request) -> dict:
 
 @router.get("/interviews", summary="The person's interviews, coming up and past")
 def list_interviews(request):
-    mine = list(Interview.objects.filter(owner=request.user).select_related("application"))
+    mine = list(Interview.objects.filter(owner=request.user).select_related("application").prefetch_related("contacts"))
     now = timezone.now()
     rows = [_interview(i, now) for i in mine]
     return {
         "upcoming": [r for r in rows if r["upcoming"]],
         "past": [r for r in reversed(rows) if not r["upcoming"]],
         "jobs": _jobs(request), "kinds": _choices(Interview.KINDS), "outcomes": _choices(Interview.OUTCOMES),
+        "contacts": [{"id": c.pk, "label": c.name + (f" ({c.company})" if c.company else "")} for c in Contact.objects.filter(owner=request.user)],
         "google": _google(request),
     }
 
@@ -113,7 +117,10 @@ def interview_outcome(request, interview_id: int, payload: OutcomeIn):
     item = owned(Interview.objects.select_related("application"), request, interview_id)
     if not pipeline.set_interview_outcome(item, payload.outcome):
         raise HttpError(400, "Pick one of the outcomes in the list.")
-    return {"ok": True, "outcome": item.outcome, "outcome_label": item.get_outcome_display(), "calendar_note": gcal.push(item)}
+    return {
+        "ok": True, "outcome": item.outcome, "outcome_label": item.get_outcome_display(), "calendar_note": gcal.push(item),
+        "suggest_status": interviewdepth.suggest_for_outcome(item, item.outcome),
+    }
 
 
 @router.delete("/interviews/{interview_id}", summary="Delete an interview")
@@ -137,6 +144,7 @@ def _contact(item: Contact) -> dict:
         "id": item.pk, "name": item.name, "company": item.company, "title": item.title, "email": item.email, "link": item.link,
         "notes": item.notes, "last_contacted": item.last_contacted.isoformat() if item.last_contacted else "",
         "referrals": [_referral(r) for r in item.referrals.all()],
+        "interviewed_you_for": interviewdepth.interviewed_you_for(item),
     }
 
 

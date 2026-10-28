@@ -13,6 +13,7 @@ import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import type { Job, StatusInfo } from "@/lib/types";
 import { applyHref, cn } from "@/lib/utils";
+import { companyPath } from "@/features/pipeline/depth-api";
 import { dashboardApi } from "./api";
 import { statusLabel } from "./jobmgmt";
 import { appliedParts, cvBadgeText, deadlineText, FIT_BADGE_TEXT, livingBadge, paperlessDocumentUrl, repostTitle, SKILL_MATCH_TITLE, shortDate, truncate } from "./logic";
@@ -203,6 +204,7 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
     if (extras.prepEnabled && job.gaps.length > 0 && job.has_description) {
       list.push({ key: "prep", label: "Prepare for this job", onSelect: () => void run("Preparing your plan…", async () => `/prep/${(await prepApi.create(job.id)).id}`) });
     }
+    list.push({ key: "process", label: "Hiring process", to: `/jobs/${job.id}/process` });
     list.push({ key: "edit", label: "Edit details", to: `/jobs/${job.id}/edit` });
     if (job.url) list.push({ key: "view", label: "View the posting", href: job.url });
     if (extras.notForMe) list.push({ key: "notforme", label: "Not for me", onSelect: () => extras.notForMe?.(job) });
@@ -260,7 +262,9 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
           <div className="min-w-0 flex-1">
             <h3 className="break-words font-semibold text-gray-800 dark:text-white/90">{job.role}</h3>
             <p className="break-words text-muted">
-              {job.company}
+              <Link to={companyPath(job.company)} className="hover:underline">
+                {job.company}
+              </Link>
               {job.location && <span> · {job.location}</span>}
             </p>
             <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-theme-xs text-muted">

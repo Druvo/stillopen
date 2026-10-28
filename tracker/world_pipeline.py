@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from tracker.models import Application, Contact, Interview, Offer, Referral
+from tracker.models import Application, BankQuestion, Contact, Interview, Offer, Referral
 
 
 def world(owner, ids):
@@ -12,10 +12,15 @@ def world(owner, ids):
     contact = Contact.objects.create(owner=owner, name=f"{owner.username} friend", company="Acme")
     referral = Referral.objects.create(owner=owner, contact=contact, application=app)
     offer = Offer.objects.create(owner=owner, application=app, base=100000, currency="USD")
-    return {"interview_id": interview.pk, "contact_id": contact.pk, "referral_id": referral.pk, "offer_id": offer.pk}
+    interview.contacts.add(contact)
+    bank = BankQuestion.objects.create(owner=owner, question="Tell me about yourself", tags=["intro"])
+    return {"interview_id": interview.pk, "contact_id": contact.pk, "referral_id": referral.pk, "offer_id": offer.pk, "bank_id": bank.pk}
 
 
 BODIES = {
+    ("POST", "/api/v1/jobs/{job_id}/came-up"): {"key": "behavioural-1", "value": True},
+    ("POST", "/api/v1/prep/questions/{question_id}/came-up"): {"value": True},
+    ("PATCH", "/api/v1/bank/{bank_id}"): {"answer": "changed"},
     ("POST", "/api/v1/interviews/{interview_id}/outcome"): {"outcome": "done"},
     ("POST", "/api/v1/referrals/{referral_id}/status"): {"status": "asked"},
     ("POST", "/api/v1/offers/{offer_id}/status"): {"status": "accepted"},

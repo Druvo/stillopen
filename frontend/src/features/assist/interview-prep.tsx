@@ -5,6 +5,7 @@ import { useState } from "react";
 import { TextAreaField } from "@/components/form";
 import { Badge, Button, Card } from "@/components/ui";
 import { errorText } from "@/lib/api";
+import { CameUpTally, CameUpTick, SaveToBank } from "@/features/pipeline/came-up";
 import { assistApi, type Feedback, type PrepQuestion } from "./api";
 import { canAsk, prepText, questionText, starMissing } from "./logic";
 import { AiNotice, CopyButton, NoKeyLine, ProblemLine } from "./ui";
@@ -89,6 +90,10 @@ function QuestionCard({ jobId, q, canPractise }: { jobId: number; q: PrepQuestio
       {q.flags.length > 0 && (
         <p className="mt-1 text-xs text-warn">The job mentions {q.flags.join(", ")}, which your material does not. Only say it if it is true.</p>
       )}
+      <CameUpTick jobId={jobId} qkey={q.id} />
+      <div className="mt-2">
+        <SaveToBank question={q.question} jobId={jobId} />
+      </div>
       {canPractise && <Practise jobId={jobId} question={q.question} />}
     </li>
   );
@@ -129,6 +134,7 @@ export function InterviewPrepSection({ jobId }: { jobId: number }) {
               <CopyButton text={prepText(prep)} label="Copy all questions" small={false} />
               <Badge>Made {prep.generated_at.slice(0, 10)}</Badge>
             </div>
+            <CameUpTally jobId={jobId} />
             {prep.groups
               .filter((g) => g.questions.length > 0)
               .map((g) => (

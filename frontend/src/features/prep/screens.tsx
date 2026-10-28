@@ -1,5 +1,6 @@
 "use client";
 
+import { CameUpTally, CameUpTick } from "@/features/pipeline/came-up";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader, Progress, SourceLinks } from "@/components/ui";
@@ -357,6 +358,7 @@ export function PrepToday({ id }: { id: number }) {
       )}
       {message && <div className="mb-3"><Notice tone="error">{message}</Notice></div>}
 
+      {data.finished && <CameUpTally planId={data.plan.id} />}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -399,6 +401,7 @@ export function PrepToday({ id }: { id: number }) {
                   <p className="text-sm">
                     Read more: <SourceLinks sources={row.sources ?? []} />
                   </p>
+                  <CameUpTick planId={data.plan.id} questionId={row.id} />
                 </>
               )}
             </fieldset>

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
+import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import { pipelineApi, type Interview, type InterviewList, type InterviewValues } from "./api";
 import { InterviewPrepSection } from "@/features/assist/interview-prep";
@@ -25,8 +26,10 @@ function InterviewForm({ data, item, defaultJob, onDone, onSuggest }: { data: In
     kind: item?.kind ?? "video",
     where: item?.where ?? "",
     notes: item?.notes ?? "",
+    custom_label: item?.custom_label ?? "",
+    contacts: item?.interviewers.map((c) => c.id) ?? [],
   });
-  const set = (name: keyof InterviewValues) => (e: { target: { value: string } }) => setV({ ...v, [name]: e.target.value });
+  const set = (name: Exclude<keyof InterviewValues, "contacts">) => (e: { target: { value: string } }) => setV({ ...v, [name]: e.target.value });
   const submit = form.handle(async () => {
     const saved = item ? await pipelineApi.editInterview(item.id, v) : await pipelineApi.addInterview(v);
     if (saved.calendar_note) notify(saved.calendar_note, "error");
@@ -54,6 +57,24 @@ function InterviewForm({ data, item, defaultJob, onDone, onSuggest }: { data: In
           </option>
         ))}
       </SelectField>
+      {v.kind === "other" && (
+        <TextField label="Name of this stage" value={v.custom_label} onChange={set("custom_label")} errors={form.fields.custom_label} maxLength={80} hint="For example: Meet the CEO." />
+      )}
+      {data.contacts.length > 0 && (
+        <fieldset className="mb-3">
+          <legend className="mb-1 text-sm font-medium">Who interviewed you</legend>
+          {data.contacts.map((c) => (
+            <label key={c.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={v.contacts.includes(c.id)}
+                onChange={() => setV({ ...v, contacts: v.contacts.includes(c.id) ? v.contacts.filter((x) => x !== c.id) : [...v.contacts, c.id] })}
+              />{" "}
+              {c.label}
+            </label>
+          ))}
+        </fieldset>
+      )}
       <TextField label="Where or link" value={v.where} onChange={set("where")} errors={form.fields.where} maxLength={300} />
       <TextAreaField label="Notes" rows={3} value={v.notes} onChange={set("notes")} errors={form.fields.notes} hint="Who you will meet, what to prepare, questions to ask." maxLength={4000} />
       <FormError message={form.error} />
@@ -82,9 +103,10 @@ function Row({ item, data, onEdit, upcoming = false }: { item: Interview; data: 
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="font-semibold">
-            {item.kind_label} · {item.job.company} - {item.job.role}
+            {item.stage_name} · {item.job.company} - {item.job.role}
           </h3>
           <p className="text-sm text-muted">{whenLabel(item.scheduled_local)}</p>
+          {item.interviewers.length > 0 && <p className="text-sm">With {item.interviewers.map((c) => c.name).join(", ")}</p>}
           {item.where && <p className="text-sm">{item.where}</p>}
           {item.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{item.notes}</p>}
         </div>
@@ -111,6 +133,9 @@ function Row({ item, data, onEdit, upcoming = false }: { item: Interview; data: 
             Add to calendar
           </a>
         )}
+        <Link to={`/jobs/${item.job.id}/process`} className={buttonClass("outline", true)}>
+          Hiring process
+        </Link>
         <Button variant="outline" small onClick={onEdit}>
           Edit
         </Button>
