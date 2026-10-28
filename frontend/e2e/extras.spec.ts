@@ -268,7 +268,7 @@ test("Contacts: draft a referral request, edit it and copy it; it is never sent"
     route.request().method() === "GET"
       ? route.fulfill({
           json: {
-            contacts: [{ id: 5, name: "Jamal Khan", company: "Gamma", title: "Engineer", email: "j@gamma.example", link: "", notes: "", last_contacted: "", referrals: [] }],
+            contacts: [{ id: 5, name: "Jamal Khan", company: "Gamma", title: "Engineer", email: "j@gamma.example", link: "", notes: "", last_contacted: "", referrals: [], interviewed_you_for: [] }],
             jobs: [{ id: 1, label: "Gamma - Platform Engineer" }], referral_statuses: [{ value: "thinking", label: "Thinking of asking" }],
           },
         })
