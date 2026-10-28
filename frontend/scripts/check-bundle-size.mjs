@@ -10,7 +10,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 
-// Set just above the numbers of the current build (167.7 first load, 381.7 total, 67.3 largest). Why these:
+// Total raised 430 -> 480 for the second feature round (refine chat, Google connection, more CV looks, drafts, startups, calendar link,
+// data import): each is its own lazy chunk, so the first-load budget below is unchanged. Set just above the numbers of the current build (167.7 first load, 381.7 total, 67.3 largest). Why these:
 //  - The first load is what a person waits for. It went from 176.4 to 167.7 kB although the dashboard gained the tabs, filter panel,
 //    action menu, preferences and the persisted query cache, because every other screen and the board (dnd-kit) are now their own chunks.
 //    About 142 kB of it is Next.js and React themselves, which nothing in this app can shrink.
@@ -20,7 +21,7 @@ import { gzipSync } from "node:zlib";
 //    statistics screens, each its own lazily loaded chunk: a person only downloads the screens they open. The budget is 430 so the
 //    next screen is a deliberate decision, while the first-load budget (168 kB now, limit 172) is what keeps the app quick to open.
 const FIRST_LOAD_BUDGET_KB = Number(process.env.BUNDLE_FIRST_LOAD_KB || 172);
-const TOTAL_BUDGET_KB = Number(process.env.BUNDLE_TOTAL_KB || 430);
+const TOTAL_BUDGET_KB = Number(process.env.BUNDLE_TOTAL_KB || 480);
 const FILE_BUDGET_KB = Number(process.env.BUNDLE_FILE_KB || 70);
 
 function scripts(dir) {
