@@ -275,6 +275,9 @@ const CV_TEMPLATES: { value: string; label: string }[] = [
   { value: "classic", label: "Classic" },
   { value: "modern", label: "Modern" },
   { value: "compact", label: "Compact" },
+  { value: "serif", label: "Serif" },
+  { value: "forest", label: "Forest" },
+  { value: "slate", label: "Slate" },
 ];
 
 export function CvDetail({ id }: { id: number }) {

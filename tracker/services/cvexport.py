@@ -15,6 +15,9 @@ TEMPLATES = {
     "classic": {"label": "Classic", "font": "Calibri", "heading_font": "Calibri", "accent": "111111", "body_pt": 10.5, "print_pt": 11, "line_height": 1.45, "upper_h2": True},
     "modern": {"label": "Modern", "font": "Calibri", "heading_font": "Georgia", "accent": "2A5DB0", "body_pt": 10.5, "print_pt": 11, "line_height": 1.45, "upper_h2": False},
     "compact": {"label": "Compact", "font": "Arial", "heading_font": "Arial", "accent": "111111", "body_pt": 9.5, "print_pt": 9.5, "line_height": 1.3, "upper_h2": True},
+    "serif": {"label": "Serif", "font": "Times New Roman", "heading_font": "Times New Roman", "accent": "111111", "body_pt": 11, "print_pt": 11.5, "line_height": 1.4, "upper_h2": True},
+    "forest": {"label": "Forest", "font": "Verdana", "heading_font": "Georgia", "accent": "1F5A44", "body_pt": 10, "print_pt": 10, "line_height": 1.5, "upper_h2": False},
+    "slate": {"label": "Slate", "font": "Arial", "heading_font": "Verdana", "accent": "3B4A63", "body_pt": 10.5, "print_pt": 10.5, "line_height": 1.4, "upper_h2": True},
 }
 DEFAULT_TEMPLATE = "classic"
 

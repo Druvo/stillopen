@@ -9,6 +9,7 @@ import { Link } from "@/lib/router";
 import { usePreferences } from "@/lib/use-preferences";
 import type { Density, TextSize, Theme } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { DataImportCard } from "./data-import";
 import { accountApi, type Area, type AreaValues, type ProfileData, type ProfileValues } from "./api";
 import { addRole } from "@/features/assist/logic";
 import { SuggestRoles } from "./suggest-roles";
@@ -429,6 +430,7 @@ function DataCard({ data }: { data: ProfileData }) {
       <a className={buttonClass("outline")} href={account.classic.export}>
         Export my data (JSON)
       </a>
+      <DataImportCard />
       {account.can_delete ? (
         <form onSubmit={remove} className="mt-4 max-w-sm">
           <TextField

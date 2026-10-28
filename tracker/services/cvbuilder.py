@@ -12,6 +12,10 @@ from tracker.services.cvversions import CVError, source_texts
 from tracker.services.factcheck import fact_check
 
 MAX_ROLES, MAX_BULLETS, MAX_EDU, MAX_GROUPS, MAX_PROJECTS = 4, 5, 3, 6, 3
+MAX_PUBLICATIONS, MAX_REFERENCES = 8, 3
+CITATION_STYLES = ("plain", "apa")  # how a publication line reads; the default is the plain one
+REFERENCE_MODES = ("off", "on_request", "listed")  # most employers only want "available on request", so "off" and that line come first
+_YEAR = re.compile(r"^(19|20)\d{2}$")
 _EMAIL = re.compile(r"^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$")
 _DATE = re.compile(rf"^{ats._D}$", re.I)
 
@@ -22,6 +26,11 @@ def _s(value, limit: int) -> str:
         return ""
     text = re.sub(r"\s+", " ", value.replace("\x00", "")).strip()
     return re.sub(r"^[#>|*\-•\s]+", "", text)[:limit].strip()
+
+
+def _plain(value, limit: int) -> str:
+    """`_s` plus no emphasis marks: publication and reference lines are plain text (no bold, italic or code) so every parser reads them the same."""
+    return re.sub(r"[*`]+", "", _s(value, limit * 2))[:limit].strip()
 
 
 def _list(value) -> list:
@@ -54,6 +63,8 @@ def clean_answers(raw) -> dict:
         "links": [x for x in (_s(v, 120) for v in _list(raw.get("links"))[:3]) if x],
         "summary": _s(raw.get("summary"), 450), "roles": [], "education": [], "skills": [], "projects": [],
         "languages": _s(raw.get("languages"), 200), "certificates": _s(raw.get("certificates"), 300),
+        "publications": [], "citation_style": raw.get("citation_style") if raw.get("citation_style") in CITATION_STYLES else "plain",
+        "references_mode": raw.get("references_mode") if raw.get("references_mode") in REFERENCE_MODES else "off", "references": [],
     }
     for i, role in enumerate(_list(raw.get("roles"))[:MAX_ROLES], start=1):
         if not isinstance(role, dict):
@@ -88,9 +99,38 @@ def clean_answers(raw) -> dict:
     for project in _list(raw.get("projects"))[:MAX_PROJECTS]:
         if isinstance(project, dict) and _s(project.get("name"), 80):
             answers["projects"].append({"name": _s(project.get("name"), 80), "description": _s(project.get("description"), 300), "link": _s(project.get("link"), 120)})
+    for i, pub in enumerate(_list(raw.get("publications"))[:MAX_PUBLICATIONS], start=1):
+        if not isinstance(pub, dict) or not _plain(pub.get("title"), 200):
+            continue
+        year = _s(pub.get("year"), 10)
+        if year and not _YEAR.match(year):
+            raise CVError(f"Write the year for publication {i} as four digits, like 2023. You wrote \"{year}\".")
+        answers["publications"].append({"title": _plain(pub.get("title"), 200), "venue": _plain(pub.get("venue"), 120), "year": year, "link": _plain(pub.get("link"), 120)})
+    if answers["references_mode"] == "listed":
+        for i, ref in enumerate(_list(raw.get("references"))[:MAX_REFERENCES], start=1):
+            if not isinstance(ref, dict):
+                continue
+            name, role, contact = _plain(ref.get("name"), 80), _plain(ref.get("role"), 120), _plain(ref.get("contact"), 120)
+            if not (name or role or contact):
+                continue
+            if not name:
+                raise CVError(f"Reference {i} needs a name.")
+            answers["references"].append({"name": name, "role": role, "contact": contact})
+        if not answers["references"]:
+            answers["references_mode"] = "on_request"  # nobody listed: fall back to the one-line version rather than an empty section
     if not (answers["roles"] or answers["education"] or answers["projects"]):
         raise CVError("Add at least one role, a school or a project, so the CV has something to say.")
     return answers
+
+
+def publication_line(p: dict, style: str) -> str:
+    """One plain line per publication. "plain": Title - Venue, 2023 - link. "apa": (2023). Title. Venue. link -- no bold or italic either way."""
+    if style == "apa":
+        head = f"({p['year']}). " if p["year"] else ""
+        parts = [head + p["title"].rstrip(".") + "."] + ([p["venue"].rstrip(".") + "."] if p["venue"] else []) + ([p["link"]] if p["link"] else [])
+        return " ".join(parts)
+    tail = ", ".join(x for x in (p["venue"], p["year"]) if x)
+    return " - ".join(x for x in (p["title"], tail, p["link"]) if x)
 
 
 def to_markdown(a: dict) -> str:
@@ -127,6 +167,15 @@ def to_markdown(a: dict) -> str:
         out += ["", "## Certifications", a["certificates"]]
     if a["languages"]:
         out += ["", "## Languages", a["languages"]]
+    if a.get("publications"):
+        out += ["", "## Publications"]
+        out += [publication_line(p, a.get("citation_style", "plain")) for p in a["publications"]]
+    mode = a.get("references_mode", "off")
+    if mode == "on_request":
+        out += ["", "## References", "References available on request."]
+    elif mode == "listed" and a.get("references"):
+        out += ["", "## References"]
+        out += [" - ".join(x for x in (r["name"], r["role"], r["contact"]) if x) for r in a["references"]]
     return "\n".join(out).strip() + "\n"
 
 

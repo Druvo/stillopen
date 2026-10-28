@@ -121,7 +121,26 @@ describe("parseDraft", () => {
 
 describe("stepProgress", () => {
   it("says where the person is", () => {
-    expect(stepProgress(0)).toEqual({ label: "Step 1 of 7: Contact", percent: 14 });
-    expect(stepProgress(6).percent).toBe(100);
+    expect(stepProgress(0)).toEqual({ label: "Step 1 of 8: Contact", percent: 13 });
+    expect(stepProgress(7).percent).toBe(100);
+  });
+});
+
+describe("publications and references", () => {
+  it("checks the year and listed reference names", () => {
+    const a = emptyAnswers();
+    a.publications = [{ title: "T", venue: "", year: "soon", link: "" }];
+    expect(validateStep(6, a)["publications.0.year"]).toBeTruthy();
+    a.publications[0].year = "2023";
+    a.references_mode = "listed";
+    a.references = [{ name: "", role: "Boss", contact: "" }];
+    expect(validateStep(6, a)["references.0.name"]).toBeTruthy();
+  });
+  it("sends no references unless they are listed", () => {
+    const a = emptyAnswers();
+    a.references = [{ name: "Bo", role: "", contact: "" }];
+    expect(toApiAnswers(a).references).toEqual([]);
+    a.references_mode = "listed";
+    expect(toApiAnswers(a).references).toHaveLength(1);
   });
 });

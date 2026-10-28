@@ -7,7 +7,7 @@ import { CheckField, FormError, TextAreaField, TextField, useSubmit } from "@/co
 import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import { cvApi } from "./api";
-import { DRAFT_KEY, emptyAnswers, emptyRole, MAX_ROLES, parseDraft, STEPS, stepProgress, toApiAnswers, validateStep, type BuilderAnswers } from "./quality";
+import { DRAFT_KEY, emptyAnswers, emptyPublication, emptyReference, emptyRole, MAX_PUBLICATIONS, MAX_REFERENCES, MAX_ROLES, parseDraft, STEPS, stepProgress, toApiAnswers, validateStep, type BuilderAnswers } from "./quality";
 
 // The answers live in this tab's sessionStorage until the CV is built, never on the server. Storage can be blocked, so every use is guarded.
 function readDraft() {
@@ -225,6 +225,56 @@ export function CvBuilder() {
               {a.projects.length < 3 && (
                 <Button variant="outline" onClick={() => setA({ ...a, projects: [...a.projects, { name: "", description: "", link: "" }] })}>
                   Add another project
+                </Button>
+              )}
+            </>
+          )}
+          {step === 6 && (
+            <>
+              <p className="mb-3 text-sm text-muted">Both are optional. Publications are papers, articles or talks, one plain line each.</p>
+              {a.publications.map((p, i) => (
+                <fieldset key={i} className="mb-4 rounded-lg border border-border p-3">
+                  <legend className="px-1 text-sm font-medium">Publication {i + 1}</legend>
+                  <TextField label="Title" value={p.title} maxLength={200} onChange={(e) => setA({ ...a, publications: set(a.publications, i, { title: e.target.value }) })} />
+                  <div className="grid gap-x-3 sm:grid-cols-2">
+                    <TextField label="Journal, publisher or event (optional)" value={p.venue} maxLength={120} onChange={(e) => setA({ ...a, publications: set(a.publications, i, { venue: e.target.value }) })} />
+                    <TextField label="Year (optional)" placeholder="2023" value={p.year} maxLength={10} errors={err(`publications.${i}.year`)} onChange={(e) => setA({ ...a, publications: set(a.publications, i, { year: e.target.value }) })} />
+                  </div>
+                  <TextField label="Link (optional)" value={p.link} maxLength={120} onChange={(e) => setA({ ...a, publications: set(a.publications, i, { link: e.target.value }) })} />
+                </fieldset>
+              ))}
+              {a.publications.length < MAX_PUBLICATIONS && (
+                <Button variant="outline" onClick={() => setA({ ...a, publications: [...a.publications, emptyPublication()] })}>
+                  Add another publication
+                </Button>
+              )}
+              <div className="mt-3">
+                <label htmlFor="citation-style" className="mb-1 block text-sm font-medium">How publications are written</label>
+                <select id="citation-style" value={a.citation_style} onChange={(e) => setA({ ...a, citation_style: e.target.value as BuilderAnswers["citation_style"] })} className="rounded-lg border border-border bg-surface px-2 py-1 text-sm">
+                  <option value="plain">Plain: Title - Journal, 2023</option>
+                  <option value="apa">APA-like: (2023). Title. Journal.</option>
+                </select>
+              </div>
+              <h3 className="mb-1 mt-5 text-sm font-semibold">References</h3>
+              <p className="mb-2 text-sm text-muted">Most employers only ask for references later, so the usual choice is one line saying they are available on request.</p>
+              <label htmlFor="references-mode" className="mb-1 block text-sm font-medium">References on your CV</label>
+              <select id="references-mode" value={a.references_mode} onChange={(e) => setA({ ...a, references_mode: e.target.value as BuilderAnswers["references_mode"] })} className="mb-3 rounded-lg border border-border bg-surface px-2 py-1 text-sm">
+                <option value="off">Leave them out</option>
+                <option value="on_request">Add the line References available on request</option>
+                <option value="listed">List up to {MAX_REFERENCES} people</option>
+              </select>
+              {a.references_mode === "listed" &&
+                a.references.map((r, i) => (
+                  <fieldset key={i} className="mb-4 rounded-lg border border-border p-3">
+                    <legend className="px-1 text-sm font-medium">Reference {i + 1}</legend>
+                    <TextField label="Name" value={r.name} maxLength={80} errors={err(`references.${i}.name`)} onChange={(e) => setA({ ...a, references: set(a.references, i, { name: e.target.value }) })} />
+                    <TextField label="Role and company (optional)" value={r.role} maxLength={120} onChange={(e) => setA({ ...a, references: set(a.references, i, { role: e.target.value }) })} />
+                    <TextField label="Email or phone (optional)" value={r.contact} maxLength={120} onChange={(e) => setA({ ...a, references: set(a.references, i, { contact: e.target.value }) })} />
+                  </fieldset>
+                ))}
+              {a.references_mode === "listed" && a.references.length < MAX_REFERENCES && (
+                <Button variant="outline" onClick={() => setA({ ...a, references: [...a.references, emptyReference()] })}>
+                  Add another reference
                 </Button>
               )}
             </>

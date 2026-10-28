@@ -45,7 +45,7 @@ test("the CV list shows a readiness number per version and offers the builder", 
 test("the builder checks each step, keeps answers when the page reloads, and builds a CV that opens with its ATS check", async ({ page }) => {
   await signIn(page, "frank", "/app/cv/new");
   await expect(page.getByRole("heading", { name: "Build your CV" })).toBeVisible();
-  await expect(page.getByText("Step 1 of 7: Contact")).toBeVisible();
+  await expect(page.getByText("Step 1 of 8: Contact")).toBeVisible();
 
   // plain validation first
   await page.getByRole("button", { name: "Next" }).click();
@@ -56,12 +56,12 @@ test("the builder checks each step, keeps answers when the page reloads, and bui
   await page.getByLabel("Email", { exact: true }).fill("frank@example.com");
   await page.getByLabel("City and country (optional)").fill("Penang, Malaysia");
   await page.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByText("Step 2 of 7: Summary")).toBeVisible();
+  await expect(page.getByText("Step 2 of 8: Summary")).toBeVisible();
   await page.getByLabel(/One or two sentences about you/).fill("Support engineer who likes fixing things.");
 
   // the answers are kept in this tab: a reload comes back to the same step with the same words
   await page.reload();
-  await expect(page.getByText("Step 2 of 7: Summary")).toBeVisible();
+  await expect(page.getByText("Step 2 of 8: Summary")).toBeVisible();
   await expect(page.getByLabel(/One or two sentences about you/)).toHaveValue("Support engineer who likes fixing things.");
   await page.getByRole("button", { name: "Next" }).click();
 
@@ -78,13 +78,14 @@ test("the builder checks each step, keeps answers when the page reloads, and bui
   await page.getByLabel("What you did, point 1").fill("Answered 40 tickets a day.");
   await page.getByRole("button", { name: "Next" }).click();
 
-  await expect(page.getByText("Step 4 of 7: Education")).toBeVisible();
+  await expect(page.getByText("Step 4 of 8: Education")).toBeVisible();
   await page.getByLabel("School or university").fill("State University");
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByLabel("Skills in Tools").fill("Zendesk, SQL, Excel");
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "Next" }).click(); // projects are optional
-  await expect(page.getByText("Step 7 of 7: Languages and certificates")).toBeVisible();
+  await page.getByRole("button", { name: "Next" }).click(); // so are publications and references
+  await expect(page.getByText("Step 8 of 8: Languages and certificates")).toBeVisible();
   await expect(page.getByText("Add your free Google AI Studio key in AI settings to use this.")).toBeVisible();
 
   await page.getByRole("button", { name: "Build my CV" }).click();
@@ -93,6 +94,6 @@ test("the builder checks each step, keeps answers when the page reloads, and bui
   await expect(page.getByText("Frank Builder").first()).toBeVisible();
   // the draft is gone once the CV is built
   await page.goto("/app/cv/new");
-  await expect(page.getByText("Step 1 of 7: Contact")).toBeVisible();
+  await expect(page.getByText("Step 1 of 8: Contact")).toBeVisible();
   await expect(page.getByLabel("Your name")).toHaveValue("");
 });
