@@ -99,6 +99,7 @@ export type ScanLog = ScanStatus & { entries: ScanEntry[] };
 export type Followup = { id: number; company: string; role: string; follow_up_date: string; applied_date: string | null };
 
 /** One line of the dashboard's "Coming up" card: an interview, a job's apply-by date, or an offer's reply-by date. */
+export type WorthItem = { kind: "interview" | "offer" | "followup" | "draft" | "quiet"; job_id: number; label: string; reason: string; version_id?: number };
 export type ComingUpItem = { kind: "interview" | "deadline" | "offer"; date: string; when: string; label: string; company: string; role: string; job_id: number };
 export type DraftWaiting = { id: number; job_id: number; company: string; role: string; flagged_count: number; created_at: string | null };
 
@@ -131,6 +132,8 @@ export type Dashboard = {
   upcoming_interviews: UpcomingInterview[];
   /** The next 14 days, soonest first: interviews, apply-by dates and offer reply-by dates together. */
   coming_up?: ComingUpItem[];
+  /** At most 6 things to look at next, in a fixed order (see services/dashviz.py). */
+  worth_a_look?: WorthItem[];
   drafts?: DraftWaiting[];
   next_step: NextStep | null;
   can_scan: boolean;
@@ -181,6 +184,13 @@ export type Preferences = {
   density: Density;
   /** How the next cover letter should sound. */
   cover_tone: CoverTone;
+  /** "Worth a look next": days without a reply before an application counts as quiet (3 to 30). */
+  quiet_days: number;
+  /** Applications a day / over 7 days the person wants to send. 0 is off. */
+  goal_daily: number;
+  goal_weekly: number;
+  /** The funnel's period tab on Insights. */
+  insights_period: "30" | "90" | "all";
 };
 
 /** Any subset; `filters` is replaced as a whole. */

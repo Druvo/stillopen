@@ -11,7 +11,7 @@ test("alice's Insights shows every section of Your numbers with her seeded numbe
   const stats = await page.evaluate(async () => await (await fetch("/api/v1/stats")).json());
   const hasPrep = stats.prep !== null;
   const hasCalibration = Boolean(stats.calibration); // the "Match and replies" section only appears once there is something to compare
-  const titles = ["This week", "Last 8 weeks", "Match quality", ...(hasCalibration ? ["Match and replies"] : []), "Waiting for a reply", "Where jobs come from", "Kinds of work and countries", "Skills that keep coming up", ...(hasPrep ? ["Prep"] : []), "Roles on the boards"];
+  const titles = ["This week", "From sent to offer", "Last 8 weeks", "Your year", "Goals and streak", "Calendar", "Match quality", ...(hasCalibration ? ["Match and replies"] : []), "Waiting for a reply", "Where jobs come from", "Kinds of work and countries", "Skills that keep coming up", ...(hasPrep ? ["Prep"] : []), "Roles on the boards"];
   await expect(page.locator("#your-numbers h3")).toHaveText(titles);
 
   const week = page.locator("section", { has: page.getByRole("heading", { name: "This week" }) });

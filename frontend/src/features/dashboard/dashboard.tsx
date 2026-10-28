@@ -26,13 +26,15 @@ import { allSelected, archivedText, movedText, notForMeStatus, pruneSelection, r
 import { ArchivedSection } from "./archived";
 import { SelectionBar, UndoBar } from "./selection";
 import { comingUpItems } from "./coming-up";
-import { AiKeyPrompt, AsideCard, ComingUpBody, DraftsBody, FollowupsBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, UpdateNotice, YourSearchBody } from "./panels";
+import { AiKeyPrompt, AsideCard, ComingUpBody, DraftsBody, FollowupsBody, WorthBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, UpdateNotice, YourSearchBody } from "./panels";
 import { StageTabs, TAB_PANEL_ID, tabId, Toolbar } from "./toolbar";
 import { useRun } from "./use-run";
 import { TimezonePrompt } from "./timezone-prompt";
 
 // The board (and the drag-and-drop library it needs) is fetched only when someone asks for the board view.
 const Board = lazy(() => import("./board"));
+// The goals card draws with the stats chunk, which is fetched only for a person who set a goal.
+const GoalsBody = lazy(() => import("@/features/stats/viz").then((m) => ({ default: m.GoalsBody })));
 
 const KEY = ["dashboard"] as const;
 const PAGE = 50; // the list shows this many at first, then "Show more"
@@ -388,6 +390,18 @@ export function Dashboard() {
           {data.next_step && (
             <AsideCard title="Your next step" defaultOpen accent>
               <NextStepBody step={data.next_step} onCard={goToCard} />
+            </AsideCard>
+          )}
+          {(data.worth_a_look ?? []).length > 0 && (
+            <AsideCard title="Worth a look next" defaultOpen>
+              <WorthBody items={data.worth_a_look ?? []} />
+            </AsideCard>
+          )}
+          {stats.data?.goals && (
+            <AsideCard title="Today" defaultOpen>
+              <Suspense fallback={<p className="text-theme-sm text-muted">Loading…</p>}>
+                <GoalsBody goals={stats.data.goals} />
+              </Suspense>
             </AsideCard>
           )}
           {hasFollowups && (

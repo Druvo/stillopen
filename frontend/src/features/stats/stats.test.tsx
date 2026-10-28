@@ -112,7 +112,7 @@ describe("Your numbers", () => {
     show(stats());
     await screen.findByRole("heading", { name: "Your numbers" });
     const titles = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
-    expect(titles).toEqual(["This week", "Last 8 weeks", "Match quality", "Waiting for a reply", "Where jobs come from", "Kinds of work and countries", "Skills that keep coming up", "Prep", "Roles on the boards"]);
+    expect(titles).toEqual(["This week", "Last 8 weeks", "Goals and streak", "Calendar", "Match quality", "Waiting for a reply", "Where jobs come from", "Kinds of work and countries", "Skills that keep coming up", "Prep", "Roles on the boards"]);
     expect(screen.getByRole("link", { name: "See them on your dashboard" }).getAttribute("href")).toBe("/app/");
     expect(screen.getByText("50% of your applications were to a strong match (Strong).")).toBeTruthy();
     expect(screen.getByText("2 applications are waiting for a reply, typically for 9 days.")).toBeTruthy();

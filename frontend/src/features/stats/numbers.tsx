@@ -7,6 +7,7 @@ import { Link } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { type Stats, useStats } from "./api";
 import { BarList, WeeklyChart } from "./charts";
+import { FunnelChart, CalendarSection, GoalsSection, Heatmap } from "./viz";
 import { anyChecked, averageText, calibrationLine, calibrationWaiting, count, marketText, prepText, strongShareText, waitingText, weekTiles, weeklyHasData, workLabel } from "./logic";
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -213,8 +214,24 @@ export function YourNumbers() {
             <ThisWeek week={s.week} />
             <p className="mt-2 text-theme-xs text-muted">The last 7 days, up to {s.as_of}.</p>
           </Section>
+          {s.funnel && (
+            <Section id="stats-funnel" title="From sent to offer">
+              <FunnelChart funnel={s.funnel} />
+            </Section>
+          )}
           <Section id="stats-weeks" title="Last 8 weeks">
             {weeklyHasData(s.weekly) ? <WeeklyChart weekly={s.weekly} /> : <Empty>Nothing in the last 8 weeks yet. Search for jobs or add one, and the weeks fill in.</Empty>}
+          </Section>
+          {s.activity && (
+            <Section id="stats-activity" title="Your year">
+              <Heatmap activity={s.activity} />
+            </Section>
+          )}
+          <Section id="stats-goals" title="Goals and streak">
+            <GoalsSection goals={s.goals} />
+          </Section>
+          <Section id="stats-calendar" title="Calendar">
+            <CalendarSection />
           </Section>
           <Section id="stats-match" title="Match quality">
             <MatchQuality match={s.match} />
