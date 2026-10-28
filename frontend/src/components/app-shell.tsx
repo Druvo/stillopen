@@ -400,12 +400,12 @@ export function AppShell() {
             aria-label={isWide ? (expanded ? "Collapse the sidebar" : "Expand the sidebar") : "Open the menu"}
             aria-expanded={isWide ? expanded : drawer}
             aria-controls={sidebarId}
-            className="flex size-11 items-center justify-center rounded-lg border-gray-200 text-gray-500 hover:bg-gray-100 xl:border dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/5"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg border-gray-200 text-gray-500 hover:bg-gray-100 xl:border dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/5"
           >
             <Menu className="size-5 xl:hidden" aria-hidden />
             {expanded ? <PanelLeftClose className="hidden size-5 xl:block" aria-hidden /> : <PanelLeftOpen className="hidden size-5 xl:block" aria-hidden />}
           </button>
-          <Link to="/" className="inline-flex min-h-11 items-center text-lg font-semibold tracking-tight text-gray-800 xl:hidden dark:text-white/90">
+          <Link to="/" className="inline-flex min-h-11 min-w-0 items-center truncate text-lg font-semibold tracking-tight text-gray-800 xl:hidden dark:text-white/90">
             {title}
           </Link>
           <SearchBox />
@@ -413,17 +413,17 @@ export function AppShell() {
             type="button"
             onClick={() => setOverlay("palette")}
             aria-label="Search and jump to a screen"
-            className="ml-auto flex size-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 md:hidden dark:text-gray-400 dark:hover:bg-white/5"
+            className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 md:hidden dark:text-gray-400 dark:hover:bg-white/5"
           >
             <Search className="size-5" aria-hidden />
           </button>
-          <div className="flex items-center gap-2 max-md:ml-0 md:ml-auto sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1 max-md:ml-0 sm:gap-3 md:ml-auto">
             <UpdatingNote />
             <button
               type="button"
               onClick={() => update({ theme: prefs.theme === "dark" ? "light" : "dark" })}
               aria-label="Switch between light and dark"
-              className="flex size-11 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/5"
+              className="flex size-11 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/5"
             >
               <Sun className="hidden size-5 dark:block" aria-hidden />
               <Moon className="size-5 dark:hidden" aria-hidden />
