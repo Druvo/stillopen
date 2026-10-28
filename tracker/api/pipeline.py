@@ -11,7 +11,7 @@ from ninja.errors import HttpError
 
 from ..forms import ContactForm, InterviewForm, OfferForm, ReferralForm
 from ..models import Application, Contact, Interview, Offer, Referral
-from ..services import board, pipeline
+from ..services import board, gcal, googleconnect, pipeline
 from .common import owned, validate_form
 
 router = Router()
@@ -68,6 +68,11 @@ def _interview_current(item: Interview) -> dict:
     }
 
 
+def _google(request) -> dict:
+    connection = googleconnect.for_user(request.user)
+    return {"connected": connection is not None, "sync": bool(connection and connection.calendar_sync)}
+
+
 @router.get("/interviews", summary="The person's interviews, coming up and past")
 def list_interviews(request):
     mine = list(Interview.objects.filter(owner=request.user).select_related("application"))
@@ -77,6 +82,7 @@ def list_interviews(request):
         "upcoming": [r for r in rows if r["upcoming"]],
         "past": [r for r in reversed(rows) if not r["upcoming"]],
         "jobs": _jobs(request), "kinds": _choices(Interview.KINDS), "outcomes": _choices(Interview.OUTCOMES),
+        "google": _google(request),
     }
 
 
@@ -86,7 +92,7 @@ def create_interview(request, payload: Raw):
     validate_form(form)
     _check_room(request, Interview)
     item = pipeline.save_interview(form, request.user)
-    return {"id": item.pk, "suggest_status": board.suggest_for(item.application, "Interview")}
+    return {"id": item.pk, "suggest_status": board.suggest_for(item.application, "Interview"), "calendar_note": gcal.push(item)}
 
 
 @router.patch("/interviews/{interview_id}", summary="Change an interview")
@@ -95,7 +101,7 @@ def update_interview(request, interview_id: int, payload: Raw):
     form = InterviewForm(_merged(_interview_current(item), payload), owner=request.user, instance=item)
     validate_form(form)
     form.save()
-    return {"id": item.pk, "suggest_status": board.suggest_for(item.application, "Interview")}
+    return {"id": item.pk, "suggest_status": board.suggest_for(item.application, "Interview"), "calendar_note": gcal.push(item)}
 
 
 class OutcomeIn(Schema):
@@ -107,13 +113,15 @@ def interview_outcome(request, interview_id: int, payload: OutcomeIn):
     item = owned(Interview.objects.select_related("application"), request, interview_id)
     if not pipeline.set_interview_outcome(item, payload.outcome):
         raise HttpError(400, "Pick one of the outcomes in the list.")
-    return {"ok": True, "outcome": item.outcome, "outcome_label": item.get_outcome_display()}
+    return {"ok": True, "outcome": item.outcome, "outcome_label": item.get_outcome_display(), "calendar_note": gcal.push(item)}
 
 
 @router.delete("/interviews/{interview_id}", summary="Delete an interview")
 def delete_interview(request, interview_id: int):
-    owned(Interview, request, interview_id).delete()
-    return {"ok": True}
+    item = owned(Interview.objects.select_related("application", "owner"), request, interview_id)
+    note = gcal.remove(item)
+    item.delete()
+    return {"ok": True, "calendar_note": note}
 
 
 # --- contacts and referrals -------------------------------------------------------------------------

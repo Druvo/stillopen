@@ -389,6 +389,9 @@ function AccountCard({ data }: { data: ProfileData }) {
         <Link to="/profile/ai" className={buttonClass("outline")}>
           AI settings
         </Link>
+        <Link to="/profile/connections" className={buttonClass("outline")}>
+          Google connection
+        </Link>
         {site.assistant_enabled && (
           <Link to="/profile/assistant" className={buttonClass("outline")}>
             Connect an AI assistant

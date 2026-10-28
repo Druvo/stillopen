@@ -59,6 +59,7 @@ export type ApplyData = {
   channels: Option[];
   followup_days: number;
   max_followup_days: number;
+  google: { available: boolean; connected: boolean; suggested_to: string; thread: boolean };
 };
 export type RecordInput = { cv: number | null; channel: string; note: string; days: number | null; applied_on: string | null; confirm_closed: boolean };
 

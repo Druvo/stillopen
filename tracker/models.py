@@ -339,6 +339,10 @@ class SiteConfig(PersonalSettings):
     github_secret_encrypted = models.CharField(max_length=500, blank=True)
     facebook_client_id = models.CharField(max_length=200, blank=True)
     facebook_secret_encrypted = models.CharField(max_length=500, blank=True)
+    # The opt-in "Connect my Google account" feature (send from Gmail, replies, Calendar): a SEPARATE OAuth client from the sign-in one above,
+    # because it asks for more scopes and has its own redirect address. Blank = the feature is off. GOOGLE_OAUTH_CLIENT_ID / _SECRET take precedence.
+    google_connect_client_id = models.CharField(max_length=200, blank=True)
+    google_connect_secret_encrypted = models.CharField(max_length=500, blank=True)
 
     # Email sending (Brevo, Mailgun, any SMTP). The EMAIL_HOST environment variable takes precedence.
     email_host = models.CharField(max_length=200, blank=True, help_text="SMTP server, e.g. smtp-relay.brevo.com. Blank = email is not set up.")
@@ -433,6 +437,16 @@ class SiteConfig(PersonalSettings):
 
     def set_social_secret(self, provider: str, plain: str) -> None:
         setattr(self, f"{provider}_secret_encrypted", crypto.encrypt(plain.strip()))
+
+    def set_google_connect_secret(self, plain: str) -> None:
+        self.google_connect_secret_encrypted = crypto.encrypt(plain.strip())
+
+    @property
+    def effective_google_connect(self):
+        """(client id, secret) for the Google connection (Gmail and Calendar), or None while either is blank: the feature is then off."""
+        client_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip() or self.google_connect_client_id.strip()
+        secret = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip() or crypto.decrypt(self.google_connect_secret_encrypted)
+        return (client_id, secret) if client_id and secret else None
 
     def social_enabled(self, provider: str) -> bool:
         return bool(getattr(self, f"{provider}_login_enabled", False))
@@ -846,6 +860,8 @@ class Application(models.Model):
     )
     applied_channel = models.CharField(max_length=10, choices=CHANNELS, blank=True)
     applied_note = models.CharField(max_length=300, blank=True)
+    gmail_thread_id = models.CharField(max_length=64, blank=True, help_text="The Gmail conversation the person's own connected account sent this application in (or linked). Replies are read from it only.")
+    gmail_checked_at = models.DateTimeField(null=True, blank=True, editable=False)
     follow_up_date = models.DateField(null=True, blank=True)
     follow_up_emailed_for = models.DateField(
         null=True, blank=True,
@@ -1028,6 +1044,8 @@ class Interview(models.Model):
     notes = models.TextField(blank=True, max_length=4000, help_text="Who you will meet, what to prepare, questions to ask.")
     outcome = models.CharField(max_length=10, choices=OUTCOMES, default="pending")
     reminded_at = models.DateTimeField(null=True, blank=True, editable=False, help_text="When the reminder email went out, if one did.")
+    google_event_id = models.CharField(max_length=128, blank=True, editable=False, help_text="The Google Calendar event this app created for it (only ever one of ours).")
+    google_event_updated = models.CharField(max_length=40, blank=True, editable=False, help_text="Google's own 'updated' stamp of that event as of our last sync.")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1511,4 +1529,5 @@ class InterviewPrep(models.Model):
         return f"Interview questions for {self.application}"
 
 
+from .google_models import GoogleConnection, MailMessage  # noqa: E402,F401  (registers them with the app)
 from .prep_models import PrepAnswer, PrepChallenge, PrepChallengeItem, PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, PrepTopic, PrepWeek  # noqa: E402,F401  (registers them with the app)

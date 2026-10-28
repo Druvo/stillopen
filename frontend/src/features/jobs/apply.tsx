@@ -16,6 +16,8 @@ import { FitList } from "./edit-job";
 import { jobsApi, type ApplyData } from "./api";
 import { appliedMessage } from "./logic";
 import { ReplyPaste } from "./reply-paste";
+import { JobMail } from "@/features/google/mail";
+import { SendFromGmail } from "@/features/google/send";
 
 /** Makes a new CV version or letter for this job, then opens it so the person can review it. */
 function MakeButton({ label, busyLabel, make }: { label: string; busyLabel: string; make: () => Promise<{ path: string; said: Said }> }) {
@@ -145,6 +147,15 @@ function RecordForm({ id, data }: { id: number; data: ApplyData }) {
           </div>
         </details>
       </Card>
+      <SendFromGmail
+        jobId={id}
+        available={data.google.available}
+        connected={data.google.connected}
+        suggestedTo={data.google.suggested_to}
+        draft={data.draft}
+        cv={cv === "none" ? null : Number(cv)}
+        cover={data.cover_letters.find((l) => !l.needs_review)?.id ?? null}
+      />
 
       <h2 className="mb-2 mt-6 text-lg font-semibold">4. Record what you sent</h2>
       <Card>
@@ -206,6 +217,7 @@ export function ApplyAssistant({ id }: { id: number }) {
         <FitList checks={data.checks} empty="Nothing to check yet." />
       </Card>
       <RecordForm id={id} data={data} />
+      <JobMail jobId={id} connected={data.google.connected} thread={data.google.thread} />
       <ReplyPaste jobId={id} />
       <ApplicationAnswers jobId={id} />
       <InterviewPrepSection jobId={id} />

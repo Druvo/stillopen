@@ -6,6 +6,7 @@ import type { Route } from "@/lib/router";
 // Each screen is its own chunk: it is downloaded when the person opens it, not with the dashboard.
 const AiSettingsPage = lazy(() => import("./ai").then((m) => ({ default: m.AiSettingsPage })));
 const AssistantPage = lazy(() => import("./assistant").then((m) => ({ default: m.AssistantPage })));
+const ConnectionsPage = lazy(() => import("@/features/google/connections").then((m) => ({ default: m.ConnectionsPage })));
 const ProfilePage = lazy(() => import("./profile").then((m) => ({ default: m.ProfilePage })));
 const SourcesPage = lazy(() => import("./sources").then((m) => ({ default: m.SourcesPage })));
 const WelcomePage = lazy(() => import("./welcome").then((m) => ({ default: m.WelcomePage })));
@@ -14,6 +15,7 @@ const WelcomePage = lazy(() => import("./welcome").then((m) => ({ default: m.Wel
 export const ROUTES: Route[] = [
   { pattern: /^\/profile$/, render: () => <ProfilePage /> },
   { pattern: /^\/profile\/ai$/, render: () => <AiSettingsPage /> },
+  { pattern: /^\/profile\/connections$/, render: () => <ConnectionsPage /> },
   { pattern: /^\/profile\/assistant$/, render: () => <AssistantPage /> },
   { pattern: /^\/sources$/, render: () => <SourcesPage /> },
   { pattern: /^\/welcome$/, render: () => <WelcomePage /> },
