@@ -7,6 +7,7 @@ import { FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/c
 import { errorText } from "@/lib/api";
 import { notify } from "@/lib/toast";
 import { pipelineApi, type Interview, type InterviewList, type InterviewValues } from "./api";
+import { CalendarLinkCard } from "./calendar-link";
 import { jobFromSearch, whenLabel } from "./logic";
 
 const KEY = ["pipeline", "interviews"] as const;
@@ -165,6 +166,7 @@ export function Interviews() {
               </Button>
             )}
           </Card>
+          <CalendarLinkCard />
         </aside>
       </div>
     </>

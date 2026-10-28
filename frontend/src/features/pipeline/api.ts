@@ -41,12 +41,18 @@ export type Insights = {
 
 type Ok = { ok: true };
 
+export type CalendarLink = { enabled: boolean; url: string; created_at: string | null; last_used_at: string | null };
+
 export const pipelineApi = {
   interviews: () => request<InterviewList>("GET", "/interviews"),
   addInterview: (v: InterviewValues) => request<{ id: number }>("POST", "/interviews", v),
   editInterview: (id: number, v: InterviewValues) => request<{ id: number }>("PATCH", `/interviews/${id}`, v),
   interviewOutcome: (id: number, outcome: string) => request<Ok>("POST", `/interviews/${id}/outcome`, { outcome }),
   deleteInterview: (id: number) => request<Ok>("DELETE", `/interviews/${id}`),
+
+  calendarLink: () => request<CalendarLink>("GET", "/calendar-link"),
+  makeCalendarLink: () => request<CalendarLink>("POST", "/calendar-link"),
+  stopCalendarLink: () => request<CalendarLink>("DELETE", "/calendar-link"),
 
   contacts: () => request<ContactList>("GET", "/contacts"),
   addContact: (v: ContactValues) => request<{ id: number }>("POST", "/contacts", v),

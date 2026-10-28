@@ -1,2 +1,5 @@
 # Vendored files must stay byte-for-byte identical on every OS (their hashes are checked by tests).
 static/vendor/** -text
+
+# Shell scripts run inside Linux containers: LF only, whatever the checkout OS.
+*.sh text eol=lf

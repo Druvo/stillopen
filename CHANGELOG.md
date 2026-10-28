@@ -5,6 +5,15 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- A private calendar link (Interviews screen > "Show these dates in your calendar"): subscribe Google, Apple or Outlook
+  Calendar to `/calendar/<token>.ics` and upcoming interviews, follow-up days and apply-by days appear there. Read-only, dates plus
+  company and role only (never notes, job text, meeting links or contacts), rate-limited per address, "Make a new link" revokes the old one
+  at once, "Turn off" deletes it. Tunable with `STILLOPEN_CALENDAR_FEED_PER_HOUR`, `STILLOPEN_CALENDAR_FEED_BAD_PER_HOUR`,
+  `STILLOPEN_CALENDAR_LINKS_PER_HOUR`.
+- Container image: the `Dockerfile` now has an entrypoint that makes a secret key and migrates on start, a health check and image labels;
+  `.github/workflows/image.yml` builds on pull requests and pushes `ghcr.io/<owner>/<repo>` on `v*` tags. New `docs/INSTALL.md`
+  covers Docker Compose, plain Docker, from source, an Ubuntu service and CapRover/Coolify/Dokploy.
+
 - Optional shared cache: set `REDIS_URL` and `pip install -r requirements-redis.txt` so per-person rate limits
   and the search-source cache are shared across every process/machine instead of split per worker. Unset,
   nothing changes. Fixed two Playwright e2e specs left broken by the earlier quick-add-bar removal (CI on
