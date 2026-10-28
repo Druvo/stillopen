@@ -26,6 +26,11 @@ EXPORT_EXCLUDED = {
     "tracker.prepchallengeitem": "which questions a practice day held; derived from the answers and practice days, which are exported",
     "tracker.posting": "a fact about a company's public job board, shared by everyone who watches that board (CLAUDE.md), not one person's data",
     "tracker.postingsighting": "the same shared fact: when a posting was seen on a public board",
+    "tracker.calendarfeed": "the private calendar link is a credential (only a hash and an encrypted copy are kept); exporting it would be a risk",
+    "tracker.googleconnection": "Google access tokens are credentials (stored encrypted); never exported",
+    "tracker.mailmessage": "short snippets of employer replies fetched from the person's own Gmail; fetched again on demand, and the original mail stays in their mailbox",
+    "tracker.refinemessage": "the scratch conversation behind a CV or letter change; the resulting versions are exported",
+    "tracker.coverletterrevision": "older texts of a letter kept for Undo; the current letter is exported",
 }
 
 
@@ -63,8 +68,12 @@ class ExportCoversEveryPersonalModel(TestCase):
     def test_every_model_with_an_owner_is_in_the_export_or_explicitly_excluded(self):
         from tracker import views
 
-        with open(views.__file__, encoding="utf-8") as handle:
-            source = handle.read()
+        from tracker.services import dataexport
+
+        source = ""
+        for module in (views, dataexport):  # views.export_data hands the work to services/dataexport
+            with open(module.__file__, encoding="utf-8") as handle:
+                source += handle.read()
         missing = []
         for model in personal_models():
             label = model._meta.label_lower
