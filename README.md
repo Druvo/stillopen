@@ -64,7 +64,7 @@ Open <http://localhost:8000>. A ready-built image (`ghcr.io/druvo/stillopen`) is
 
 ## Performance and sizing
 
-Measured on this repository's demo data (nine jobs, `manage.py e2e_seed --demo`, SQLite, the Django test client, 2026-10): the dashboard answer takes 42 database queries, the numbers page 16 and the profile call 9. The count does not grow with the number of jobs (it was one query per job before it was fixed; see the changelog). The signed-in app's first load is 168.0 kB gzip in 9 scripts, and all its JavaScript 429.5 kB gzip in 42 files (`pnpm size`; budgets 172 and 480 kB). Anything beyond these numbers (how many people one small server carries, how long a search takes) has not been benchmarked, so none is claimed.
+Measured on this repository's demo data (nine jobs, `manage.py e2e_seed --demo`, SQLite, the Django test client, 2026-10): the dashboard answer takes 45 database queries, the numbers page 16 and the profile call 9. The count does not grow with the number of jobs (it was one query per job before it was fixed; see the changelog). The signed-in app's first load is 168.7 kB gzip in 9 scripts, and all its JavaScript 459.4 kB gzip in 49 files (`pnpm size`; budgets 172 and 480 kB). Anything beyond these numbers (how many people one small server carries, how long a search takes) has not been benchmarked, so none is claimed.
 
 ## Use it from Claude Code or any AI assistant
 
