@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useState } from "react";
+import { Fragment, lazy, Suspense, useState } from "react";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { FormError, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
@@ -184,6 +184,45 @@ export function CvList() {
   );
 }
 
+// The chat is its own chunk, downloaded only when the person opens "Ask for changes".
+const RefinePanel = lazy(() => import("./refine"));
+let reopenRefine = false; // a change on a CV opens the new version: keep the panel open there
+
+function AskForChanges({ kind, id, flagged }: { kind: "cv" | "cover"; id: number; flagged: Finding[] }) {
+  const [open, setOpen] = useState(() => {
+    const keep = kind === "cv" && reopenRefine;
+    reopenRefine = false;
+    return keep;
+  });
+  const panel = `refine-panel-${kind}`;
+  return (
+    <section className="mb-4 rounded-xl border border-border p-3">
+      <h2 className="font-semibold">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panel}
+          className="link-target flex w-full items-center justify-between text-left"
+          onClick={() => {
+            reopenRefine = kind === "cv" && !open;
+            setOpen(!open);
+          }}
+        >
+          Ask for changes
+          <span aria-hidden="true">{open ? "-" : "+"}</span>
+        </button>
+      </h2>
+      <div id={panel} hidden={!open} className="mt-3">
+        {open && (
+          <Suspense fallback={<Loading what="the chat" />}>
+            <RefinePanel kind={kind} id={id} flagged={flagged} />
+          </Suspense>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /** Grammar/clarity check (LanguageTool). Only rendered when the admin has set one up (`me.writing_check_enabled`). */
 function WritingCheck({ run }: { run: () => Promise<{ matches: WritingMatch[] }> }) {
   const [matches, setMatches] = useState<WritingMatch[] | null>(null);
@@ -351,6 +390,7 @@ export function CvDetail({ id }: { id: number }) {
         }}
       />
       {me.data?.writing_check_enabled && <WritingCheck run={() => cvApi.writingCheck(id)} />}
+      <AskForChanges kind="cv" id={id} flagged={v.source === "ai" && !v.approved ? v.check_report : []} />
 
       <h2 className="mb-2 font-semibold">Preview</h2>
       <Card className="mb-6 bg-white text-neutral-900">
@@ -496,6 +536,7 @@ export function CoverDetail({ id }: { id: number }) {
       {message && <div className="mb-3"><Notice tone="error">{message}</Notice></div>}
       {saved && <div className="mb-3"><Notice tone="success">{saved}</Notice></div>}
       {me.data?.writing_check_enabled && <WritingCheck run={() => coverApi.writingCheck(id)} />}
+      <AskForChanges kind="cover" id={id} flagged={letter.source === "ai" && !letter.approved ? letter.check_report : []} />
       <div className="mb-4">
         <Findings
           items={letter.check_report}

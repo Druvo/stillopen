@@ -335,6 +335,7 @@ STILLOPEN_MAX_PIPELINE = int(os.environ.get("STILLOPEN_MAX_PIPELINE", "500"))
 STILLOPEN_MAX_CV_VERSIONS = int(os.environ.get("STILLOPEN_MAX_CV_VERSIONS", "200"))
 STILLOPEN_CVGEN_PER_HOUR = int(os.environ.get("STILLOPEN_CVGEN_PER_HOUR", "20"))
 STILLOPEN_CVIMPROVE_PER_HOUR = int(os.environ.get("STILLOPEN_CVIMPROVE_PER_HOUR", "20"))  # "Improve with AI" on a CV and "Polish my wording" in the builder
+STILLOPEN_REFINE_PER_HOUR = int(os.environ.get("STILLOPEN_REFINE_PER_HOUR", "30"))  # "Ask for changes" chat on a CV or cover letter
 STILLOPEN_ATS_PER_HOUR = int(os.environ.get("STILLOPEN_ATS_PER_HOUR", "240"))  # the free, rule-based ATS check (cheap, but still bounded)
 STILLOPEN_CVBUILDER_PER_HOUR = int(os.environ.get("STILLOPEN_CVBUILDER_PER_HOUR", "30"))
 # Optional AI help (interview questions, answer feedback, application answers, posting summary, role suggestions, message drafts):

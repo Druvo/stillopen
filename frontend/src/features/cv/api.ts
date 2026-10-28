@@ -40,7 +40,15 @@ export type Suggestion = { id: number; kind: SuggestionKind; original: string; r
 export type Improved = { suggestions: Suggestion[]; dropped: number; message: string };
 export type Built = { id: number; content: string; polished: number; kept_as_written: number; readiness: number; label: string };
 
+export type RefineMessage = { id: number; role: "user" | "assistant"; text: string; flagged_count: number; result_id: number | null; created_at: string };
+export type RefineState = { ai: AiInfo; messages: RefineMessage[]; undo_to?: number | null; can_undo?: boolean };
+export type CvRefined = { id: number; summary: string; flagged: boolean; flagged_count: number; check_report: Finding[]; exportable: boolean; messages: RefineMessage[]; undo_to: number | null };
+export type CoverRefined = { summary: string; letter: Cover; messages: RefineMessage[]; can_undo: boolean };
+
 export const cvApi = {
+  refineState: (id: number) => request<RefineState>("GET", `/cv/${id}/refine`),
+  refine: (id: number, message: string) => request<CvRefined>("POST", `/cv/${id}/refine`, { message }),
+  refineUndo: (id: number) => request<{ id: number }>("POST", `/cv/${id}/refine/undo`),
   ats: (id: number, jobId?: number | null) => request<AtsReport>("GET", `/cv/${id}/ats${jobId ? `?job=${jobId}` : ""}`),
   improve: (id: number, jobId?: number | null) => request<Improved>("POST", `/cv/${id}/improve`, { job_id: jobId ?? null }),
   jobChoices: () => request<JobChoices>("GET", "/cv/job-choices"),
@@ -57,6 +65,9 @@ export const cvApi = {
 };
 
 export const coverApi = {
+  refineState: (id: number) => request<RefineState>("GET", `/cover/${id}/refine`),
+  refine: (id: number, message: string) => request<CoverRefined>("POST", `/cover/${id}/refine`, { message }),
+  refineUndo: (id: number) => request<CoverRefined>("POST", `/cover/${id}/refine/undo`),
   get: (id: number) => request<Cover>("GET", `/cover/${id}`),
   save: (id: number, content: string) => request<Cover>("POST", `/cover/${id}/save`, { content }),
   approve: (id: number) => request<{ ok: true; exportable: boolean }>("POST", `/cover/${id}/approve`),
