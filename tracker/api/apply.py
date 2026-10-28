@@ -1,4 +1,4 @@
-"""The apply assistant for the new app. Nothing here submits an application or sends a message: the person applies on the employer's site,
+"""The apply assistant for the new app. Nothing here submits an application or sends a message (the opt-in Gmail send is in `google.py`, behind its own confirm step): the person applies on the employer's site,
 and `record` only notes what they did. Same rules as `views_apply.py`: a CV with flagged claims that is not approved is never offered, and
 a CV that is not the person's own or was tailored for another job is refused."""
 from datetime import date
@@ -10,6 +10,7 @@ from ninja.errors import HttpError
 
 from ..models import Application, CVVersion, SiteConfig
 from ..services import apply as apply_service
+from ..services import gmail, googleconnect
 from ..services import fit as fit_service
 from ..services.apply import ApplyError
 from .common import owned_job
@@ -48,6 +49,9 @@ def get_apply(request, job_id: int):
             for l in letters
         ],
         "draft": apply_service.email_draft(app),
+        # the opt-in "Send from my Gmail": the address is only ever the one the posting itself publishes (shown, and editable by the person)
+        "google": {"available": googleconnect.available(), "connected": googleconnect.for_user(request.user) is not None, "suggested_to": gmail.posting_address(app),
+                   "thread": bool(app.gmail_thread_id)},
         "channels": [{"value": v, "label": label} for v, label in Application.CHANNELS if v],
         "followup_days": config.apply_followup_days,
         "max_followup_days": apply_service.MAX_FOLLOW_UP_DAYS,

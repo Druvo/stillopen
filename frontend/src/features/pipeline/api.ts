@@ -8,7 +8,7 @@ export type Interview = {
   id: number; job: JobRef; scheduled_at: string; scheduled_local: string; kind: string; kind_label: string; where: string; notes: string;
   outcome: string; outcome_label: string; upcoming: boolean;
 };
-export type InterviewList = { upcoming: Interview[]; past: Interview[]; jobs: JobChoice[]; kinds: Choice[]; outcomes: Choice[] };
+export type InterviewList = { upcoming: Interview[]; past: Interview[]; jobs: JobChoice[]; kinds: Choice[]; outcomes: Choice[]; google: { connected: boolean; sync: boolean } };
 export type InterviewValues = { application: string; scheduled_at: string; kind: string; where: string; notes: string };
 
 export type Referral = { id: number; job: JobRef; status: string; status_label: string; note: string };
@@ -41,7 +41,7 @@ export type Insights = {
 
 type Ok = { ok: true };
 /** Saving an interview or an offer says which status the job could move to, if it is not there yet (the person decides). */
-export type Saved = { id: number; suggest_status: { id: number; name: string; label: string } | null };
+export type Saved = { id: number; suggest_status: { id: number; name: string; label: string } | null; calendar_note?: string };
 
 export type CalendarLink = { enabled: boolean; url: string; created_at: string | null; last_used_at: string | null };
 

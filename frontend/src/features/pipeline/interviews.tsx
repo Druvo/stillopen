@@ -11,6 +11,7 @@ import { InterviewPrepSection } from "@/features/assist/interview-prep";
 import { MessageDraft } from "@/features/assist/message-draft";
 import { CalendarLinkCard } from "./calendar-link";
 import { jobFromSearch, whenLabel } from "./logic";
+import { CalendarSync } from "@/features/google/calendar-sync";
 import { SuggestMove, type Suggestion } from "./suggest";
 
 const KEY = ["pipeline", "interviews"] as const;
@@ -28,6 +29,7 @@ function InterviewForm({ data, item, defaultJob, onDone, onSuggest }: { data: In
   const set = (name: keyof InterviewValues) => (e: { target: { value: string } }) => setV({ ...v, [name]: e.target.value });
   const submit = form.handle(async () => {
     const saved = item ? await pipelineApi.editInterview(item.id, v) : await pipelineApi.addInterview(v);
+    if (saved.calendar_note) notify(saved.calendar_note, "error");
     if (saved.suggest_status) onSuggest({ jobId: Number(v.application), status: saved.suggest_status });
     await client.invalidateQueries({ queryKey: KEY });
     notify("Interview saved.");
@@ -153,6 +155,7 @@ export function Interviews() {
   return (
     <>
       <PageHeader title="Interviews" subtitle="Keep every conversation in one place: when it is, where, who you meet and what to prepare. Nothing is sent to anyone." />
+      <CalendarSync connected={data.google.connected} sync={data.google.sync} />
       {suggest && (
         <div className="mb-4">
           <SuggestMove suggestion={suggest} onDone={() => setSuggest(null)} />

@@ -76,6 +76,12 @@ class SiteConfigForm(forms.ModelForm):
     github_secret = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), help_text="Client secret. Stored encrypted. Leave blank to keep the saved one.")
     facebook_secret = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), help_text="App secret. Stored encrypted. Leave blank to keep the saved one.")
 
+    google_connect_secret = forms.CharField(
+        required=False, widget=forms.PasswordInput(render_value=False),
+        help_text="Client secret of the Google connection (Gmail and Calendar). Stored encrypted and never shown again. Leave blank to keep the saved one. "
+        "The GOOGLE_OAUTH_CLIENT_SECRET environment variable takes precedence.",
+    )
+
     class Meta:
         model = SiteConfig
         fields = "__all__"
@@ -86,6 +92,8 @@ class SiteConfigForm(forms.ModelForm):
             obj.set_adzuna_app_key(self.cleaned_data["adzuna_app_key"])
         if self.cleaned_data.get("email_password"):
             obj.set_email_password(self.cleaned_data["email_password"])
+        if self.cleaned_data.get("google_connect_secret"):
+            obj.set_google_connect_secret(self.cleaned_data["google_connect_secret"])
         for provider in ("google", "github", "facebook"):
             if self.cleaned_data.get(f"{provider}_secret"):
                 obj.set_social_secret(provider, self.cleaned_data[f"{provider}_secret"])
@@ -199,6 +207,21 @@ class SiteConfigAdmin(ModelAdmin):
                     "Redirect addresses: <code>{base}/accounts/google/login/callback/</code>, "
                     "<code>{base}/accounts/github/login/callback/</code>, <code>{base}/accounts/facebook/login/callback/</code>. "
                     "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (and the GITHUB_ and FACEBOOK_ ones) in the environment take precedence."
+                ).format(base=_public_base()),
+            },
+        ),
+        (
+            "Google connection",
+            {
+                "classes": ("tab",),
+                "fields": ("google_connect_client_id", "google_connect_secret"),
+                "description": (
+                    "Optional. Lets each person connect their OWN Google account to send an application from their Gmail, see employer replies next to the job, "
+                    "and keep their Google Calendar in step with their interviews. It is off while the client ID or secret is blank. In Google Cloud, create an "
+                    "OAuth client (type: Web application), turn on the Gmail API and the Google Calendar API, add the scopes gmail.send, gmail.readonly, "
+                    "calendar.events and calendar.freebusy to the consent screen, and give it the redirect address <code>{base}/google/callback/</code>. "
+                    "This is a different client from the Google sign-in one above. Nothing is ever sent unless the person presses Send on a message they have seen in full. "
+                    "GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET in the environment take precedence."
                 ).format(base=_public_base()),
             },
         ),
