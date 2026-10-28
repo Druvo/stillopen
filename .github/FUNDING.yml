@@ -1,0 +1,4 @@
+# Turns on the "Sponsor" button once the owner has a GitHub Sponsors profile.
+# 1. Set up Sponsors at https://github.com/sponsors, then
+# 2. uncomment the next line and put the real account name in it.
+# github: [your-username]

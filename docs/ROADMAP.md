@@ -391,3 +391,7 @@ when a site-wide Jooble source is enabled but no key is set.
 
 Any Bangladeshi company using Greenhouse/Lever/Ashby/SmartRecruiters/Recruitee for its own careers page
 already works automatically the moment it's added as a `JobSource` row — no new connector code needed.
+
+## Update, 2026-10-29: launch kit shipped
+
+Built on this branch: the new README (screenshots and GIF generated from demo data by `pnpm readme:images`), a project site in `site/` with a Pages workflow, a release workflow plus `scripts/release_notes.py` and `docs/RELEASING.md`, one-line update scripts, a sponsor-button placeholder and issue-template links. Still the owner's to do on GitHub (not code): set the repository description, website and topics, switch on Discussions and Pages (Source: GitHub Actions), add a Sponsors profile and uncomment `.github/FUNDING.yml`, add a 1280x640 social image, and push the first tag (`docs/launch/topics.md`, `docs/RELEASING.md`). Also open: a live demo site (none is run for this repository, so the README does not link one), and a 20-second GIF recorded as real video (the current one is a five-frame slideshow of the real screens).

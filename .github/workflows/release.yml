@@ -1,0 +1,39 @@
+name: Release
+
+# Runs when a version tag is pushed (git tag v0.1.0 && git push --tags). It cannot know whether the tests workflow passed for that commit,
+# so run the tests first (docs/RELEASING.md). It publishes the matching CHANGELOG.md section as the GitHub release notes; the container
+# image is built and pushed by .github/workflows/image.yml on the same tag.
+#
+# Pinned actions: actions/checkout v4.2.2 (released 2024-10, the same pin image.yml already uses). The release itself uses the
+# preinstalled `gh` CLI with the job's own GITHUB_TOKEN, no third-party action.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create the release; nothing else
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Take this version's notes from CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 scripts/release_notes.py "$TAG" > release-notes.md
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          flags=()
+          case "$TAG" in *-*) flags+=(--prerelease) ;; esac
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file release-notes.md "${flags[@]}"

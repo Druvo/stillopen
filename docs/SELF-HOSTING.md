@@ -297,6 +297,13 @@ git pull
 docker compose -f docker-compose.selfhost.yml up -d --build      # Python install: pip install -r requirements.txt && python manage.py migrate, then restart
 ```
 
+The same thing as one command, which first prints what it will do and refuses if you have local changes:
+
+```bash
+deploy/update.sh              # Linux/macOS, Docker Compose install; add --source for a Python install, --dry-run to only look
+deploy\update.ps1             # Windows PowerShell; -Source, -DryRun
+```
+
 Migrations run on start. Read [CHANGELOG.md](../CHANGELOG.md) first. The image now runs as an ordinary user (uid 10001); if you are updating a volume created by an older
 image that ran as root, give it to that user once: `docker compose -f docker-compose.selfhost.yml run --rm --user root stillopen chown -R 10001:10001 /data`.
 
