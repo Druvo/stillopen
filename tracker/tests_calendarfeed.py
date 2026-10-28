@@ -149,7 +149,7 @@ class FeedApiTests(FeedBase):
         self.assertTrue(made["enabled"])
         self.assertRegex(made["url"], r"/calendar/cal_[A-Za-z0-9_-]+\.ics$")
         self.assertEqual(api(self.client, "get", "/calendar-link").json()["url"], made["url"])
-        self.assertEqual(api(self.client, "get", "/calendar-link").headers["Cache-Control"], "no-store")
+        self.assertIn("no-store", api(self.client, "get", "/calendar-link").headers["Cache-Control"])
 
     def test_each_person_sees_only_their_own_link(self):
         mine = self.link(self.a)

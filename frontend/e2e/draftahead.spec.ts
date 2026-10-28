@@ -45,7 +45,10 @@ test("the Job alerts section on the profile has the draft-ahead switch, off unti
   const box = page.getByLabel("Also prepare tailored CV drafts for my best new matches");
   await expect(box).not.toBeChecked();
   await box.check();
-  await page.getByRole("button", { name: /^Save/ }).first().click();
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByText("Saved. Your next matches will use this.")).toBeVisible();
+  // the tab keeps its answers in sessionStorage a moment after they change: wait for that before reloading
+  await page.waitForFunction(() => (sessionStorage.getItem("stillopen-query-cache") ?? "").includes('"draft_ahead_enabled":true'));
   await page.reload();
   await expect(page.getByLabel("Also prepare tailored CV drafts for my best new matches")).toBeChecked();
 });

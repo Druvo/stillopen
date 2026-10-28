@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
-import { Button, buttonClass, Card, Notice, Progress } from "@/components/ui";
+import { Button, buttonClass, Notice, Progress } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";

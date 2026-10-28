@@ -127,7 +127,7 @@ export type Dashboard = {
   upcoming_interviews: UpcomingInterview[];
   /** The next 14 days, soonest first: interviews, apply-by dates and offer reply-by dates together. */
   coming_up?: ComingUpItem[];
-  drafts: DraftWaiting[];
+  drafts?: DraftWaiting[];
   next_step: NextStep | null;
   can_scan: boolean;
   checked_at: string | null;
