@@ -3,6 +3,10 @@
 All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). There are no numbered releases yet; `main` is the
 supported version, so entries are grouped under **Unreleased** until the first tag.
 
+- CV import: "Start from a CV you already have" in the builder reads a PDF, Word, Markdown or text file (5 MB, real type checked, macros/embedded files refused, time limit) and sorts it into review cards (Accept / Edit / Skip per section) with plain rules or, optionally, the person's own AI (only words found in the file survive). Nothing is saved until the builder is finished.
+- Live CV preview (builder and CV page): the exact print page for the chosen look, in a no-permission sandboxed frame.
+- "Download CV and cover letter (zip)" per job: DOCX, plain text and Markdown; refuses anything flagged and unapproved.
+
 ## [Unreleased]
 
 - "Ask for changes" on a CV version and on a cover letter: type what you want different ("make it shorter", "lead with my Django work", "less formal") and your own AI sends back a revised copy. It is fact-checked like a tailored CV (anything not in your own CV or documents is flagged, and a flagged copy cannot be downloaded until you approve it). On a CV the result is a new version and the old one is kept; on a cover letter the earlier text is kept and "Undo" brings it back. Needs your AI set up; limited per hour by `STILLOPEN_REFINE_PER_HOUR`.

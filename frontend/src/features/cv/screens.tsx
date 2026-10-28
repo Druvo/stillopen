@@ -13,6 +13,7 @@ import { coverApi, cvApi, type CvSummary, type WritingMatch } from "./api";
 import { AtsCard } from "./ats";
 import { diffSummary, findingText, parseBlocks, parseInline, type Finding } from "./logic";
 import { applySuggestion, readinessTone } from "./quality";
+import { CV_TEMPLATES, DownloadAll, PreviewDialog } from "./preview";
 
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -270,16 +271,6 @@ function WritingCheck({ run }: { run: () => Promise<{ matches: WritingMatch[] }>
   );
 }
 
-/** Built-in download looks -- labels kept in sync by hand with tracker/services/cvexport.py's TEMPLATES. */
-const CV_TEMPLATES: { value: string; label: string }[] = [
-  { value: "classic", label: "Classic" },
-  { value: "modern", label: "Modern" },
-  { value: "compact", label: "Compact" },
-  { value: "serif", label: "Serif" },
-  { value: "forest", label: "Forest" },
-  { value: "slate", label: "Slate" },
-];
-
 export function CvDetail({ id }: { id: number }) {
   const client = useQueryClient();
   const me = useMe();
@@ -288,6 +279,7 @@ export function CvDetail({ id }: { id: number }) {
   const [saved, setSaved] = useState("");
   const [draft, setDraft] = useState<string | null>(null); // the editor's text when it differs from the saved version (an applied suggestion or typing)
   const [template, setTemplate] = useState("classic");
+  const [previewing, setPreviewing] = useState(false);
   const form = useSubmit();
   const refresh = () => client.invalidateQueries({ queryKey: ["cv"] });
   const act = useMutation({ mutationFn: (fn: () => Promise<unknown>) => fn(), onSuccess: refresh, onError: (e) => setMessage(errorText(e)) });
@@ -298,6 +290,7 @@ export function CvDetail({ id }: { id: number }) {
   return (
     <>
       <PageHeader title={<>{v.label || "CV"} <Badge>v{v.id}</Badge></>} subtitle={<Link to="/cv" className="link-target text-brand underline">All versions</Link>} />
+      {previewing && <PreviewDialog source={{ kind: "saved", id }} template={template} onTemplate={setTemplate} onClose={() => setPreviewing(false)} />}
       <p className="mb-3 text-sm text-muted">
         {v.kind_label} · {v.source_label}
         {v.provider ? ` (${v.provider})` : ""} · {when(v.created_at)}
@@ -345,6 +338,8 @@ export function CvDetail({ id }: { id: number }) {
         ) : (
           <span className="text-sm text-muted">Downloads unlock after you review the flagged items.</span>
         )}
+        <Button variant="outline" onClick={() => setPreviewing(true)}>Preview</Button>
+        {v.job && v.downloads && <DownloadAll jobId={v.job.id} />}
         <Link to={`/cv/${v.id}/diff`} className={buttonClass("outline")}>Compare</Link>
         {master ? (
           <Button
@@ -558,6 +553,7 @@ export function CoverDetail({ id }: { id: number }) {
           <>
             <a className={buttonClass("primary")} href={letter.downloads.docx}>Download DOCX</a>
             <a className={buttonClass("outline")} href={letter.downloads.txt}>Plain text</a>
+            <DownloadAll jobId={letter.job.id} />
           </>
         ) : (
           <span className="text-sm text-muted">Downloads unlock after you review the flagged items.</span>

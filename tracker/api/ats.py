@@ -8,7 +8,7 @@ from ninja import Router, Schema
 from ninja.errors import HttpError
 
 from ..models import Application, CVVersion, SiteConfig
-from ..services import ats, cvbuilder, cvimprove
+from ..services import ats, cvbuilder, cvimport, cvimprove
 from ..services.cvversions import CVError, source_texts
 from .common import owned, owned_job, throttle
 
@@ -79,5 +79,23 @@ def build_cv(request, payload: BuilderIn):
         throttle(request, "cvimprove", settings.STILLOPEN_CVIMPROVE_PER_HOUR)
     try:
         return cvbuilder.build_and_save(request.user, config, payload.answers, payload.polish)
+    except CVError as exc:
+        raise HttpError(400, str(exc))
+
+
+@router.post("/cv/import", summary="Read an uploaded CV (multipart `file`, optional `use_ai`) into review cards; nothing is saved")
+def import_cv(request):
+    upload = request.FILES.get("file")
+    if upload is None:
+        raise HttpError(400, "Choose a CV file first: a PDF, a Word document, a Markdown file or a text file.")
+    use_ai = (request.POST.get("use_ai") or "").lower() in ("1", "true", "on", "yes")
+    config = SiteConfig.for_user(request.user)
+    if use_ai and not cvimprove.ai_ready(config):
+        raise HttpError(400, cvimprove.NO_KEY)
+    throttle(request, "cvimport", settings.STILLOPEN_CVIMPORT_PER_HOUR)
+    if use_ai:
+        throttle(request, "cvimprove", settings.STILLOPEN_CVIMPROVE_PER_HOUR)
+    try:
+        return cvimport.import_cv(upload, config, request.user, use_ai)
     except CVError as exc:
         raise HttpError(400, str(exc))

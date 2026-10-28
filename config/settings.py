@@ -344,6 +344,8 @@ STILLOPEN_CVIMPROVE_PER_HOUR = int(os.environ.get("STILLOPEN_CVIMPROVE_PER_HOUR"
 STILLOPEN_REFINE_PER_HOUR = int(os.environ.get("STILLOPEN_REFINE_PER_HOUR", "30"))  # "Ask for changes" chat on a CV or cover letter
 STILLOPEN_ATS_PER_HOUR = int(os.environ.get("STILLOPEN_ATS_PER_HOUR", "240"))  # the free, rule-based ATS check (cheap, but still bounded)
 STILLOPEN_CVBUILDER_PER_HOUR = int(os.environ.get("STILLOPEN_CVBUILDER_PER_HOUR", "30"))
+STILLOPEN_CVIMPORT_PER_HOUR = int(os.environ.get("STILLOPEN_CVIMPORT_PER_HOUR", "20"))  # reading an uploaded CV into the builder (the AI sort inside it also counts as an "Improve with AI")
+STILLOPEN_CVPREVIEW_PER_HOUR = int(os.environ.get("STILLOPEN_CVPREVIEW_PER_HOUR", "600"))  # the live CV preview of the builder's unsaved answers
 # Optional AI help (interview questions, answer feedback, application answers, posting summary, role suggestions, message drafts):
 # how many times each of them may call the person's own AI in an hour. Counted per person and per kind of help.
 STILLOPEN_ASSIST_PER_HOUR = int(os.environ.get("STILLOPEN_ASSIST_PER_HOUR", "20"))

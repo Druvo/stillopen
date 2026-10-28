@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+{% if preview %}<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+{% endif %}<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ v.label|default:"CV" }}</title>
 <style>
 body{margin:0;background:#eee;color:#111;font:{{ style.print_pt }}pt/{{ style.line_height }} {{ style.font }},"Segoe UI",Arial,sans-serif}
@@ -18,11 +19,12 @@ a{color:#111;text-decoration:none}
 hr{border:0;border-top:1px solid #bbb}
 .bar{position:sticky;top:0;background:#222;color:#fff;padding:8px 14px;font:13px system-ui;display:flex;gap:12px;align-items:center;justify-content:space-between}
 .bar button{background:#5b9dff;border:0;border-radius:6px;color:#fff;padding:6px 14px;font-weight:600;cursor:pointer}
+{% if preview %}a{pointer-events:none}body{background:#fff}.page{margin:0 auto;padding:0.5in 0.6in}{% endif %}
 @media print{.bar{display:none}body{background:#fff}.page{padding:0;max-width:none}@page{margin:0.7in 0.8in}}
 </style>
 </head>
 <body>
-<div class="bar"><span>Choose "Save as PDF" as the printer. Single column, plain text: ATS friendly.</span><button onclick="window.print()">Print / save as PDF</button></div>
+{% if not preview %}<div class="bar"><span>Choose "Save as PDF" as the printer. Single column, plain text: ATS friendly.</span><button onclick="window.print()">Print / save as PDF</button></div>{% endif %}
 <div class="page">{{ body|safe }}</div>
 </body>
 </html>

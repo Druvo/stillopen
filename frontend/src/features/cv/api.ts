@@ -1,5 +1,6 @@
 import { request } from "@/lib/api";
 import type { DiffRow, Finding } from "./logic";
+import type { Imported } from "./importlogic";
 import type { BuilderAnswers } from "./quality";
 
 export type JobRef = { id: number; role: string; company: string };
@@ -38,6 +39,7 @@ export type JobChoices = { ai: AiInfo; jobs: (JobRef & { has_description: boolea
 export type SuggestionKind = "bullet" | "summary" | "heading" | "keyword";
 export type Suggestion = { id: number; kind: SuggestionKind; original: string; replacement: string; reason: string };
 export type Improved = { suggestions: Suggestion[]; dropped: number; message: string };
+export type JobDocuments = { ready: boolean; url: string | null; reason: string; has_cv?: boolean; has_cover?: boolean };
 export type Built = { id: number; content: string; polished: number; kept_as_written: number; readiness: number; label: string };
 
 export type RefineMessage = { id: number; role: "user" | "assistant"; text: string; flagged_count: number; result_id: number | null; created_at: string };
@@ -53,6 +55,13 @@ export const cvApi = {
   improve: (id: number, jobId?: number | null) => request<Improved>("POST", `/cv/${id}/improve`, { job_id: jobId ?? null }),
   jobChoices: () => request<JobChoices>("GET", "/cv/job-choices"),
   build: (answers: BuilderAnswers, polish: boolean) => request<Built>("POST", "/cv/builder", { answers, polish }),
+  importFile: (file: File, useAi: boolean) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (useAi) form.append("use_ai", "1");
+    return request<Imported>("POST", "/cv/import", form);
+  },
+  documents: (jobId: number) => request<JobDocuments>("GET", `/jobs/${jobId}/documents`),
   list: () => request<CvList>("GET", "/cv"),
   get: (id: number) => request<CvDetail>("GET", `/cv/${id}`),
   edit: (id: number, content: string, label: string) => request<{ id: number; changed: boolean }>("POST", `/cv/${id}/edit`, { content, label }),
