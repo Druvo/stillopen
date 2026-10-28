@@ -65,7 +65,20 @@ export type WelcomeData = { done: boolean; target_roles: string; home_country: s
 
 type Payload = Record<string, unknown> | FormData;
 
+export type DataImportReport = {
+  preview: boolean; nothing: boolean; left_out: number;
+  profile: { filled: string[]; kept: string[] };
+  cvs: { add: number; have: number; left_out: number; stopped: string };
+  covers: { add: number; have: number; no_job: number; stopped: string };
+  notes: { add: number; have: number; kept: number; no_job: number };
+};
+
 export const accountApi = {
+  importData: (file: File, preview: boolean) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<DataImportReport>("POST", `/account/import${preview ? "?preview=1" : ""}`, form);
+  },
   profile: () => request<ProfileData>("GET", "/profile"),
   saveProfile: (values: Payload) => (values instanceof FormData ? request<ProfileData>("POST", "/profile", values) : request<ProfileData>("PUT", "/profile", values)),
   addArea: (values: Record<string, unknown>) => request<{ area: Area; warning?: string }>("POST", "/profile/areas", values),

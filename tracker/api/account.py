@@ -13,8 +13,8 @@ from ninja.errors import HttpError
 
 from .. import forms
 from ..models import Application, KnowledgeSource, SearchArea, SiteConfig, UserProfile
-from ..services import account as account_service, links, tz
-from .common import owned, validate_form
+from ..services import account as account_service, dataimport, links, tz
+from .common import owned, throttle, validate_form
 
 router = Router()
 
@@ -210,3 +210,17 @@ def delete_account(request):
     logout(request)
     user.delete()  # cascades to profile, applications, knowledge, events, runs
     return {"ok": True}
+
+
+@router.post("/account/import", summary="Put an \"Export my data\" file back into the same account (preview=1 only says what would happen; nothing is overwritten)")
+def import_data(request, preview: int = 0):
+    throttle(request, "dataimport", getattr(settings, "STILLOPEN_IMPORTS_PER_HOUR", 30))
+    upload = request.FILES.get("file")
+    if upload is None:
+        raise HttpError(400, "Choose the file you downloaded from \"Export my data\" first.")
+    if upload.size > dataimport.MAX_BYTES:
+        raise HttpError(400, "That file is bigger than 8 MB, so it is not one of our exports.")
+    try:
+        return dataimport.read(request.user, upload.read(dataimport.MAX_BYTES + 1), preview=bool(preview))
+    except dataimport.ImportProblem as exc:
+        raise HttpError(400, str(exc))

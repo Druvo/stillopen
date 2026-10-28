@@ -65,14 +65,23 @@ export type BuilderRole = { title: string; company: string; location: string; st
 export type BuilderEdu = { school: string; degree: string; start: string; end: string };
 export type BuilderGroup = { group: string; items: string };
 export type BuilderProject = { name: string; description: string; link: string };
+export type BuilderPublication = { title: string; venue: string; year: string; link: string };
+export type BuilderReference = { name: string; role: string; contact: string };
+export type CitationStyle = "plain" | "apa";
+export type ReferencesMode = "off" | "on_request" | "listed";
 export type BuilderAnswers = {
   name: string; email: string; phone: string; location: string; links: string[]; summary: string;
   roles: BuilderRole[]; education: BuilderEdu[]; skills: BuilderGroup[]; projects: BuilderProject[]; languages: string; certificates: string;
+  publications: BuilderPublication[]; citation_style: CitationStyle; references_mode: ReferencesMode; references: BuilderReference[];
 };
 
-export const STEPS = ["Contact", "Summary", "Work", "Education", "Skills", "Projects", "Languages and certificates"] as const;
+export const STEPS = ["Contact", "Summary", "Work", "Education", "Skills", "Projects", "Publications and references", "Languages and certificates"] as const;
 export const DRAFT_KEY = "stillopen-cv-builder-draft";
 export const MAX_ROLES = 4;
+export const MAX_PUBLICATIONS = 8;
+export const MAX_REFERENCES = 3;
+export const emptyPublication = (): BuilderPublication => ({ title: "", venue: "", year: "", link: "" });
+export const emptyReference = (): BuilderReference => ({ name: "", role: "", contact: "" });
 
 export const emptyRole = (): BuilderRole => ({ title: "", company: "", location: "", start: "", end: "", bullets: ["", "", ""] });
 
@@ -82,6 +91,7 @@ export function emptyAnswers(): BuilderAnswers {
     roles: [emptyRole()], education: [{ school: "", degree: "", start: "", end: "" }],
     skills: [{ group: "Tools", items: "" }, { group: "Languages", items: "" }],
     projects: [{ name: "", description: "", link: "" }], languages: "", certificates: "",
+    publications: [emptyPublication()], citation_style: "plain", references_mode: "off", references: [emptyReference()],
   };
 }
 
@@ -118,6 +128,16 @@ export function validateStep(step: number, a: BuilderAnswers): Record<string, st
       }
     });
   }
+  if (step === 6) {
+    a.publications.forEach((p, i) => {
+      if (filled(p.year) && !/^(19|20)\d{2}$/.test(p.year.trim())) errors[`publications.${i}.year`] = "Write the year with four digits, like 2023.";
+    });
+    if (a.references_mode === "listed") {
+      a.references.forEach((r, i) => {
+        if ([r.name, r.role, r.contact].some(filled) && !filled(r.name)) errors[`references.${i}.name`] = "Add the name.";
+      });
+    }
+  }
   if (step === STEPS.length - 1) {
     const hasWork = a.roles.some((r) => filled(r.title) && filled(r.company));
     const hasEdu = a.education.some((e) => filled(e.school));
@@ -141,6 +161,8 @@ export function toApiAnswers(a: BuilderAnswers): BuilderAnswers {
     skills: a.skills.filter((g) => filled(g.items)).slice(0, 6),
     projects: a.projects.filter((p) => filled(p.name)).slice(0, 3),
     languages: t(a.languages), certificates: t(a.certificates),
+    publications: a.publications.filter((p) => filled(p.title)).slice(0, MAX_PUBLICATIONS),
+    references: a.references_mode === "listed" ? a.references.filter((r) => [r.name, r.role, r.contact].some(filled)).slice(0, MAX_REFERENCES) : [],
   };
 }
 
@@ -155,7 +177,7 @@ export function parseDraft(raw: string | null): { step: number; answers: Builder
     for (const [key, value] of Object.entries(data.answers)) {
       if (key in base && typeof value === typeof base[key] && Array.isArray(value) === Array.isArray(base[key])) merged[key] = value;
     }
-    for (const key of ["roles", "links", "education", "skills", "projects"]) {
+    for (const key of ["roles", "links", "education", "skills", "projects", "publications", "references"]) {
       const list = merged[key];
       if (!Array.isArray(list) || list.length === 0) merged[key] = base[key];
     }
