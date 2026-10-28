@@ -1583,3 +1583,37 @@ class InterviewPrep(models.Model):
 
 
 from .prep_models import PrepAnswer, PrepChallenge, PrepChallengeItem, PrepLesson, PrepMilestone, PrepPlan, PrepQuestion, PrepTopic, PrepWeek  # noqa: E402,F401  (registers them with the app)
+
+
+class RefineMessage(models.Model):
+    """One line of the "Ask for changes" chat on a CV version or a cover letter: the person's instruction, or a one-sentence summary
+    of what the AI changed. Text only and short; the panel shows earlier turns from here. Owner-only, like the document it belongs to."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="refine_messages")
+    cv_version = models.ForeignKey(CVVersion, null=True, blank=True, on_delete=models.CASCADE, related_name="refine_messages", help_text="The version the instruction was given on.")
+    cover_letter = models.ForeignKey(CoverLetter, null=True, blank=True, on_delete=models.CASCADE, related_name="refine_messages")
+    role = models.CharField(max_length=10, choices=[("user", "Person"), ("assistant", "AI")])
+    text = models.CharField(max_length=700)
+    result_version = models.ForeignKey(CVVersion, null=True, blank=True, on_delete=models.SET_NULL, related_name="+", help_text="The new CV version this answer made.")
+    flagged_count = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+
+
+class CoverLetterRevision(models.Model):
+    """What a cover letter said before the AI changed it (or before an undo), so a change can be taken back. A letter is edited in
+    place, so this small list is its history; rows are only ever added (the oldest ones are trimmed past a cap)."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cover_revisions")
+    letter = models.ForeignKey(CoverLetter, on_delete=models.CASCADE, related_name="revisions")
+    content = models.TextField()
+    source = models.CharField(max_length=10, blank=True)
+    check_report = models.JSONField(default=list, blank=True)
+    reason = models.CharField(max_length=10, choices=[("refine", "Before an AI change"), ("undo", "Before going back")], default="refine")
+    undone = models.BooleanField(default=False, help_text="Already taken back, so Undo skips it.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]

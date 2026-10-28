@@ -8,6 +8,8 @@ BODIES = {
     ("POST", "/api/v1/jobs/{job_id}/tailor"): {"mode": "keywords"},
     ("POST", "/api/v1/cover/{cover_id}/save"): {"content": "Dear hiring team,"},
     ("POST", "/api/v1/jobs/{job_id}/cover-letter"): {"mode": "keywords"},
+    ("POST", "/api/v1/cv/{cv_id}/refine"): {"message": "make it shorter"},
+    ("POST", "/api/v1/cover/{cover_id}/refine"): {"message": "make it shorter"},
 }
 
 
