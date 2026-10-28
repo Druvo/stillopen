@@ -97,6 +97,7 @@ export type Followup = { id: number; company: string; role: string; follow_up_da
 
 /** One line of the dashboard's "Coming up" card: an interview, a job's apply-by date, or an offer's reply-by date. */
 export type ComingUpItem = { kind: "interview" | "deadline" | "offer"; date: string; when: string; label: string; company: string; role: string; job_id: number };
+export type DraftWaiting = { id: number; job_id: number; company: string; role: string; flagged_count: number; created_at: string | null };
 
 export type UpcomingInterview = { id: number; when: string; kind: string; company: string; role: string; job_id: number };
 
@@ -125,6 +126,7 @@ export type Dashboard = {
   upcoming_interviews: UpcomingInterview[];
   /** The next 14 days, soonest first: interviews, apply-by dates and offer reply-by dates together. */
   coming_up?: ComingUpItem[];
+  drafts: DraftWaiting[];
   next_step: NextStep | null;
   can_scan: boolean;
   checked_at: string | null;

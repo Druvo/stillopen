@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from django.utils import timezone
 
-from tracker.models import Application, Interview, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile
+from tracker.models import Application, CVVersion, Interview, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile
 
 CV = """# Alice Example
 
@@ -48,6 +48,7 @@ class Command(BaseCommand):
             ("dave", [("Umbrella", "SRE", "Saved", 3.5)]),  # the account the delete test removes
             ("erin", []),  # the welcome-questions test saves her answers
             ("frank", []),  # the CV builder test builds his CV (so bob stays a person with no CV)
+            ("grace", [("Hooli", "Backend Engineer", "Saved", 4.5)]),  # has a CV draft the scheduled search prepared (draftahead spec)
         ):
             user, _ = User.objects.get_or_create(username=name, defaults={"email": f"{name}@example.com"})
             user.set_password(PASSWORD)
@@ -66,4 +67,12 @@ class Command(BaseCommand):
                 run = ScanRun.objects.create(owner=user, running=False, total=2, done=2, found=40, added=3, note="Only the best matches were added.")
                 ScanLogEntry.objects.create(run=run, source_name="Acme Careers", connector="greenhouse", found=30, matched=6, added=3, duplicates=1, outside=2)
                 ScanLogEntry.objects.create(run=run, source_name="Broken Board", connector="lever", error="The board did not answer.")
-        self.stdout.write("Seeded alice, bob, carol, dave, erin and frank.")
+        grace = User.objects.get(username="grace")
+        CVVersion.objects.filter(owner=grace).delete()
+        master = CVVersion.objects.create(owner=grace, kind="master", content=CV, label="Initial CV", approved=True)
+        CVVersion.objects.create(
+            owner=grace, application=Application.objects.get(owner=grace), parent=master, kind="tailored", source="ai", label="Hooli - Backend Engineer",
+            content=CV + "- Led a team of 40 engineers.\n", draft_ahead=True,
+            check_report=[{"kind": "number", "text": "40", "line": 12}],
+        )
+        self.stdout.write("Seeded alice, bob, carol, dave, erin, frank and grace.")

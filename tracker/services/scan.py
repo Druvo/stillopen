@@ -1253,7 +1253,7 @@ def start_run(owner, background: bool = True) -> ScanRun:
     return run
 
 
-def scan_digest_text(apps) -> str:
+def scan_digest_text(apps, extra: str = "") -> str:
     from tracker.services import links
 
     lines = ["New jobs matching your search on StillOpen:", ""]
@@ -1265,6 +1265,8 @@ def scan_digest_text(apps) -> str:
         if links.job_link(app.pk):
             lines.append(f"  In StillOpen: {links.job_link(app.pk)}")
 
+    if extra:
+        lines += ["", extra]
     lines += ["", links.link_line("They are saved on your dashboard. Open it to check each fit and decide what to apply to", "/", "your dashboard"),
               "Turn these emails off any time under Profile > Job alerts (or Profile > Emails)."]
     return "\n".join(lines)
@@ -1276,6 +1278,8 @@ def send_scan_digest(owner, run: ScanRun) -> bool:
     from allauth.account.models import EmailAddress
     from django.core.mail import send_mail
 
+    from tracker.services import draftahead
+
     apps = list(Application.objects.filter(owner=owner, pk__in=run.added_ids))
     if not apps:
         return False
@@ -1284,7 +1288,7 @@ def send_scan_digest(owner, run: ScanRun) -> bool:
     count = len(apps)
     send_mail(
         subject=f"StillOpen: {count} new job{'s' if count != 1 else ''} for you",
-        message=scan_digest_text(apps),
+        message=scan_digest_text(apps, draftahead.digest_line(owner)),
         from_email=integrations.from_email(),
         recipient_list=[owner.email],
         fail_silently=False,

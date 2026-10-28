@@ -135,6 +135,12 @@ function ProfileForm({ data, onSaved, saved, onEdit }: { data: ProfileData; onSa
           onChange={(e) => set("scan_digest_enabled", e.target.checked)}
         />
         <CheckField
+          label="Also prepare tailored CV drafts for my best new matches"
+          hint={`After a scheduled search, writes a draft CV for your top new matches with your own AI settings (you need an AI set up and a CV). Drafts wait on your dashboard for you to check; nothing is approved, downloaded or sent for you. Off until you turn it on.${data.site.draft_ahead_site_enabled ? "" : " The site owner has not switched this on yet, so no drafts are made for now."}`}
+          checked={values.draft_ahead_enabled}
+          onChange={(e) => set("draft_ahead_enabled", e.target.checked)}
+        />
+        <CheckField
           label="Email me a weekly summary of how my search is going"
           hint={`Applications sent, interviews, offers and follow-ups from the last 7 days. Off until you turn it on.${data.site.weekly_digest_site_enabled ? "" : " The site owner has not switched the weekly digest on yet, so nothing is sent for now."}`}
           checked={values.weekly_digest_enabled}

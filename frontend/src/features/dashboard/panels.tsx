@@ -7,7 +7,7 @@ import { Button, buttonClass, Card, Notice, Progress } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";
-import type { Dashboard, Followup, Me, NextStep, ScanStatus, SearchSummary, ComingUpItem } from "@/lib/types";
+import type { Dashboard, DraftWaiting, Followup, Me, NextStep, ScanStatus, SearchSummary, ComingUpItem } from "@/lib/types";
 import { useIsWide } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { jobsApi } from "@/features/jobs/api";
@@ -375,6 +375,45 @@ export function FollowupsBody({ items, onChanged }: { items: Followup[]; onChang
         </li>
       ))}
     </ul>
+  );
+}
+
+/** CV drafts the scheduled search prepared. They are never approved for the person: open one to check it, or discard it. */
+export function DraftsBody({ items, onChanged }: { items: DraftWaiting[]; onChanged: () => Promise<unknown> | void }) {
+  const [busy, setBusy] = useState<number | null>(null);
+  const discard = async (d: DraftWaiting) => {
+    if (!window.confirm(`Discard the draft CV for ${d.company}? Your own CV is not touched.`)) return;
+    setBusy(d.id);
+    try {
+      await dashboardApi.discardDraft(d.id);
+      notify(`Discarded the draft for ${d.company}.`);
+      await onChanged();
+    } catch (e) {
+      notify(errorText(e, "That did not work. Please try again."), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="space-y-2 text-theme-sm">
+      <p className="text-muted">We prepared these CVs after your last search. Open one to check it, then approve it or discard it. Nothing is sent for you.</p>
+      <ul className="space-y-2">
+        {items.map((d) => (
+          <li key={d.id} className="flex flex-wrap items-center justify-between gap-2">
+            <span className="min-w-0">
+              {d.company} — {d.role}{" "}
+              <span className="text-muted">({d.flagged_count === 0 ? "nothing flagged" : `flagged claims: ${d.flagged_count}`})</span>{" "}
+              <Link to={`/cv/${d.id}`} className="text-brand underline">
+                Open draft
+              </Link>
+            </span>
+            <Button variant="outline" small disabled={busy === d.id} onClick={() => discard(d)} aria-label={`Discard the draft for ${d.company}`}>
+              Discard
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

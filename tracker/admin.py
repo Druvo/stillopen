@@ -126,7 +126,7 @@ class SiteConfigAdmin(ModelAdmin):
             "Dashboard",
             {
                 "classes": ("tab",),
-                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "weekly_emails_enabled", "weekly_digest_site_enabled", "auto_scan_hours", "mcp_remote_enabled"),
+                "fields": ("site_title", "score_scale", "urgent_days", "apply_followup_days", "auto_close_expired", "followup_emails_enabled", "scan_emails_enabled", "weekly_emails_enabled", "weekly_digest_site_enabled", "draft_ahead_site_enabled", "auto_scan_hours", "mcp_remote_enabled"),
                 "description": "Follow-up emails need email set up (the Email tab) and `manage.py send_followup_emails` on a schedule (e.g. daily cron) -- enabling this alone does not send anything by itself.",
             },
         ),
@@ -259,7 +259,7 @@ class UserProfileAdmin(ModelAdmin):
     search_fields = ("user__username", "user__email")
     fieldsets = (
         (None, {"fields": ("user",)}),
-        ("What they want", {"fields": ("target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages", "notice_period", "salary_floor", "deal_breakers", "about", "scan_digest_enabled")}),
+        ("What they want", {"fields": ("target_roles", "home_country", "employment_types", "seniority_levels", "industries", "languages", "notice_period", "salary_floor", "deal_breakers", "about", "scan_digest_enabled", "draft_ahead_enabled")}),
         ("Emails", {"fields": ("email_followups", "email_interviews", "email_weekly")}),
         ("CV", {"fields": ("profile_cv",)}),
         (

@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
 from tracker.models import JobSource, SiteConfig
-from tracker.services import scan, who
+from tracker.services import draftahead, scan, who
 
 
 class Command(BaseCommand):
@@ -31,6 +31,7 @@ class Command(BaseCommand):
                 continue
             run = scan.start_run(owner, background=False)
             searched += 1
+            draftahead.prepare(owner, run)
             if scan.send_scan_digest(owner, run):
                 emailed += 1
         self.stdout.write(f"Searched for {searched} person(s); emailed {emailed}.")
