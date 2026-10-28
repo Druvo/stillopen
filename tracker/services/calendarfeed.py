@@ -41,7 +41,7 @@ def build(user, now=None) -> str:
     )
     for i in interviews:
         events.append(ics.event_lines(i, now, private=True))
-    open_jobs = Application.objects.filter(owner=user).exclude(status__is_terminal=True)
+    open_jobs = Application.objects.filter(owner=user, archived_at__isnull=True).exclude(status__is_terminal=True)
     for a in open_jobs.filter(follow_up_date__gte=today).order_by("follow_up_date")[:MAX_EVENTS]:
         events.append(ics.day_event_lines(f"followup-{a.pk}@stillopen", f"Follow up: {_title(a)}", a.follow_up_date, now))
     for a in open_jobs.filter(deadline__gte=today, applied_date__isnull=True).order_by("deadline")[:MAX_EVENTS]:

@@ -6,8 +6,8 @@ from django.urls import reverse
 from ninja import Router, Schema
 from ninja.errors import HttpError
 
-from ..models import CoverLetter, SiteConfig
-from ..services import coverletter, languagetool
+from ..models import CoverLetter, SiteConfig, UserProfile
+from ..services import coverletter, languagetool, preferences
 from ..services.cvversions import CVError
 from ..services.throttle import throttled
 from .common import owned_job, throttle
@@ -82,6 +82,7 @@ def delete_letter(request, cover_id: int):
 
 class WriteIn(Schema):
     mode: str = "auto"
+    tone: str = ""  # warm | direct | formal; blank = the person's saved choice
 
 
 @router.post("/jobs/{job_id}/cover-letter", summary="Write a cover letter for a job")
@@ -90,8 +91,14 @@ def write_letter(request, job_id: int, payload: WriteIn):
     if throttled(request.user, "cvgen", settings.STILLOPEN_CVGEN_PER_HOUR):
         raise HttpError(429, "Too many requests this hour. Try again later.")  # the classic page's own words
     mode = payload.mode if payload.mode in ("auto", "ai", "keywords") else "auto"
+    profile = UserProfile.for_user(request.user)
+    if payload.tone and payload.tone not in coverletter.TONES:
+        raise HttpError(400, f"Choose a tone: {', '.join(coverletter.TONES)}.")
+    tone = payload.tone or preferences.read(profile)["cover_tone"]
     try:
-        letter = coverletter.generate(app, SiteConfig.for_user(request.user), mode)
+        letter = coverletter.generate(app, SiteConfig.for_user(request.user), mode, tone)
     except CVError as exc:
         raise HttpError(400, str(exc))
-    return {"id": letter.pk, "flagged": letter.flagged, "flagged_count": len(letter.check_report or [])}
+    if payload.tone and preferences.read(profile)["cover_tone"] != tone:
+        preferences.update(profile, {"cover_tone": tone})  # remembered for the next letter
+    return {"id": letter.pk, "flagged": letter.flagged, "flagged_count": len(letter.check_report or []), "tone": tone}

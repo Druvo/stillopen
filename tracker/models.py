@@ -888,6 +888,11 @@ class Application(models.Model):
         help_text="The latest \"what this role really needs\" reading of the posting, with red flags (services/assist.py). Separate from the person's own summary.",
     )
 
+    archived_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text="Set when the person archived this job: it leaves the dashboard and its counts but is kept, and Restore clears it. Separate from the status, so a restored job is exactly as it was.",
+    )
+
     live_state = models.CharField(max_length=10, choices=LIVE, default="unknown")
     live_detail = models.CharField(max_length=300, blank=True)
     live_checked_at = models.DateTimeField(null=True, blank=True)

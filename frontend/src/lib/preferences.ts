@@ -14,6 +14,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   theme: "light",
   text_size: "normal",
   density: "comfortable",
+  cover_tone: "warm",
 };
 
 export const SORT_KEYS: SortKey[] = ["best", "newest", "oldest", "company", "deadline"];
@@ -46,6 +47,7 @@ export function normalizePreferences(raw: unknown): Preferences {
     theme: pick(r.theme, THEMES, DEFAULT_PREFERENCES.theme),
     text_size: pick(r.text_size, TEXT_SIZES, DEFAULT_PREFERENCES.text_size),
     density: pick(r.density, DENSITIES, DEFAULT_PREFERENCES.density),
+    cover_tone: pick(r.cover_tone, ["warm", "direct", "formal"] as const, DEFAULT_PREFERENCES.cover_tone),
   };
 }
 

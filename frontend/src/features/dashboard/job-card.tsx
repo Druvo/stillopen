@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarClock, GripVertical } from "lucide-react";
-import { useMemo, useState, type HTMLAttributes, type ReactNode, type Ref } from "react";
+import { lazy, Suspense, useMemo, useState, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { ActionMenu, type MenuItem } from "@/components/menu";
 import { CreditLink } from "@/components/credit";
 import { buttonClass } from "@/components/ui";
@@ -17,6 +17,25 @@ import { dashboardApi } from "./api";
 import { statusLabel } from "./jobmgmt";
 import { appliedParts, cvBadgeText, deadlineText, FIT_BADGE_TEXT, livingBadge, paperlessDocumentUrl, repostTitle, SKILL_MATCH_TITLE, shortDate, truncate } from "./logic";
 
+// The per-requirement card is fetched only when someone opens it.
+const MatchCard = lazy(() => import("@/features/jobs/match-card"));
+
+function MatchDetails({ jobId }: { jobId: number }) {
+  const [opened, setOpened] = useState(false);
+  return (
+    <details className="mt-2" onToggle={(e) => e.currentTarget.open && setOpened(true)}>
+      <summary className="cursor-pointer">How you match</summary>
+      <div className="mt-2">
+        {opened && (
+          <Suspense fallback={<p className="text-theme-sm text-muted">Reading the posting…</p>}>
+            <MatchCard jobId={jobId} heading={false} />
+          </Suspense>
+        )}
+      </div>
+    </details>
+  );
+}
+
 /** What every card needs from the page around it. */
 export type CardExtras = {
   /** "Quick keyword check" / the AI's name, for the Check my fit tooltip. */
@@ -28,6 +47,8 @@ export type CardExtras = {
   refresh: () => Promise<unknown> | void;
   /** Move one job to "Not for me" (with an Undo). Absent where the card is shown without the list's actions. */
   notForMe?: (job: Job) => void;
+  /** Archive one job: it leaves the list and the counts and can be restored from the Archived section. */
+  archive?: (job: Job) => void;
   /** Ask to remove one job for good (the page shows the confirmation). */
   remove?: (job: Job) => void;
 };
@@ -185,6 +206,7 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
     list.push({ key: "edit", label: "Edit details", to: `/jobs/${job.id}/edit` });
     if (job.url) list.push({ key: "view", label: "View the posting", href: job.url });
     if (extras.notForMe) list.push({ key: "notforme", label: "Not for me", onSelect: () => extras.notForMe?.(job) });
+    if (extras.archive) list.push({ key: "archive", label: "Archive", onSelect: () => extras.archive?.(job) });
     if (extras.remove) list.push({ key: "remove", label: "Remove for good…", onSelect: () => extras.remove?.(job) });
     if (extras.paperlessUrl && unsent.length > 0) {
       list.push({
@@ -337,6 +359,7 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
               {problem}
             </p>
           )}
+          {job.has_description && <MatchDetails jobId={job.id} />}
           {hasDetails && (
             <details className="mt-2">
               <summary className="cursor-pointer">Details</summary>

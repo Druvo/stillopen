@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from ..models import Application, Interview, JobSource, Posting, PrepPlan, ScoreBand, SiteConfig, UserProfile
 from . import apply as apply_service
-from . import geo, quiz, scan, tz
+from . import geo, quiz, scan, tracking, tz
 from .cards import band_for
 
 WEEKS = 8
@@ -159,7 +159,7 @@ def candidate_stats(user, today: date | None = None) -> dict:
     profile = UserProfile.for_user(user)
     bands = list(ScoreBand.objects.all())
     apps = list(
-        Application.objects.filter(owner=user)
+        Application.objects.filter(owner=user).filter(tracking.counted_in_stats())
         .select_related("status", "source", "posting__source")
         .prefetch_related("insights", "interviews", "offers")
     )

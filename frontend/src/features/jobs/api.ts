@@ -129,7 +129,40 @@ export type ReplyReading = { suggestion: ReplySuggestion | null; truncated: bool
 /** What an interview or an offer that was just saved suggests: the status the job could move to (never moved by itself). */
 export type SuggestedStatus = { id: number; name: string; label: string } | null;
 
+export type MatchRow = {
+  id: string;
+  text: string;
+  kind: string;
+  state: "covered" | "gap" | "unchecked";
+  /** Where the evidence is from ("from your CV", "from your note 'Project X'"), or null for a gap. */
+  source: { label: string; title: string; kind: string } | null;
+  snippet: string;
+  hint: string;
+};
+export type MatchCardData = {
+  job_id: number;
+  requirements: MatchRow[];
+  covered: number;
+  total: number;
+  summary: string;
+  has_material: boolean;
+  method: "keywords" | "ai";
+  can_ai: boolean;
+  excerpt: boolean;
+  /** "" when there is a list; otherwise why there is none. */
+  empty: "" | "no_description" | "no_requirements" | "no_material";
+};
+export type Strength = { percent: number; missing: { key: string; label: string; why: string; to: string }[]; complete: boolean };
+
 export const jobsApi = {
+  matchCard: (id: number) => request<MatchCardData>("GET", `/jobs/${id}/match-card`),
+  matchCardAi: (id: number) => request<MatchCardData>("POST", `/jobs/${id}/match-card/ai`),
+  addFact: (id: number, text: string) => request<{ added: boolean; message: string; card: MatchCardData }>("POST", `/jobs/${id}/match-card/fact`, { text }),
+  strength: () => request<Strength>("GET", "/profile/strength"),
+  archive: (id: number) => request<{ ok: true; archived: number[] }>("POST", `/jobs/${id}/archive`),
+  restore: (id: number) => request<{ ok: true; restored: number[] }>("POST", `/jobs/${id}/restore`),
+  bulkArchive: (ids: number[]) => request<{ ok: true; archived: number[] }>("POST", "/jobs/bulk", { ids, action: "archive" }),
+  bulkRestore: (ids: number[]) => request<{ ok: true; restored: number[] }>("POST", "/jobs/bulk", { ids, action: "restore" }),
   quickAdd: (url: string) => request<Prefilled>("POST", "/quickadd", { url }),
   addJob: (values: Record<string, string>, allowDuplicate = false) =>
     request<{ id: number; company: string; role: string }>("POST", "/jobs", allowDuplicate ? { ...values, allow_duplicate: true } : values),

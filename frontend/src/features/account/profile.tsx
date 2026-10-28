@@ -13,6 +13,7 @@ import { DataImportCard } from "./data-import";
 import { accountApi, type Area, type AreaValues, type ProfileData, type ProfileValues } from "./api";
 import { addRole } from "@/features/assist/logic";
 import { SuggestRoles } from "./suggest-roles";
+import { StrengthMeter } from "./strength";
 import { TimeZoneField } from "./timezone";
 import { EmailsCard } from "./emails";
 import { withoutEmails } from "./email-choices";
@@ -49,6 +50,7 @@ function ProfileScreen({ data }: { data: ProfileData }) {
         </div>
       )}
       <div className="space-y-4">
+        <StrengthMeter stamp={version} />
         <ProfileForm
           key={version}
           data={current}

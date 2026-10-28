@@ -89,7 +89,7 @@ def _row(app: Application, config: SiteConfig, today=None) -> dict:
 
 def summary() -> dict:
     config = _config()
-    apps = list(Application.objects.filter(owner=_owner()).select_related("status", "status__bucket"))
+    apps = list(Application.objects.filter(owner=_owner(), archived_at__isnull=True).select_related("status", "status__bucket"))
     tabs = {b.label: 0 for b in Bucket.objects.all()}
     for app in apps:
         tabs[app.effective_bucket(config).label] = tabs.get(app.effective_bucket(config).label, 0) + 1
@@ -114,7 +114,7 @@ def summary() -> dict:
 def list_applications(tab: str = "", status: str = "", query: str = "", limit: int = 30) -> list[dict]:
     """tab = a dashboard tab label (e.g. 'To apply'); status = exact status name; query matches company/role/notes."""
     config = _config()
-    qs = Application.objects.filter(owner=_owner()).select_related("status", "status__bucket", "source")
+    qs = Application.objects.filter(owner=_owner(), archived_at__isnull=True).select_related("status", "status__bucket", "source")
     if status:
         qs = qs.filter(status__name__iexact=status)
     if query:

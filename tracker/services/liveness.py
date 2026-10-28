@@ -80,7 +80,7 @@ def check_url(url: str, config: SiteConfig) -> tuple[str, str]:
 
 
 def _targets(owner):
-    return Application.objects.filter(owner=owner, status__is_terminal=False).exclude(url="")
+    return Application.objects.filter(owner=owner, status__is_terminal=False, archived_at__isnull=True).exclude(url="")
 
 
 def _worker(run_id: int):

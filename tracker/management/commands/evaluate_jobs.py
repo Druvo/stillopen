@@ -18,7 +18,7 @@ class Command(BaseCommand):
         except who.WhoError as exc:
             raise CommandError(str(exc)) from exc
         config = SiteConfig.for_user(owner)
-        qs = Application.objects.filter(owner=owner, status__is_terminal=False)
+        qs = Application.objects.filter(owner=owner, status__is_terminal=False, archived_at__isnull=True)
         if not opts["all"]:
             qs = qs.filter(score__isnull=True)  # never replace scores that career-ops or you already set
         done = 0

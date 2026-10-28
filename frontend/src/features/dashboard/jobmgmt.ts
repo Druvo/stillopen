@@ -61,3 +61,7 @@ export function removedText(count: number, role?: string): string {
 export function weakLine(hidden: number): string {
   return hidden === 0 ? "" : `${hidden} weak ${hidden === 1 ? "match is" : "matches are"} hidden (under 40%).`;
 }
+
+export function archivedText(count: number, role?: string): string {
+  return count === 1 && role ? `Archived ${role}. You can bring it back from Archived, below your list.` : `Archived ${jobs(count)}. You can bring them back from Archived, below your list.`;
+}
