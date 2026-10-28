@@ -28,10 +28,10 @@ async function ids(page: Page) {
 
 function screens(job: number | null, cv: number | null): string[] {
   const list = [
-    "/", "/postings", "/jobs/add", "/knowledge", "/cv", "/cv/new", "/interviews", "/contacts", "/offers", "/insights", "/prep", "/help",
+    "/", "/postings", "/jobs/add", "/knowledge", "/cv", "/cv/new", "/interviews", "/contacts", "/companies", "/questions", "/offers", "/insights", "/prep", "/help",
     "/profile", "/profile/ai", "/profile/assistant", "/sources", "/welcome", "/stats",
   ];
-  if (job) list.push(`/jobs/${job}/edit`, `/jobs/${job}/apply`);
+  if (job) list.push(`/jobs/${job}/edit`, `/jobs/${job}/apply`, `/jobs/${job}/process`);
   if (cv) list.push(`/cv/${cv}`, `/cv/${cv}/diff`);
   return list;
 }

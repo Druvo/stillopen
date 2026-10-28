@@ -2,6 +2,7 @@
 
 All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). There are no numbered releases yet; `main` is the
 supported version, so entries are grouped under **Unreleased** until the first tag.
+- Interview and company depth: a hiring-process timeline per job (stages in order, outcome incl. no-show, "Round 2 of 4, passed", only *suggests* a status), interviewers linked to your contacts, "This came up" ticks with a tally on prep questions, a personal question bank (tags, search, links to jobs/stages) and company pages (jobs, contacts, interviews, offers, notes, https links kept as text, watch star).
 
 ## [Unreleased]
 

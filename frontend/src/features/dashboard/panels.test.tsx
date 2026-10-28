@@ -270,7 +270,7 @@ describe("a job card", () => {
     expect(screen.getByText("Not checked yet")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Get ready to apply" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /More actions/ }));
-    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Get ready to apply", "Tailor my CV", "Edit details", "View the posting"]);
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Get ready to apply", "Tailor my CV", "Hiring process", "Edit details", "View the posting"]);
   });
 
   it("offers Get ready to apply once it is checked, and Check again moves under More", () => {
@@ -287,7 +287,7 @@ describe("a job card", () => {
     expect(screen.queryByRole("button", { name: /^Check my fit/ })).toBeNull();
     expect(screen.getByRole("link", { name: "Get ready to apply" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /More actions/ }));
-    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Edit details"]);
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Hiring process", "Edit details"]);
   });
 
   it("keeps the details closed until asked, and puts the applied line inside", () => {

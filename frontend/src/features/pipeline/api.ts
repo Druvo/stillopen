@@ -7,13 +7,15 @@ export type Choice = { value: string; label: string };
 export type Interview = {
   id: number; job: JobRef; scheduled_at: string; scheduled_local: string; kind: string; kind_label: string; where: string; notes: string;
   outcome: string; outcome_label: string; upcoming: boolean;
+  custom_label: string; stage_name: string; interviewers: { id: number; name: string }[];
 };
-export type InterviewList = { upcoming: Interview[]; past: Interview[]; jobs: JobChoice[]; kinds: Choice[]; outcomes: Choice[]; google: { connected: boolean; sync: boolean } };
-export type InterviewValues = { application: string; scheduled_at: string; kind: string; where: string; notes: string };
+export type InterviewList = { upcoming: Interview[]; past: Interview[]; jobs: JobChoice[]; kinds: Choice[]; outcomes: Choice[]; contacts: { id: number; label: string }[]; google: { connected: boolean; sync: boolean } };
+export type InterviewValues = { application: string; scheduled_at: string; kind: string; where: string; notes: string; custom_label: string; contacts: number[] };
 
 export type Referral = { id: number; job: JobRef; status: string; status_label: string; note: string };
 export type Contact = {
   id: number; name: string; company: string; title: string; email: string; link: string; notes: string; last_contacted: string; referrals: Referral[];
+  interviewed_you_for: { id: number; job_id: number; label: string; when: string }[];
 };
 export type ContactList = { contacts: Contact[]; jobs: JobChoice[]; referral_statuses: Choice[] };
 export type ContactValues = { name: string; company: string; title: string; email: string; link: string; last_contacted: string; notes: string };
@@ -49,7 +51,7 @@ export const pipelineApi = {
   interviews: () => request<InterviewList>("GET", "/interviews"),
   addInterview: (v: InterviewValues) => request<Saved>("POST", "/interviews", v),
   editInterview: (id: number, v: InterviewValues) => request<Saved>("PATCH", `/interviews/${id}`, v),
-  interviewOutcome: (id: number, outcome: string) => request<Ok>("POST", `/interviews/${id}/outcome`, { outcome }),
+  interviewOutcome: (id: number, outcome: string) => request<Ok & { suggest_status?: Saved["suggest_status"] }>("POST", `/interviews/${id}/outcome`, { outcome }),
   deleteInterview: (id: number) => request<Ok>("DELETE", `/interviews/${id}`),
 
   calendarLink: () => request<CalendarLink>("GET", "/calendar-link"),

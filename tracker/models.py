@@ -1042,11 +1042,11 @@ class Interview(models.Model):
 
     KINDS = [
         ("phone", "Phone screen"), ("video", "Video call"), ("technical", "Technical round"),
-        ("onsite", "On-site"), ("final", "Final round"), ("other", "Other"),
+        ("onsite", "On-site"), ("final", "Final round"), ("takehome", "Take-home task"), ("other", "Other"),
     ]
     OUTCOMES = [
         ("pending", "Not yet"), ("done", "Happened, waiting to hear"), ("passed", "Going well, moving on"),
-        ("rejected", "Not moving on"), ("cancelled", "Cancelled"),
+        ("rejected", "Not moving on"), ("noshow", "Did not happen (no-show)"), ("cancelled", "Cancelled"),
     ]
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="interviews")
@@ -1056,6 +1056,8 @@ class Interview(models.Model):
     where = models.CharField(max_length=300, blank=True, help_text="Address, or the video-call link.")
     notes = models.TextField(blank=True, max_length=4000, help_text="Who you will meet, what to prepare, questions to ask.")
     outcome = models.CharField(max_length=10, choices=OUTCOMES, default="pending")
+    custom_label = models.CharField(max_length=80, blank=True, help_text="A name for a stage of your own, such as 'Meet the CEO'. Shown instead of the kind.")
+    contacts = models.ManyToManyField("Contact", blank=True, related_name="interviews", help_text="The people on your contact list who interviewed you.")
     reminded_at = models.DateTimeField(null=True, blank=True, editable=False, help_text="When the reminder email went out, if one did.")
     google_event_id = models.CharField(max_length=128, blank=True, editable=False, help_text="The Google Calendar event this app created for it (only ever one of ours).")
     google_event_updated = models.CharField(max_length=40, blank=True, editable=False, help_text="Google's own 'updated' stamp of that event as of our last sync.")
@@ -1063,6 +1065,10 @@ class Interview(models.Model):
 
     class Meta:
         ordering = ["scheduled_at", "id"]
+
+    @property
+    def stage_name(self) -> str:
+        return self.custom_label or self.get_kind_display()
 
     def __str__(self):
         return f"{self.get_kind_display()} for {self.application.company} on {self.scheduled_at:%d %b %Y %H:%M}"
@@ -1598,6 +1604,58 @@ class InterviewPrep(models.Model):
 
     def __str__(self):
         return f"Interview questions for {self.application}"
+
+
+class CameUp(models.Model):
+    """"This came up": the person ticked a prep question as really asked. One row per (person, question); untick deletes it.
+    Either a quiz question of a prep plan, or a question from a job's interview-prep list (keyed by its id in that list)."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="came_up")
+    prep_question = models.ForeignKey("PrepQuestion", null=True, blank=True, on_delete=models.CASCADE, related_name="came_up")
+    application = models.ForeignKey(Application, null=True, blank=True, on_delete=models.CASCADE, related_name="came_up")
+    question_key = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "prep_question"], condition=models.Q(prep_question__isnull=False), name="uniq_cameup_plan_question"),
+            models.UniqueConstraint(fields=["owner", "application", "question_key"], condition=models.Q(application__isnull=False), name="uniq_cameup_job_question"),
+        ]
+
+
+class BankQuestion(models.Model):
+    """One of the person's own reusable interview questions, with the answer they wrote, a few skill tags and where it was asked."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bank_questions")
+    question = models.CharField(max_length=400)
+    answer = models.TextField(blank=True, max_length=4000)
+    tags = models.JSONField(default=list, blank=True, help_text="Up to five short words.")
+    interviews = models.ManyToManyField(Interview, blank=True, related_name="bank_questions")
+    applications = models.ManyToManyField(Application, blank=True, related_name="bank_questions")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-id"]
+
+
+class CompanyNote(models.Model):
+    """What the person keeps about one company: notes, three links and a watch star. Companies themselves are not a table: the page
+    is built from the person's own jobs, contacts, interviews and offers, matched on the lower-cased name (`key`)."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="company_notes")
+    key = models.CharField(max_length=160)
+    name = models.CharField(max_length=160)
+    notes = models.TextField(blank=True, max_length=4000)
+    website = models.CharField(max_length=300, blank=True)
+    careers = models.CharField(max_length=300, blank=True)
+    linkedin = models.CharField(max_length=300, blank=True)
+    watched = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["owner", "key"], name="uniq_company_note")]
+        ordering = ["name"]
 
 
 from .google_models import GoogleConnection, MailMessage  # noqa: E402,F401  (registers them with the app)

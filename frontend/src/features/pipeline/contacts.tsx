@@ -117,6 +117,11 @@ function Person({ item, data, onEdit }: { item: Contact; data: ContactList; onEd
             )}
           </p>
           {item.last_contacted && <p className="text-xs text-muted">Last spoke {dayLabel(item.last_contacted)}</p>}
+          {item.interviewed_you_for.map((i) => (
+            <p key={i.id} className="text-sm">
+              Interviewed you for {i.label}, {dayLabel(i.when)}
+            </p>
+          ))}
           {item.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{item.notes}</p>}
         </div>
         <div className="flex gap-2">

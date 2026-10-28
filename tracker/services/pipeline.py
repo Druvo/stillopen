@@ -211,6 +211,7 @@ def save_interview(form, owner):
     item = form.save(commit=False)
     item.owner = owner
     item.save()
+    form.save_m2m()
     _note(item.application, "interview", f"{item.get_kind_display()} scheduled for {timezone.localtime(item.scheduled_at):%d %b %Y %H:%M}")
     return item
 

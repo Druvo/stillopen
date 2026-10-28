@@ -69,6 +69,13 @@ def build(user) -> dict:
             {"for_job": f"{ip.application.company} - {ip.application.role}", "created": ip.created_at.isoformat(), "content": ip.content}
             for ip in user.interview_preps.select_related("application")
         ],
+        "question_bank": [
+            {"question": q.question, "answer": q.answer, "tags": q.tags} for q in user.bank_questions.all()
+        ],
+        "company_notes": [
+            {"company": n.name, "notes": n.notes, "website": n.website, "careers": n.careers, "linkedin": n.linkedin, "watched": n.watched}
+            for n in user.company_notes.all()
+        ],
         "own_job_sources": [
             {"name": s.name, "connector": s.connector, "board_token": s.board_token, "enabled": s.enabled}
             for s in user.job_sources.all()

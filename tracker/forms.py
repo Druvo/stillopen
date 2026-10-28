@@ -513,6 +513,8 @@ class OwnedFormMixin:
             self.fields["application"].label_from_instance = lambda a: f"{a.company} - {a.role}"
         if "contact" in self.fields:
             self.fields["contact"].queryset = Contact.objects.filter(owner=owner)
+        if "contacts" in self.fields:
+            self.fields["contacts"].queryset = Contact.objects.filter(owner=owner)
 
 
 class InterviewForm(OwnedFormMixin, forms.ModelForm):
@@ -524,9 +526,9 @@ class InterviewForm(OwnedFormMixin, forms.ModelForm):
 
     class Meta:
         model = Interview
-        fields = ["application", "scheduled_at", "kind", "where", "notes"]
+        fields = ["application", "scheduled_at", "kind", "custom_label", "where", "notes", "contacts"]
         widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
-        labels = {"where": "Where or link"}
+        labels = {"where": "Where or link", "custom_label": "Name of this stage (optional)", "contacts": "Who interviewed you"}
 
 
 class ContactForm(OwnedFormMixin, forms.ModelForm):
