@@ -55,6 +55,7 @@ export type Job = {
   has_cv: boolean;
   cv: CvBadge | null;
   repost: Repost | null;
+  apply_address: string;
   skill_matched: boolean;
   /** "Jobs by Adzuna" when the job came from an Adzuna search (their terms ask for the credit). */
   credit?: { label: string; url: string } | null;

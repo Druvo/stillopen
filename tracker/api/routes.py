@@ -140,6 +140,7 @@ def _job(card, has_areas: bool, prep: dict | None = None) -> dict:
         "has_cv": cv is not None,
         "cv": {"id": cv.pk, "label": f"CV v{cv.pk}", "flagged": cv.flagged, "approved": cv.approved} if cv else None,
         "repost": _repost(card["repost"]),
+        "apply_address": card["apply_address"],
         "skill_matched": card["skill_matched"],
         "credit": adzuna.credit_for(app.posting) if app.posting_id else None,  # "Jobs by Adzuna", required where Adzuna's results appear
         "tech_skills": card["tech_skills"],

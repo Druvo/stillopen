@@ -6,6 +6,7 @@ import { CreditLink } from "@/components/credit";
 import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
+import { applyHref } from "@/lib/utils";
 import { jobsApi, type Duplicate, type PostingRow } from "./api";
 import { duplicateMessage, duplicateOf } from "./jobmgmt";
 import { postingsQuery, readPostingsQuery, repostHint } from "./logic";
@@ -140,6 +141,15 @@ export function Postings() {
                   {p.credit && (
                     <p className="text-xs text-muted">
                       <CreditLink credit={p.credit} />
+                    </p>
+                  )}
+                  {applyHref(p.apply_address) && (
+                    <p className="mt-1 text-sm">
+                      Apply address:{" "}
+                      <a href={applyHref(p.apply_address)} target="_blank" rel="noopener noreferrer" className="text-brand underline">
+                        {p.apply_address}
+                      </a>{" "}
+                      <span className="text-xs text-muted">(the post publishes this; we never send anything for you)</span>
                     </p>
                   )}
                   {p.repost && (

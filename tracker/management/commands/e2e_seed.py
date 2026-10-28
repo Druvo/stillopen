@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from django.utils import timezone
 
-from tracker.models import Application, CVVersion, Interview, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile
+from tracker.models import Application, CVVersion, Interview, JobSource, Posting, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile
 
 CV = """# Alice Example
 
@@ -67,6 +67,13 @@ class Command(BaseCommand):
                 run = ScanRun.objects.create(owner=user, running=False, total=2, done=2, found=40, added=3, note="Only the best matches were added.")
                 ScanLogEntry.objects.create(run=run, source_name="Acme Careers", connector="greenhouse", found=30, matched=6, added=3, duplicates=1, outside=2)
                 ScanLogEntry.objects.create(run=run, source_name="Broken Board", connector="lever", error="The board did not answer.")
+                # a startup post from Hacker News that publishes an apply address: listed under All postings (the spec adds it to the tracker)
+                hn, _ = JobSource.objects.get_or_create(connector="hnhiring", board_token="all", owner=None, defaults={"name": "Startups: Hacker News", "enabled": False})
+                Posting.objects.get_or_create(
+                    source=hn, url="https://news.ycombinator.com/item?id=1000001",
+                    defaults={"title": "Founding Backend Engineer", "company": "Launchpad Labs", "title_key": "launchpad labs founding backend engineer",
+                              "location": "Remote (EU)", "apply_address": "jobs@launchpad.example"},
+                )
         grace = User.objects.get(username="grace")
         CVVersion.objects.filter(owner=grace).delete()
         master = CVVersion.objects.create(owner=grace, kind="master", content=CV, label="Initial CV", approved=True)

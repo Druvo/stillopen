@@ -12,7 +12,7 @@ import { errorText } from "@/lib/api";
 import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import type { Job, StatusInfo } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { applyHref, cn } from "@/lib/utils";
 import { dashboardApi } from "./api";
 import { statusLabel } from "./jobmgmt";
 import { appliedParts, cvBadgeText, deadlineText, FIT_BADGE_TEXT, livingBadge, paperlessDocumentUrl, repostTitle, SKILL_MATCH_TITLE, shortDate, truncate } from "./logic";
@@ -283,6 +283,13 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
               {job.risk && <Pill>Risk: {job.risk}</Pill>}
             </div>
             {!compact && job.summary && <p className="mt-1.5 line-clamp-2">{job.summary}</p>}
+            {!compact && applyHref(job.apply_address) && (
+              <p className="mt-1">
+                <a href={applyHref(job.apply_address)} target="_blank" rel="noopener noreferrer" className="text-brand underline" title="The address this posting publishes for applying. We never send anything for you.">
+                  Apply address: {job.apply_address}
+                </a>
+              </p>
+            )}
           </div>
         </div>
 
