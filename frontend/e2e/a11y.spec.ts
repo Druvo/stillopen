@@ -46,6 +46,8 @@ async function screens(page: Page): Promise<{ name: string; path: string }[]> {
     { name: "cv-new", path: "/app/cv/new" },
     { name: "profile", path: "/app/profile" },
     { name: "ai-settings", path: "/app/profile/ai" },
+    { name: "ai-usage", path: "/app/profile/ai/usage" },
+    { name: "notifications", path: "/app/notifications" },
     { name: "assistant", path: "/app/profile/assistant" },
     { name: "sources", path: "/app/sources" },
     { name: "prep-list", path: "/app/prep" },

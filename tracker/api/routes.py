@@ -6,7 +6,7 @@ from ninja.security import django_auth
 
 from ..context import staff_flags
 from ..models import Application, Bucket, Event, JobSource, ScoreBand, SiteConfig, Status, UserProfile
-from ..services import adzuna, ai, assist, board, careerops, geo, guide, knowledge, liveness, preferences, quiz, scan, sourcehealth, tz, weekly
+from ..services import adzuna, ai, assist, board, careerops, geo, guide, knowledge, liveness, notifications, preferences, quiz, scan, sourcehealth, tz, updatecheck, weekly
 from ..services import apply as apply_service
 from ..services.cards import card_for
 from ..services.pipeline import upcoming_interviews
@@ -62,6 +62,8 @@ def me(request):
         "timezone": profile.timezone,
         "contact_email": site.contact_email,
         "site_timezone": settings.TIME_ZONE,
+        "version": updatecheck.running_version(),
+        "update_check_enabled": bool(user.is_staff and site.update_check_enabled),  # staff only; the dashboard asks /update-check only when this is true
         "writing_check_enabled": bool(site.effective_languagetool_url),
         "translate_enabled": bool(site.effective_libretranslate_url),
         # the banners only a site admin sees (the same rule the classic pages used)
@@ -202,6 +204,14 @@ def dashboard(request):
         ((c["app"], v) for c in cards for v in c["app"].cv_versions.all() if v.draft_ahead and v.kind == "tailored" and not v.approved),
         key=lambda pair: (pair[1].created_at, pair[1].pk), reverse=True,
     )
+    followups = [
+        {
+            "id": a.pk, "company": a.company, "role": a.role, "follow_up_date": a.follow_up_date.isoformat(),
+            "applied_date": _iso(a.applied_date),
+        }
+        for a in apply_service.due_followups(user, today)
+    ]
+    notifications.sync_dashboard(user, cards, followups)  # the bell: each deadline and follow-up is announced once
     paperless_on = user.is_staff and config.paperless_enabled and bool(config.effective_paperless_url)
     return {
         "greeting": guide.greeting(user, now),
@@ -218,13 +228,7 @@ def dashboard(request):
             "average_match": round(sum(scored) / len(scored)) if scored else None,
             "urgent": sum(1 for c in cards if c["urgent"]),
         },
-        "followups": [
-            {
-                "id": a.pk, "company": a.company, "role": a.role, "follow_up_date": a.follow_up_date.isoformat(),
-                "applied_date": _iso(a.applied_date),
-            }
-            for a in apply_service.due_followups(user, today)
-        ],
+        "followups": followups,
         "coming_up": weekly.coming_up(user, today=today, now=now),
         "upcoming_interviews": [
             {

@@ -9,7 +9,7 @@ from django.core.mail import send_mail
 from django.utils import timezone
 
 from tracker.models import Application, Interview, Offer, ScoreBand, SiteConfig
-from tracker.services import integrations, links, tz
+from tracker.services import integrations, links, notifications, tz
 from tracker.services.cards import band_for
 
 REMINDER_HOURS = 24
@@ -55,6 +55,7 @@ def send_interview_reminders(owner, items) -> bool:
         fail_silently=False,
     )
     Interview.objects.filter(pk__in=[i.pk for i in items]).update(reminded_at=timezone.now())
+    notifications.interview_reminders_sent(owner, items)
     return True
 
 

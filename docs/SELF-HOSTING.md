@@ -300,6 +300,15 @@ docker compose -f docker-compose.selfhost.yml up -d --build      # Python instal
 Migrations run on start. Read [CHANGELOG.md](../CHANGELOG.md) first. The image now runs as an ordinary user (uid 10001); if you are updating a volume created by an older
 image that ran as root, give it to that user once: `docker compose -f docker-compose.selfhost.yml run --rm --user root stillopen chown -R 10001:10001 /data`.
 
+## Knowing about a newer version (optional, off by default)
+
+StillOpen never contacts anyone on its own. The running version is in the `VERSION` file and shown on the Help page. If you want a
+reminder when a release is out, tick **Check GitHub for a newer release** under Site configuration > Dashboard. Then, only when an admin
+opens the dashboard and at most once every six hours, the server makes one plain `GET https://api.github.com/repos/Druvo/stillopen/releases/latest`
+(GitHub's public releases list). Nothing about any person or your install is sent: no account, address, version or counts, only the
+request itself (so GitHub sees your server's IP address, as with any web request). If the request fails, nothing happens and it is not
+retried for an hour. Admins then see a small notice with a link to the release notes. Leave it unticked and no request is ever made.
+
 ## Troubleshooting
 
 | Problem | What to do |

@@ -19,6 +19,7 @@ USER_MODEL = settings.AUTH_USER_MODEL.lower()
 EXPORT_EXCLUDED = {
     "tracker.apitoken": "access tokens are credentials (only a hash is kept); exporting them would be a risk, not a favour",
     "tracker.aiusageevent": "a log of provider calls (tokens and cost), no personal content",
+    "tracker.notification": "short notices made by the app about events already in the export (a finished search, a due follow-up); not data of their own",
     "tracker.scanrun": "operational log of searches",
     "tracker.scanlogentry": "operational log of searches",
     "tracker.livenessrun": "operational log of open/closed checks",

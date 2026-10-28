@@ -80,7 +80,7 @@ from django.utils import timezone
 from tracker.models import (
     Application, Event, JobSource, Posting, PostingSighting, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile,
 )
-from tracker.services import ai, fit, geo, integrations, knowledge
+from tracker.services import ai, fit, geo, integrations, knowledge, notifications
 from tracker.services.jobtext import html_to_text
 from tracker.services.adzuna import fetch_adzuna  # noqa: F401  (looked up by name in _fetch; asked with roles via _fetch_search)
 from tracker.services.careerpage import fetch_careerpage  # noqa: F401  (looked up by name in _fetch)
@@ -1378,6 +1378,7 @@ def _worker(run_id: int):
             run.note = f"Showing the {new_cap} best new matches. Search again later for more; the rest are still under All postings."
         run.done = len(sources)
         run.save(update_fields=["added", "added_ids", "error", "note", "done"])
+        notifications.search_finished(run)
         PostingSighting.objects.filter(seen_date__lt=today - timedelta(days=180)).delete()
     except Exception as exc:  # noqa: BLE001 - recorded on the run
         ScanRun.objects.filter(pk=run_id).update(error=str(exc)[:500])

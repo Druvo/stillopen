@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from django.utils import timezone
 
-from tracker.models import Application, CVVersion, Interview, JobSource, Posting, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile
+from tracker.models import Application, CVVersion, Interview, JobSource, Notification, Posting, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile
 
 CV = """# Alice Example
 
@@ -49,6 +49,7 @@ class Command(BaseCommand):
             ("erin", []),  # the welcome-questions test saves her answers
             ("frank", []),  # the CV builder test builds his CV (so bob stays a person with no CV)
             ("grace", [("Hooli", "Backend Engineer", "Saved", 4.5)]),  # has a CV draft the scheduled search prepared (draftahead spec)
+            ("heidi", []),  # has notices in the bell (notifications spec)
         ):
             user, _ = User.objects.get_or_create(username=name, defaults={"email": f"{name}@example.com"})
             user.set_password(PASSWORD)
@@ -74,6 +75,12 @@ class Command(BaseCommand):
                     defaults={"title": "Founding Backend Engineer", "company": "Launchpad Labs", "title_key": "launchpad labs founding backend engineer",
                               "location": "Remote (EU)", "apply_address": "jobs@launchpad.example"},
                 )
+        heidi = User.objects.get(username="heidi")
+        Notification.objects.filter(owner=heidi).delete()
+        UserProfile.objects.filter(user=heidi).update(notify_muted=[])
+        Notification.objects.create(owner=heidi, kind="search", title="Your search found 3 new jobs", text="Open your dashboard to see them, best match first.", link="/")
+        Notification.objects.create(owner=heidi, kind="closed", title="Acme: the posting looks closed", text="Backend Engineer. Check the page before you spend time on it.", link="/jobs/1/edit")
+        Notification.objects.create(owner=heidi, kind="followup", title="Follow up with Initech", text="API Developer. The date you set has come.", read_at=timezone.now() - timedelta(days=2), created_at=timezone.now() - timedelta(days=2))
         grace = User.objects.get(username="grace")
         CVVersion.objects.filter(owner=grace).delete()
         master = CVVersion.objects.create(owner=grace, kind="master", content=CV, label="Initial CV", approved=True)
@@ -82,4 +89,4 @@ class Command(BaseCommand):
             content=CV + "- Led a team of 40 engineers.\n", draft_ahead=True,
             check_report=[{"kind": "number", "text": "40", "line": 12}],
         )
-        self.stdout.write("Seeded alice, bob, carol, dave, erin, frank and grace.")
+        self.stdout.write("Seeded alice, bob, carol, dave, erin, frank, grace and heidi.")

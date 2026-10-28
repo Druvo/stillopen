@@ -25,7 +25,7 @@ import {
 import { allSelected, movedText, notForMeStatus, pruneSelection, removedText, selectAllIn, statusLabel, toggleId, undoText, weakLine } from "./jobmgmt";
 import { SelectionBar, UndoBar } from "./selection";
 import { comingUpItems } from "./coming-up";
-import { AiKeyPrompt, AsideCard, ComingUpBody, DraftsBody, FollowupsBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, YourSearchBody } from "./panels";
+import { AiKeyPrompt, AsideCard, ComingUpBody, DraftsBody, FollowupsBody, LastSearchBody, NextStepBody, Spinner, StaffBanners, StatTiles, ThisWeekBody, UpdateNotice, YourSearchBody } from "./panels";
 import { StageTabs, TAB_PANEL_ID, tabId, Toolbar } from "./toolbar";
 import { useRun } from "./use-run";
 import { TimezonePrompt } from "./timezone-prompt";
@@ -340,6 +340,7 @@ export function Dashboard() {
         </div>
       </header>
       <StaffBanners me={me.data} />
+      <UpdateNotice me={me.data} />
       {data.ai_prompt?.show && !prefs.ai_prompt_dismissed && <AiKeyPrompt onDismiss={() => update({ ai_prompt_dismissed: true })} />}
       <TimezonePrompt />
       {liveness.error && (

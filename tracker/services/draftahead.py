@@ -9,7 +9,7 @@ import logging
 from django.conf import settings
 
 from tracker.models import Application, CVVersion, ScoreBand, SiteConfig, UserProfile
-from tracker.services import cvgen
+from tracker.services import cvgen, notifications
 from tracker.services.cvversions import CVError
 
 log = logging.getLogger(__name__)
@@ -76,6 +76,7 @@ def prepare(owner, run) -> int:
         text = f"Draft ahead: {made} CV draft{'s' if made != 1 else ''} ready for your review"
         text += f"; {failed} could not be made." if failed else "."
         _note(run, text)
+    notifications.drafts_waiting(owner, made)
     return made
 
 

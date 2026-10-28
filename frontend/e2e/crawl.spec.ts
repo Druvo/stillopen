@@ -29,7 +29,7 @@ async function ids(page: Page) {
 function screens(job: number | null, cv: number | null): string[] {
   const list = [
     "/", "/postings", "/jobs/add", "/knowledge", "/cv", "/cv/new", "/interviews", "/contacts", "/offers", "/insights", "/prep", "/help",
-    "/profile", "/profile/ai", "/profile/assistant", "/sources", "/welcome", "/stats",
+    "/profile", "/profile/ai", "/profile/ai/usage", "/notifications", "/profile/assistant", "/sources", "/welcome", "/stats",
   ];
   if (job) list.push(`/jobs/${job}/edit`, `/jobs/${job}/apply`);
   if (cv) list.push(`/cv/${cv}`, `/cv/${cv}/diff`);

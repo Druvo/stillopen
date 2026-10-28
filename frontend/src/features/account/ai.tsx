@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, ErrorBox, Loading, Notice, PageHeader } from "@/components/ui";
 import { CheckField, FormError, SelectField, TextAreaField, TextField, useSubmit } from "@/components/form";
 import { errorText } from "@/lib/api";
+import { Link } from "@/lib/router";
 import type { AiSettings, AiSettingsValues } from "./api";
 import { accountApi } from "./api";
 import { applyPreset } from "./logic";
@@ -31,6 +32,11 @@ function Usage({ usage }: { usage: AiSettings["usage"] }) {
             {usage.total_tokens ? ` · about ${usage.total_tokens.toLocaleString()} tokens` : ""}
             {usage.cost_usd ? ` · about $${usage.cost_usd}` : ""}
             {usage.cost_usd && usage.any_estimated ? " (estimated for some calls; provider prices change, so this is approximate)" : ""}
+          </p>
+          <p className="mt-1 text-sm">
+            <Link to="/profile/ai/usage" className="link-target text-brand underline">
+              See the details: by model, by purpose, failures and your last 25 calls
+            </Link>
           </p>
           <p className="text-xs text-muted">The free keyword match (no AI provider) never appears here. It costs nothing and makes no network call.</p>
         </>

@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from collections import Counter
 from decimal import Decimal
 
@@ -69,19 +70,47 @@ def estimate_cost(model: str, input_tokens: int | None, output_tokens: int | Non
     return None
 
 
-def log_usage(app: Application | None, owner, provider: str, purpose: str) -> AIUsageEvent | None:
+def log_usage(app: Application | None, owner, provider: str, purpose: str, model: str = "", duration_ms: int | None = None) -> AIUsageEvent | None:
     """Reads whatever the just-finished backend call recorded in _last_usage and logs it. Called once, right
     after the backend() call, by both evaluate_application and complete() -- never inside a backend itself,
-    so a backend that raises (no usage to log) never creates a row."""
+    so a backend that raises (no usage to log) never creates a success row (see log_failure)."""
     usage = _last_usage.get()
     _last_usage.set(None)
     if usage is None or owner is None:
         return None
     return AIUsageEvent.objects.create(
-        owner=owner, application=app, provider=provider, purpose=purpose,
+        owner=owner, application=app, provider=provider, purpose=purpose, model=model[:80], duration_ms=duration_ms,
         input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
         cost_usd=usage.get("cost_usd"), cost_is_estimate=usage.get("cost_is_estimate", True),
     )
+
+
+def log_failure(app: Application | None, owner, provider: str, purpose: str, model: str = "", duration_ms: int | None = None) -> None:
+    """A call that raised: one row with no tokens and no cost, so the usage page can count failures. Never raises."""
+    _last_usage.set(None)
+    if owner is None:
+        return
+    try:
+        AIUsageEvent.objects.create(owner=owner, application=app, provider=provider, purpose=purpose, model=model[:80], duration_ms=duration_ms, ok=False)
+    except Exception:  # noqa: BLE001 - bookkeeping only
+        pass
+
+
+def _model_of(config: SiteConfig) -> str:
+    return (config.ai_model or DEFAULT_MODELS.get(config.ai_provider, ""))
+
+
+def _timed_call(backend, system: str, user: str, config: SiteConfig, app: Application | None, owner, purpose: str):
+    """Run the backend, time it, and log the usage (or the failure). Returns (text, usage event or None)."""
+    _last_usage.set(None)
+    started = time.monotonic()
+    try:
+        text = backend(system, user, config)
+    except Exception:
+        log_failure(app, owner, config.ai_provider, purpose, _model_of(config), int((time.monotonic() - started) * 1000))
+        raise
+    event = log_usage(app, owner, config.ai_provider, purpose, _model_of(config), int((time.monotonic() - started) * 1000))
+    return text, event
 
 SYSTEM_PROMPT = """You assess how well a job posting fits one candidate.
 
@@ -593,10 +622,9 @@ def evaluate_application(app: Application, config: SiteConfig | None = None) -> 
         if backend is None:
             raise AIError(f"Unknown AI provider: {config.ai_provider}")
         material, note = candidate_material(app, config)
-        _last_usage.set(None)
-        result = parse_result(backend(SYSTEM_PROMPT, build_user_prompt(app, config, material), config))
+        reply, usage_event = _timed_call(backend, SYSTEM_PROMPT, build_user_prompt(app, config, material), config, app, app.owner, "evaluate")
+        result = parse_result(reply)
         method = f"ai:{config.ai_provider}"
-        usage_event = log_usage(app, app.owner, config.ai_provider, "evaluate")
     store_result(app, result, config, method, note, usage_event)
     return result
 
@@ -610,7 +638,5 @@ def complete(config: SiteConfig, system: str, user: str, app: Application | None
     backend = BACKENDS.get(config.ai_provider)
     if backend is None:
         raise AIError(f"Unknown AI provider: {config.ai_provider}")
-    _last_usage.set(None)
-    text = backend(system, user, config)
-    log_usage(app, app.owner if app else owner, config.ai_provider, purpose)
+    text, _ = _timed_call(backend, system, user, config, app, app.owner if app else owner, purpose)
     return text
