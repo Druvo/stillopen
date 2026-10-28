@@ -24,7 +24,10 @@ PASSWORD = "e2e-pass-12345"  # test-only value; the users exist only in the thro
 
 
 class Command(BaseCommand):
-    help = "Create the e2e people (alice, bob, carol, dave, erin and frank) Needs STILLOPEN_E2E=1."
+    help = "Create the e2e people (alice, bob, carol, dave, erin, frank and grace). Needs STILLOPEN_E2E=1. --demo also adds Jane Doe and a public board, for the README screenshots."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--demo", action="store_true", help="Also make the demo person (jane, 9 jobs across the stages) and a few public openings. Used by `pnpm readme:images` only.")
 
     def handle(self, *args, **options):
         if os.environ.get("STILLOPEN_E2E") != "1":
@@ -82,4 +85,54 @@ class Command(BaseCommand):
             content=CV + "- Led a team of 40 engineers.\n", draft_ahead=True,
             check_report=[{"kind": "number", "text": "40", "line": 12}],
         )
-        self.stdout.write("Seeded alice, bob, carol, dave, erin, frank and grace.")
+        if options["demo"]:
+            self.seed_demo(User, statuses, today)
+        self.stdout.write("Seeded alice, bob, carol, dave, erin, frank and grace" + (", and the demo person jane." if options["demo"] else "."))
+
+    def seed_demo(self, User, statuses, today):
+        """Jane Doe: an invented person with nine jobs across the stages, one tailored CV with a flagged claim and a few public openings,
+        so the README pictures show a realistic search and no real person. Separate from the people above (no existing spec sees her)."""
+        jane, _ = User.objects.get_or_create(username="jane", defaults={"email": "jane@example.com", "first_name": "Jane", "last_name": "Doe"})
+        jane.first_name, jane.last_name = "Jane", "Doe"
+        jane.set_password(PASSWORD)
+        jane.save()
+        UserProfile.objects.filter(user=jane).update(onboarding_done=True, target_roles="Backend Engineer, Platform Engineer", home_country="MY", profile_cv=CV)
+        Application.objects.filter(owner=jane).delete()
+        ScanRun.objects.filter(owner=jane).delete()
+        d = timedelta
+        rows = [
+            ("Northwind", "Senior Backend Engineer", "Evaluated", 4.6, {"arrangement": "remote", "live_state": "active", "live_detail": "The page still loads.", "country": "MY", "advertised_pay": "MYR 18k a month", "found_date": today - d(days=1), "description": "Build payment APIs in Python and Django. Docker, SQL and CI.", "url": "https://jobs.example.com/northwind/backend"}),
+            ("Contoso Pay", "Python Developer", "Evaluated", 4.3, {"arrangement": "hybrid", "live_state": "active", "live_detail": "The page still loads.", "country": "MY", "found_date": today - d(days=2), "description": "Python, Django and PostgreSQL for a payments team.", "url": "https://jobs.example.com/contoso/python"}),
+            ("Fabrikam", "Platform Engineer", "Evaluated", 3.4, {"arrangement": "remote", "live_state": "expired", "live_detail": "The posting says it is no longer taking applications.", "found_date": today - d(days=6), "url": "https://jobs.example.com/fabrikam/platform"}),
+            ("Tailspin", "API Engineer", "Saved", 3.9, {"arrangement": "remote", "live_state": "uncertain", "live_detail": "The page loads but does not say if the role is open.", "found_date": today - d(days=3), "url": "https://jobs.example.com/tailspin/api"}),
+            ("Adventure Works", "Backend Engineer", "Applied", 4.4, {"applied_date": today - d(days=9), "applied_channel": "email", "follow_up_date": today + d(days=2), "found_date": today - d(days=12), "live_state": "active", "url": "https://jobs.example.com/adventure/backend"}),
+            ("Wingtip", "Software Engineer, Payments", "Applied", 4.1, {"applied_date": today - d(days=5), "applied_channel": "other", "found_date": today - d(days=8), "live_state": "active", "url": "https://jobs.example.com/wingtip/payments"}),
+            ("Litware", "Senior Python Engineer", "Interview", 4.7, {"applied_date": today - d(days=15), "applied_channel": "referral", "found_date": today - d(days=20), "live_state": "active", "url": "https://jobs.example.com/litware/python"}),
+            ("Proseware", "Staff Backend Engineer", "Offer", 4.9, {"applied_date": today - d(days=30), "applied_channel": "other", "found_date": today - d(days=36), "live_state": "active", "url": "https://jobs.example.com/proseware/staff"}),
+            ("Lucerne", "Data Platform Engineer", "Rejected", 3.2, {"applied_date": today - d(days=21), "applied_channel": "email", "found_date": today - d(days=26), "live_state": "expired", "url": "https://jobs.example.com/lucerne/data"}),
+        ]
+        for company, role, status, score, extra in rows:
+            Application.objects.create(owner=jane, company=company, role=role, status=statuses[status], score=score, summary=f"A role at {company}", **extra)
+        Interview.objects.create(owner=jane, application=Application.objects.get(owner=jane, company="Litware"), scheduled_at=timezone.now() + timedelta(days=2), kind="video")
+        run = ScanRun.objects.create(owner=jane, running=False, total=3, done=3, found=212, added=4, note="Only the best matches were added.")
+        ScanLogEntry.objects.create(run=run, source_name="Northwind Careers", connector="greenhouse", found=64, matched=5, added=2, duplicates=1, outside=8)
+        ScanLogEntry.objects.create(run=run, source_name="Remote jobs feed", connector="remoteok", found=148, matched=9, added=2, duplicates=3, outside=40)
+        CVVersion.objects.filter(owner=jane).delete()
+        master = CVVersion.objects.create(owner=jane, kind="master", content=CV, label="Initial CV", approved=True)
+        CVVersion.objects.create(
+            owner=jane, application=Application.objects.get(owner=jane, company="Northwind"), parent=master, kind="tailored", source="ai",
+            label="Northwind - Senior Backend Engineer", content=CV + "- Led a team of 40 engineers.\n", check_report=[{"kind": "number", "text": "40", "line": 12}],
+        )
+        # a public board for the openings screenshot: invented employers on a made-up source, nothing fetched from anywhere
+        board, _ = JobSource.objects.get_or_create(connector="greenhouse", board_token="demo-board", owner=None, defaults={"name": "Demo Careers", "enabled": True, "show_publicly": True})
+        JobSource.objects.filter(pk=board.pk).update(enabled=True, show_publicly=True)
+        for i, (company, title, place, remote) in enumerate([
+            ("Northwind", "Senior Backend Engineer", "Kuala Lumpur, Malaysia", False), ("Contoso Pay", "Python Developer", "Remote (Asia)", True),
+            ("Litware", "Platform Engineer", "Dubai, UAE", False), ("Tailspin", "API Engineer", "Remote", True), ("Wingtip", "Site Reliability Engineer", "Dhaka, Bangladesh", False),
+            ("Adventure Works", "Data Engineer", "Remote (Worldwide)", True), ("Fabrikam", "Security Engineer", "Singapore", False),
+        ]):
+            Posting.objects.get_or_create(
+                source=board, url=f"https://jobs.example.com/demo/{i}",
+                defaults={"title": title, "company": company, "title_key": f"{company} {title}".lower(), "location": place, "remote": remote,
+                          "excerpt": f"{company} is hiring a {title.lower()} to join a small, friendly team."},
+            )

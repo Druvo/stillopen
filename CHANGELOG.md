@@ -1,10 +1,14 @@
 # Changelog
 
-All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). There are no numbered releases yet; `main` is the
-supported version, so entries are grouped under **Unreleased** until the first tag.
+All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [semantic versioning](https://semver.org/).
+
+**Release flow.** Work is listed under **Unreleased**. To release: move the entries into a new `## X.Y.Z - YYYY-MM-DD` section, update `VERSION`, commit, then
+`git tag vX.Y.Z && git push --tags`. The release workflow publishes that section as the GitHub release notes and the image workflow builds the container
+image. Details, version rules and rollback: [docs/RELEASING.md](docs/RELEASING.md). Until the first tag, `main` is the supported version.
 
 ## [Unreleased]
 
+- Launch kit: a new README top (what it is, screenshots, quick start, honest limits, measured sizes), a project site in `site/` published by `.github/workflows/pages.yml`, a release workflow that turns the matching changelog section into the GitHub release notes (`scripts/release_notes.py`, `docs/RELEASING.md`, a `VERSION` file), one-line update scripts (`deploy/update.sh`, `deploy/update.ps1`), a sponsor-button placeholder, blank issues off, and `pnpm readme:images`, which makes the README pictures from invented demo data (`manage.py e2e_seed --demo`).
 - "Ask for changes" on a CV version and on a cover letter: type what you want different ("make it shorter", "lead with my Django work", "less formal") and your own AI sends back a revised copy. It is fact-checked like a tailored CV (anything not in your own CV or documents is flagged, and a flagged copy cannot be downloaded until you approve it). On a CV the result is a new version and the old one is kept; on a cover letter the earlier text is kept and "Undo" brings it back. Needs your AI set up; limited per hour by `STILLOPEN_REFINE_PER_HOUR`.
 - CV builder: optional Publications (plain one-line citations, "plain" or "APA-like") and References ("available on request" line, or up to three people) sections; three more plain download looks (Serif, Forest, Slate; font and colour only). "Export my data" now carries a format marker and the home country and time zone, and Profile > Your data can add an export back into the same account: a preview first, then a merge that only fills what is empty (profile answers, CV history, cover letters, job notes) and never overwrites.
 - Optional Google connection (off until the site admin enters a Google OAuth client under Site configuration > Google connection): connect your own Google account on Profile > Connections to send an application from your own Gmail (only after you preview the exact message and press Send), see employer replies next to the job, get a draft reply and three free interview times, and keep your Google Calendar in step with your interviews both ways. Nothing is ever sent automatically, by the scheduler or by an AI assistant.
@@ -111,3 +115,13 @@ supported version, so entries are grouped under **Unreleased** until the first t
   first-run problems found by walking the app as a new person.
 
 [Unreleased]: https://github.com/Druvo/stillopen/commits/main
+
+
+## 0.1.0 - unreleased draft
+
+The first public version. Not tagged yet: when it is, this heading gets the release date and the Unreleased entries above move here.
+
+- Searches 100+ job sources with no setup and no AI key, checks which postings are still open and flags reposts and ghost jobs.
+- Tracks every application from saved to offer, with interviews, contacts, referrals and offers; the numbers page shows plain counts.
+- Tailors CVs and cover letters with a fact check: a claim that is not in your own material is flagged and locks the download until you approve it.
+- Self-hosted with Docker (or from source), Apache-2.0, an MCP server for Claude Code, strict per-person data isolation.

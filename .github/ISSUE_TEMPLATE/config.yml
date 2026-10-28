@@ -1,8 +1,12 @@
-blank_issues_enabled: true
+# Blank issues are off: the three forms (bug_report, feature_request, new_job_source) ask for what a maintainer needs.
+blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
     url: https://github.com/Druvo/stillopen/security/advisories/new
-    about: Please report security problems privately, not as a public issue.
+    about: Please report security problems privately (a private security advisory), not as a public issue.
   - name: Self-hosting help
     url: https://github.com/Druvo/stillopen/blob/main/docs/SELF-HOSTING.md
-    about: Read the self-hosting guide first; it covers installing, email, backups and updating.
+    about: Read the self-hosting guide first; it covers installing, email, backups, updating and troubleshooting.
+  - name: Questions and ideas (Discussions)
+    url: https://github.com/Druvo/stillopen/discussions
+    about: Ask a question or show what you built. Needs Discussions switched on in the repository settings (see docs/launch/topics.md).

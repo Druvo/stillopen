@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StillOpen: never apply to a dead job</title>
+<meta name="description" content="Free, open-source, self-hosted job search that checks which postings are still open, flags reposts and ghost jobs, fact-checks your tailored CV and tracks every application.">
+<script>
+/* Applies the saved (or system) theme before the page paints, so there is no flash. */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem("stillopen-theme"); } catch (e) {}
+  if (t !== "dark" && t !== "light") t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", t);
+})();
+</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#top">StillOpen</a>
+    <nav aria-label="Sections">
+      <a href="#how">How it works</a><a href="#honest">Honest by design</a><a href="#features">Features</a><a href="#privacy">Privacy</a><a href="#install">Install</a>
+    </nav>
+    <button id="theme-toggle" type="button">Dark mode</button>
+  </header>
+</div>
+
+<main id="top">
+  <div class="wrap hero">
+    <h1>Never apply to a dead job again.</h1>
+    <p class="lead">StillOpen searches 100+ job sources for you, checks which postings are still open, flags reposts and ghost jobs, tailors your CV with a fact check, and tracks every application. Free, open source, self-hosted.</p>
+    <div class="actions">
+      <a class="btn primary" href="#install">Install it</a>
+      <a class="btn" href="https://github.com/Druvo/stillopen">Star on GitHub</a>
+      <a class="btn" href="https://github.com/Druvo/stillopen#support-the-project">Support the project</a>
+    </div>
+    <img class="shot" src="dashboard.png" width="1440" height="900" alt="The StillOpen dashboard: jobs listed best match first, each marked open or closed, with a demo person's numbers on the right.">
+  </div>
+
+  <section id="how"><div class="wrap">
+    <h2>How it works</h2>
+    <p class="sub">Four steps, and you press every button that matters.</p>
+    <ol class="steps">
+      <li><h3>Say what you want</h3><p>Your roles, places and CV. Nothing else is required.</p></li>
+      <li><h3>It searches and checks</h3><p>Company boards and remote-job feeds are read in the background; each posting is checked for closing, and re-listed ones are flagged.</p></li>
+      <li><h3>Tailor with a fact check</h3><p>A CV and cover letter per job. Anything not in your own material is flagged and locks the download until you approve it.</p></li>
+      <li><h3>Apply yourself, then track</h3><p>You send the application. StillOpen keeps the stages, follow-ups, interviews and offers.</p></li>
+    </ol>
+  </div></section>
+
+  <section id="honest"><div class="wrap">
+    <h2>Honest by design</h2>
+    <div class="grid">
+      <div class="card"><h3>A fact check on every tailored CV</h3><p>Claims that are not in your CV or documents are listed. A flagged CV cannot be downloaded until you say the items are true. An AI assistant can never approve it for you.</p></div>
+      <div class="card"><h3>It never sends without you</h3><p>It never submits an application. The one thing it can send is an email from your own connected Google account, after you preview the exact message and press Send.</p></div>
+      <div class="card"><h3>Your data is yours</h3><p>One database on your machine or server, one person per account, export or delete everything any time.</p></div>
+      <div class="card"><h3>Observations, not verdicts</h3><p>"Possible repost" means the same role appeared under new links on different days. "Unclear" is shown when a page cannot be read.</p></div>
+    </div>
+  </div></section>
+
+  <section id="features"><div class="wrap">
+    <h2>What is in it</h2>
+    <div class="grid">
+      <div class="card"><h3>100+ sources, no key</h3><p>Greenhouse, Lever, Ashby, SmartRecruiters and Recruitee boards plus remote-job feeds, with regional ones for Malaysia, the Gulf and Bangladesh.</p></div>
+      <div class="card"><h3>Open or closed</h3><p>Checks that a posting still takes applications and shows the result next to the job.</p></div>
+      <div class="card"><h3>Fit and CV tailoring</h3><p>A free keyword match works without any AI. Bring your own key or a local model for deeper reads.</p></div>
+      <div class="card"><h3>Board, list and numbers</h3><p>Every job by stage, plus plain weekly counts from your own search.</p></div>
+      <div class="card"><h3>After you apply</h3><p>Interviews, contacts, referrals, offers (compared per currency) and a private calendar link.</p></div>
+      <div class="card"><h3>Works with Claude Code</h3><p>An MCP server lets an assistant read and organise your search. It cannot send or delete.</p></div>
+    </div>
+  </div></section>
+
+  <section id="privacy"><div class="wrap">
+    <h2>Privacy: what goes where</h2>
+    <table>
+      <thead><tr><th scope="col">What</th><th scope="col">Where it goes</th></tr></thead>
+      <tbody>
+        <tr><td>Your CV, notes and applications</td><td>Your own database. Nowhere else.</td></tr>
+        <tr><td>Job searches</td><td>The public job boards and feeds being read, asked for jobs matching your roles.</td></tr>
+        <tr><td>AI requests (only if you set one up)</td><td>The AI service you chose, with your own key; or a model on your own machine. Only the relevant passages are sent.</td></tr>
+        <tr><td>This website and the app's pages</td><td>No ads, no tracking, no cookies from this site, no third-party scripts, fonts or images.</td></tr>
+      </tbody>
+    </table>
+  </div></section>
+
+  <section id="install"><div class="wrap tabs">
+    <h2>Install</h2>
+    <p class="sub">About five minutes. Full guides: <a href="https://github.com/Druvo/stillopen/blob/main/docs/INSTALL.md">install</a> and <a href="https://github.com/Druvo/stillopen/blob/main/docs/SELF-HOSTING.md">self-hosting</a>.</p>
+    <div role="tablist" aria-label="Install method">
+      <button role="tab" id="tab-docker" aria-selected="true" aria-controls="panel-docker" type="button">Docker</button>
+      <button role="tab" id="tab-source" aria-selected="false" aria-controls="panel-source" tabindex="-1" type="button">From source</button>
+    </div>
+    <div role="tabpanel" id="panel-docker" aria-labelledby="tab-docker">
+      <button class="copy" type="button" data-target="code-docker">Copy</button>
+<pre><code id="code-docker">git clone https://github.com/Druvo/stillopen.git &amp;&amp; cd stillopen
+docker compose -f docker-compose.selfhost.yml up -d --build
+docker compose -f docker-compose.selfhost.yml exec stillopen python manage.py createsuperuser</code></pre>
+      <p>Then open http://localhost:8000.</p>
+    </div>
+    <div role="tabpanel" id="panel-source" aria-labelledby="tab-source" hidden>
+      <button class="copy" type="button" data-target="code-source">Copy</button>
+<pre><code id="code-source">git clone https://github.com/Druvo/stillopen.git &amp;&amp; cd stillopen
+python -m venv .venv &amp;&amp; . .venv/bin/activate &amp;&amp; pip install -r requirements.txt
+(cd frontend &amp;&amp; pnpm install &amp;&amp; pnpm build)
+python manage.py migrate &amp;&amp; python manage.py createsuperuser &amp;&amp; python manage.py runserver</code></pre>
+      <p>Needs Python 3.12 or later, and Node 22 or later with pnpm for the app. On Windows activate with <code>.venv\Scripts\activate</code>.</p>
+    </div>
+  </div></section>
+
+  <section id="limits"><div class="wrap">
+    <h2>Known limits</h2>
+    <ul class="plain">
+      <li>The deepest reads (written evaluations, AI-tailored CVs) need your own AI key or a local model; the free keyword match needs none.</li>
+      <li>The interface is English only, and there is no mobile app (the web app works on a phone).</li>
+      <li>Job sources can change their APIs and stop working until fixed. LinkedIn, Indeed and Glassdoor are never scraped.</li>
+      <li>Gmail and Calendar features need your own Google Cloud project.</li>
+    </ul>
+  </div></section>
+
+  <section id="cta"><div class="wrap" style="text-align:center">
+    <h2>Try it, then tell a friend who is job hunting</h2>
+    <div class="actions">
+      <a class="btn primary" href="#install">Install</a>
+      <a class="btn" href="https://github.com/Druvo/stillopen">Star</a>
+      <a class="btn" href="https://github.com/Druvo/stillopen#support-the-project">Sponsor or contribute</a>
+    </div>
+  </div></section>
+</main>
+
+<footer><div class="wrap">
+  StillOpen is Apache-2.0 open source. Job postings belong to the employers and sites that published them.
+  <a href="https://github.com/Druvo/stillopen">Source code</a> · <a href="https://github.com/Druvo/stillopen/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/Druvo/stillopen/blob/main/SECURITY.md">Security</a>
+</div></footer>
+<script src="main.js"></script>
+</body>
+</html>

@@ -1,33 +1,70 @@
-# StillOpen
+<h1 align="center">StillOpen</h1>
 
-**Stop visiting job sites one by one.** StillOpen is free, open-source, self-hostable software that searches hundreds of company career pages and job boards for you, keeps the jobs you can really take, tailors your CV and cover letter for each one, and tracks every application. You press apply yourself; it never sends anything to an employer.
+<p align="center"><strong>Never apply to a dead job again.</strong><br>
+StillOpen searches 100+ job sources for you, checks which postings are still open, flags reposts and ghost jobs,<br>
+tailors your CV with a fact check, and tracks every application. Free, open source, self-hosted.</p>
 
-[![Tests](https://github.com/Druvo/stillopen/actions/workflows/tests.yml/badge.svg)](https://github.com/Druvo/stillopen/actions/workflows/tests.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="docs/MCP.md">Use it from Claude Code</a> ·
+  <a href="docs/INSTALL.md">Install guides</a> ·
+  <a href="docs/SELF-HOSTING.md">Self-hosting</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-![StillOpen landing page](docs/images/landing.jpg)
+<p align="center">
+  <a href="https://github.com/Druvo/stillopen/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/Druvo/stillopen/actions/workflows/tests.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
+  <a href="https://github.com/Druvo/stillopen/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Druvo/stillopen"></a>
+  <img alt="Self-hosted with Docker" src="https://img.shields.io/badge/self--hosted-Docker-blue">
+</p>
 
-## Why run your own
+![StillOpen: the dashboard, the board, a tailored CV with a flagged claim and the numbers, as a short slideshow](docs/images/demo.gif)
 
-- **Your data stays yours.** CV, notes and applications live in one database on your machine or server. Export or delete everything any time.
-- **No subscription, no lock-in, no tracking.** No ads and no third-party scripts, fonts or images on any page.
-- **No AI key needed.** Search, fit scoring, CV tailoring and cover letters all work without one. Bring your own key later for a deeper read.
-- **Read every line.** Apache-2.0 licensed. Contributions welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+> If StillOpen saves you a few hours of clicking through job sites, a star on GitHub helps other job seekers find it.
+
+The pictures on this page come from invented demo data ("Jane Doe"), made by `pnpm readme:images` (see [docs/images/README.md](docs/images/README.md)); no real person appears.
+
+| | |
+| --- | --- |
+| ![Dashboard: every job with its fit and whether it is still open](docs/images/dashboard.png) **Dashboard.** Every job, best match first, with "Open" or "Closed" next to it. | ![Board view of the same jobs by stage](docs/images/board.png) **Board.** The same jobs by stage; drag a card to move it. |
+| ![A tailored CV with a flagged claim that must be approved before download](docs/images/cv-fact-check.png) **A CV that stays honest.** A claim that is not in your own material is flagged and locks the download until you approve it. | ![Your numbers: jobs found, applied and replies, week by week](docs/images/insights.png) **Your numbers.** Plain counts from your own search, never predictions. |
+| ![The public openings board](docs/images/openings.png) **Openings board.** A public page of current openings, each crediting its source. | ![The dashboard on a phone](docs/images/mobile.png) **On a phone.** The web app is responsive (there is no native app). |
+
+## Why StillOpen
+
+- **Finds the jobs for you.** 100+ built-in sources (company boards on Greenhouse, Lever, Ashby, SmartRecruiters and Recruitee, plus remote-job feeds), searched in the background, no setup and no AI key.
+- **Tells you what is still open.** Postings are checked for closing, and a job that keeps reappearing under new links on different days is flagged as a possible repost or ghost job (an observation, never a verdict), so you stop applying to dead listings.
+- **A CV that stays honest.** Tailored CVs and cover letters are fact-checked against your own material. Anything the AI adds that you did not write is flagged and cannot be downloaded until you approve it.
+- **Your data stays yours.** One database on your machine or server. No ads, no tracking, no third-party scripts, fonts or images. Export or delete everything any time.
+- **Use your own AI, or none.** Bring a key (Anthropic, OpenAI-compatible, Gemini, Groq, OpenRouter and more) or a local model, or just use the free keyword match.
+- **It never applies for you.** It never submits an application. The only message it can send is an email from your own connected Google account, after you preview the exact text and press Send.
+- **Works with your assistant.** An MCP server lets Claude Code or any MCP client work with your search. It can read and organise, never send or delete.
+- **Apache-2.0.** Read every line; contributions welcome ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Quick start
 
-With Docker (about five minutes, no other setup):
-
 ```bash
-git clone https://github.com/Druvo/stillopen.git
-cd stillopen
+git clone https://github.com/Druvo/stillopen.git && cd stillopen
 docker compose -f docker-compose.selfhost.yml up -d --build
 docker compose -f docker-compose.selfhost.yml exec stillopen python manage.py createsuperuser
 ```
 
-Other ways to install (plain Docker, from source, an Ubuntu service, CapRover/Coolify/Dokploy): [docs/INSTALL.md](docs/INSTALL.md).
+Open <http://localhost:8000>. A ready-built image (`ghcr.io/druvo/stillopen`) is built by `.github/workflows/image.yml` when a version tag is pushed; it appears after the first tagged release, so use the compose path above until then. More ways to install (plain Docker, from source, an Ubuntu service, CapRover, Coolify, Dokploy): [docs/INSTALL.md](docs/INSTALL.md). Email, HTTPS, backups and updates: [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md). Running it as a shared service for many people: [docs/HOSTING.md](docs/HOSTING.md).
 
-Open <http://localhost:8000>. Full guide (email, HTTPS, backups, updates): [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md). Running it as a shared service for many people: [docs/HOSTING.md](docs/HOSTING.md).
+## Known limitations
+
+- The deepest reads (a written evaluation of a job, AI-tailored CVs and cover letters, revisions) need **your own AI key** or a local model. Without one you get the free keyword match and keyword tailoring.
+- The interface is **English only**.
+- Job sources are other people's websites and APIs; **a source can change or disappear** and stop returning jobs until it is fixed. The scan log shows each source's result.
+- **LinkedIn, Indeed and Glassdoor are never scraped.** Paste a job's link into Add job instead.
+- The Gmail and Calendar features need **your own Google Cloud project** (an OAuth client entered under Site configuration). Off until then.
+- There is **no mobile app**; the web app works on a phone.
+- A "still open" check is a best effort from what the page says; a page can lie or hide that it closed. "Unclear" is shown when it cannot tell.
+
+## Performance and sizing
+
+Measured on this repository's demo data (nine jobs, `manage.py e2e_seed --demo`, SQLite, the Django test client, 2026-10): the dashboard answer takes 42 database queries, the numbers page 16 and the profile call 9. The count does not grow with the number of jobs (it was one query per job before it was fixed; see the changelog). The signed-in app's first load is 168.0 kB gzip in 9 scripts, and all its JavaScript 429.5 kB gzip in 42 files (`pnpm size`; budgets 172 and 480 kB). Anything beyond these numbers (how many people one small server carries, how long a search takes) has not been benchmarked, so none is claimed.
 
 ## Use it from Claude Code or any AI assistant
 
@@ -318,6 +355,12 @@ By design there is no delete tool, and no way to read settings, API keys, tokens
 ```bash
 .venv\Scripts\python.exe manage.py test
 ```
+
+Browser tests and the README pictures: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Support the project
+
+If StillOpen helps your search, star it on GitHub, tell someone who is job hunting, report a source that is missing for your country, or send a fix ([CONTRIBUTING.md](CONTRIBUTING.md)). Sponsorship, when it is set up, will appear as the Sponsor button on the repository.
 
 ## License
 

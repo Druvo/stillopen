@@ -9,3 +9,5 @@ media/
 staticfiles/
 paperless/
 *.log
+
+docs/images/.frames/

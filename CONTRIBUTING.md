@@ -49,6 +49,10 @@ python manage.py makemigrations --check --dry-run      # CI fails if a model cha
 `manage.py test` switches off the seeded job sources, the live-network search and public caching, so tests are deterministic and never touch the internet.
 CI (`.github/workflows/tests.yml`) runs the same on every pull request.
 
+## README pictures
+
+The screenshots and the GIF in the README are made from invented demo data, not drawn by hand: `cd frontend && pnpm build && pnpm readme:images`, then the ffmpeg line in [docs/images/README.md](docs/images/README.md) for the GIF. Re-run it when a screen in a picture changes. Releases are described in [docs/RELEASING.md](docs/RELEASING.md). Run `python scripts/check_links.py` after moving or renaming a doc.
+
 ## The rules that matter most
 
 These are the project's design commitments; a pull request that breaks one will be asked to change. The long version is in [CLAUDE.md](CLAUDE.md).
