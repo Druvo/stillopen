@@ -14,7 +14,18 @@ export const DEFAULT_PREFERENCES: Preferences = {
   theme: "light",
   text_size: "normal",
   density: "comfortable",
+  quiet_days: 10,
+  goal_daily: 0,
+  goal_weekly: 0,
+  insights_period: "90",
 };
+
+const PERIODS = ["30", "90", "all"] as const;
+
+/** A whole number inside the range, else the fallback (the same rule the server has). */
+function whole(value: unknown, low: number, high: number, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= low && value <= high ? value : fallback;
+}
 
 export const SORT_KEYS: SortKey[] = ["best", "newest", "oldest", "company", "deadline"];
 const VIEWS: ViewMode[] = ["list", "board"];
@@ -46,6 +57,10 @@ export function normalizePreferences(raw: unknown): Preferences {
     theme: pick(r.theme, THEMES, DEFAULT_PREFERENCES.theme),
     text_size: pick(r.text_size, TEXT_SIZES, DEFAULT_PREFERENCES.text_size),
     density: pick(r.density, DENSITIES, DEFAULT_PREFERENCES.density),
+    quiet_days: whole(r.quiet_days, 3, 30, DEFAULT_PREFERENCES.quiet_days),
+    goal_daily: whole(r.goal_daily, 0, 50, 0),
+    goal_weekly: whole(r.goal_weekly, 0, 200, 0),
+    insights_period: pick(r.insights_period, PERIODS, DEFAULT_PREFERENCES.insights_period),
   };
 }
 

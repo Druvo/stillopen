@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from ..models import Application, Interview, JobSource, Posting, PrepPlan, ScoreBand, SiteConfig, UserProfile
 from . import apply as apply_service
-from . import geo, quiz, scan, tz
+from . import dashviz, geo, preferences, quiz, scan, tz
 from .cards import band_for
 
 WEEKS = 8
@@ -260,4 +260,7 @@ def candidate_stats(user, today: date | None = None) -> dict:
         "skills": skills,
         "prep": _prep(user, config, today),
         "market": _market(user, profile),
+        "funnel": dashviz.funnel(apps, today),
+        "activity": dashviz.activity(apps, today, zone),
+        "goals": dashviz.goals(apps, preferences.read(profile), today, zone),
     }

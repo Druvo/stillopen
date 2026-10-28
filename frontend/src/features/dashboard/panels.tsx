@@ -7,7 +7,7 @@ import { Button, buttonClass, Notice, Progress } from "@/components/ui";
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
 import { notify } from "@/lib/toast";
-import type { Dashboard, DraftWaiting, Followup, Me, NextStep, ScanStatus, SearchSummary, ComingUpItem } from "@/lib/types";
+import type { Dashboard, DraftWaiting, Followup, Me, NextStep, ScanStatus, SearchSummary, ComingUpItem, WorthItem } from "@/lib/types";
 import { useIsWide } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { jobsApi } from "@/features/jobs/api";
@@ -308,6 +308,33 @@ export function ThisWeekBody({ stats }: { stats: Pick<Stats, "week" | "waiting">
         See all your numbers
       </Link>
     </div>
+  );
+}
+
+/** Where each kind of "Worth a look next" item leads. */
+export function worthTo(i: WorthItem): string {
+  if (i.kind === "interview") return "/interviews";
+  if (i.kind === "offer") return "/offers";
+  if (i.kind === "draft" && i.version_id) return `/cv/${i.version_id}`;
+  return `/jobs/${i.job_id}/apply`;
+}
+
+const WORTH_WORD: Record<WorthItem["kind"], string> = { interview: "Interview", offer: "Offer", followup: "Follow up", draft: "CV draft", quiet: "Quiet" };
+
+/** At most six things worth opening next, each with one line saying why. The order is fixed on the server. */
+export function WorthBody({ items }: { items: WorthItem[] }) {
+  return (
+    <ol className="space-y-2 text-theme-sm" data-testid="worth-a-look">
+      {items.map((i) => (
+        <li key={`${i.kind}-${i.job_id}`}>
+          <Link to={worthTo(i)} className="link-target font-medium text-fg underline decoration-border underline-offset-2 hover:text-brand">
+            <span className="sr-only">{WORTH_WORD[i.kind]}: </span>
+            {i.label}
+          </Link>
+          <p className="text-theme-xs text-muted">{i.reason}</p>
+        </li>
+      ))}
+    </ol>
   );
 }
 

@@ -27,14 +27,37 @@ export type Stats = {
   skills: { gaps: { term: string; jobs: number }[]; strengths: { term: string; jobs: number }[] };
   prep: null | { active_plans: number; lessons_done: number; lessons_total: number; streak: number };
   market: null | { this_week: number; last_week: number; roles: string[] };
+  funnel?: Record<Period, Funnel>;
+  activity?: Activity;
+  /** null while the person has no targets (goals are opt-in). */
+  goals?: Goals | null;
 };
+
+export type Period = "30" | "90" | "all";
+export type Funnel = { since: string | null; stages: { key: string; label: string; count: number }[] };
+export type Activity = { start: string; end: string; days: Record<string, { applied: number; interviews: number }>; total_applied: number; total_interviews: number };
+export type Goals = {
+  daily_target: number;
+  weekly_target: number;
+  today: number;
+  week: number;
+  current_streak: number;
+  best_streak: number;
+  explain: string;
+  month: { label: string; applied: number; interviews: number; text: string };
+};
+export type CalendarItem = { kind: "interview" | "deadline" | "followup" | "offer"; date: string; when: string; label: string; company: string; role: string; job_id: number };
+export type CalendarMonth = { month: string; label: string; first: string; last: string; weekday_of_first: number; today: string; days: Record<string, CalendarItem[]>; week_ahead: CalendarItem[] };
 
 export type CalibrationBand = { label: string; color: string; min_percent: number; applied: number; replies: number; reply_rate: number | null };
 export type Calibration = { enough: boolean; scored: number; needed: number; caveat: string; bands: CalibrationBand[] };
 
 export const STATS_KEY = ["stats"] as const;
 
-export const statsApi = { get: () => request<Stats>("GET", "/stats") };
+export const statsApi = {
+  get: () => request<Stats>("GET", "/stats"),
+  calendar: (month: string) => request<CalendarMonth>("GET", `/stats/calendar?month=${encodeURIComponent(month)}`),
+};
 
 /** The person's numbers. Fetched alongside the dashboard (not after it), and shown from the saved copy while a fresh one loads. */
 export function useStats() {

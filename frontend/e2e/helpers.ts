@@ -14,6 +14,10 @@ export const DEFAULT_PREFS = {
   theme: "light",
   text_size: "normal",
   density: "comfortable",
+  quiet_days: 10,
+  goal_daily: 0,
+  goal_weekly: 0,
+  insights_period: "90",
 };
 
 export async function apiPut(page: Page, path: string, body: unknown): Promise<number> {

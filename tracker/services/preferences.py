@@ -19,7 +19,14 @@ DEFAULTS = {
     "theme": "light",
     "text_size": "normal",
     "density": "comfortable",
+    "quiet_days": 10,  # "Worth a look next": an application with no reply for this many days counts as quiet (3 to 30)
+    "goal_daily": 0,  # applications a day the person wants to send; 0 is off (goals are opt-in)
+    "goal_weekly": 0,  # applications over any 7 days; 0 is off
+    "insights_period": "90",  # the funnel's period tab on Insights: "30", "90" or "all"
 }
+
+# Whole-number settings: (lowest, highest).
+INTEGERS = {"quiet_days": (3, 30), "goal_daily": (0, 50), "goal_weekly": (0, 200)}
 
 CHOICES = {
     "view": ("list", "board"),
@@ -28,6 +35,7 @@ CHOICES = {
     "theme": ("light", "dark"),
     "text_size": ("normal", "large", "larger"),
     "density": ("comfortable", "compact"),
+    "insights_period": ("30", "90", "all"),
 }
 BOOLEANS = ("filters_open", "ai_prompt_dismissed", "tz_prompt_dismissed", "hide_weak")
 FILTER_KEYS = tuple(DEFAULTS["filters"])
@@ -55,6 +63,9 @@ def normalize(stored) -> dict:
         out[key] = stored.get(key) if stored.get(key) in options else DEFAULTS[key]
     for key in BOOLEANS:
         out[key] = stored[key] if isinstance(stored.get(key), bool) else DEFAULTS[key]
+    for key, (low, high) in INTEGERS.items():
+        value = stored.get(key)
+        out[key] = value if isinstance(value, int) and not isinstance(value, bool) and low <= value <= high else DEFAULTS[key]
     out["filters"] = _filters(stored.get("filters"))
     tab = stored.get("tab")
     out["tab"] = tab if isinstance(tab, str) and (tab == "all" or Bucket.objects.filter(key=tab).exists()) else "all"
@@ -74,6 +85,9 @@ def update(profile, patch: dict) -> dict:
     for key, options in CHOICES.items():
         if key in patch and patch[key] not in options:
             problems[key] = [f"Choose one of: {', '.join(options)}."]
+    for key, (low, high) in INTEGERS.items():
+        if key in patch and not (isinstance(patch[key], int) and not isinstance(patch[key], bool) and low <= patch[key] <= high):
+            problems[key] = [f"Choose a whole number from {low} to {high}."]
     for key in BOOLEANS:
         if key in patch and not isinstance(patch[key], bool):
             problems[key] = ["This must be true or false."]

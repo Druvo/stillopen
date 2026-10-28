@@ -6,7 +6,7 @@ from ninja.security import django_auth
 
 from ..context import staff_flags
 from ..models import Application, Bucket, Event, JobSource, ScoreBand, SiteConfig, Status, UserProfile
-from ..services import adzuna, ai, assist, board, careerops, geo, guide, knowledge, liveness, preferences, quiz, scan, sourcehealth, tz, weekly
+from ..services import adzuna, ai, dashviz, assist, board, careerops, geo, guide, knowledge, liveness, preferences, quiz, scan, sourcehealth, tz, weekly
 from ..services import apply as apply_service
 from ..services.cards import card_for
 from ..services.pipeline import upcoming_interviews
@@ -172,7 +172,7 @@ def dashboard(request):
     apps = list(
         Application.objects.filter(owner=user)
         .select_related("status", "status__bucket", "source", "posting", "posting__source", "applied_cv")
-        .prefetch_related("insights", "documents__kind", "cv_versions", "events")
+        .prefetch_related("insights", "documents__kind", "cv_versions", "events", "interviews", "offers")
     )
     prep_progress = assist.prep_progress(user)  # one query for every job's prep plan
     reposts = scan.repost_signals(a.posting for a in apps if a.posting_id)  # one lookup for the page, not two per job
@@ -202,6 +202,11 @@ def dashboard(request):
         ((c["app"], v) for c in cards for v in c["app"].cv_versions.all() if v.draft_ahead and v.kind == "tailored" and not v.approved),
         key=lambda pair: (pair[1].created_at, pair[1].pk), reverse=True,
     )
+    followups = list(apply_service.due_followups(user, today))
+    coming = weekly.coming_up(user, today=today, now=now)
+    worth = dashviz.worth_a_look(
+        [c["app"] for c in cards], followups, coming, drafts, preferences.read(profile)["quiet_days"], today, now.tzinfo,
+    )
     paperless_on = user.is_staff and config.paperless_enabled and bool(config.effective_paperless_url)
     return {
         "greeting": guide.greeting(user, now),
@@ -223,9 +228,10 @@ def dashboard(request):
                 "id": a.pk, "company": a.company, "role": a.role, "follow_up_date": a.follow_up_date.isoformat(),
                 "applied_date": _iso(a.applied_date),
             }
-            for a in apply_service.due_followups(user, today)
+            for a in followups
         ],
-        "coming_up": weekly.coming_up(user, today=today, now=now),
+        "worth_a_look": worth,
+        "coming_up": coming,
         "upcoming_interviews": [
             {
                 "id": i.pk, "when": i.scheduled_at.isoformat(), "kind": i.get_kind_display(),

@@ -71,6 +71,7 @@ function ProfileScreen({ data }: { data: ProfileData }) {
             Manage documents
           </Link>
         </Card>
+        <GoalsCard />
         <DisplayCard data={current} onZoneSaved={(next) => { setCurrent(next); client.setQueryData(PROFILE_KEY, next); }} />
         <EmailsCard key={`emails-${current.profile.email_followups}-${current.profile.email_interviews}-${current.profile.email_weekly}`} data={current} onSaved={(next) => { setCurrent(next); client.setQueryData(PROFILE_KEY, next); }} />
         <AccountCard data={current} />
@@ -365,6 +366,46 @@ function DisplayCard({ data, onZoneSaved }: { data: ProfileData; onZoneSaved: (n
       />
       <TimeZoneField data={data} onSaved={onZoneSaved} />
     </Card>
+  );
+}
+
+/** Reminders and goals: how long a reply can take before an application is called quiet, and optional targets. Saved on the account. */
+function GoalsCard() {
+  const { prefs, update } = usePreferences();
+  return (
+    <Card id="goals" className="scroll-mt-20">
+      <h2 className="font-semibold">Reminders and goals</h2>
+      <p className="my-2 text-sm text-muted">Both are your choice. Goals are off until you set a number, and nothing here is shared or sent to anyone.</p>
+      <NumberPref label="Call an application quiet after (days)" hint="Applications with no reply for this long show up under Worth a look next on your dashboard. From 3 to 30." value={prefs.quiet_days} min={3} max={30} onSave={(quiet_days) => update({ quiet_days })} />
+      <NumberPref label="Applications I would like to send each day" hint="0 turns the daily goal off." value={prefs.goal_daily} min={0} max={50} onSave={(goal_daily) => update({ goal_daily })} />
+      <NumberPref label="Applications I would like to send each week" hint="Counted over the last 7 days. 0 turns the weekly goal off." value={prefs.goal_weekly} min={0} max={200} onSave={(goal_weekly) => update({ goal_weekly })} />
+    </Card>
+  );
+}
+
+/** A whole-number setting that is saved as soon as what is typed is a valid number in range, and says so when it is not. */
+function NumberPref({ label, hint, value, min, max, onSave }: { label: string; hint: string; value: number; min: number; max: number; onSave: (n: number) => void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  const n = Number(text);
+  const valid = text.trim() !== "" && Number.isInteger(n) && n >= min && n <= max;
+  return (
+    <TextField
+      label={label}
+      hint={hint}
+      type="number"
+      inputMode="numeric"
+      min={min}
+      max={max}
+      value={text}
+      className="max-w-32"
+      errors={valid ? undefined : [`Enter a whole number from ${min} to ${max}.`]}
+      onChange={(e) => {
+        setText(e.target.value);
+        const m = Number(e.target.value);
+        if (e.target.value.trim() !== "" && Number.isInteger(m) && m >= min && m <= max && m !== value) onSave(m);
+      }}
+    />
   );
 }
 
