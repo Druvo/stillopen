@@ -145,3 +145,20 @@ def line_diff(old: str, new: str) -> list[tuple[str, str]]:
             rows += [("del", line) for line in a[i1:i2]]
             rows += [("add", line) for line in b[j1:j2]]
     return rows
+
+
+def to_text(markdown: str) -> str:
+    """The CV as plain text: no heading marks, emphasis or link syntax; bullets stay as dashes."""
+    lines = []
+    for kind, text in _blocks(markdown):
+        plain = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r"\1 (\2)", text)
+        plain = re.sub(r"\*\*(.+?)\*\*|(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", lambda m: m.group(1) or m.group(2), plain)
+        if kind == "li":
+            lines.append(f"- {plain}")
+        elif kind == "hr":
+            lines.append("")
+        else:
+            if kind in ("h1", "h2", "h3") and lines:
+                lines.append("")
+            lines.append(plain.upper() if kind == "h2" else plain)
+    return "\n".join(lines).strip() + "\n"

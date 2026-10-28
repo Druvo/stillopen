@@ -31,6 +31,9 @@ urlpatterns = [
     path("interviews/calendar.ics", views_calendar.interviews_calendar, name="interviews_calendar"),
     path("interviews/<int:pk>/calendar.ics", views_calendar.interview_calendar, name="interview_calendar"),
     path("cv/<int:pk>/print/", views_cv.cv_print, name="cv_print"),
+    path("cv/<int:pk>/preview/", views_cv.cv_preview, name="cv_preview"),
+    path("cv/builder/preview/", views_cv.builder_preview, name="cv_builder_preview"),
+    path("jobs/<int:pk>/documents.zip", views_cv.job_documents_zip, name="job_documents_zip"),
     path("cv/<int:pk>/download/<str:fmt>/", views_cv.cv_download, name="cv_download"),
     path("cover/<int:pk>/download/<str:fmt>/", views_cover.cover_download, name="cover_download"),
     # the old classic-page addresses, redirected into the app

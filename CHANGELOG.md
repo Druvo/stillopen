@@ -6,6 +6,10 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 `git tag vX.Y.Z && git push --tags`. The release workflow publishes that section as the GitHub release notes and the image workflow builds the container
 image. Details, version rules and rollback: [docs/RELEASING.md](docs/RELEASING.md). Until the first tag, `main` is the supported version.
 
+- CV import: "Start from a CV you already have" in the builder reads a PDF, Word, Markdown or text file (5 MB, real type checked, macros/embedded files refused, time limit) and sorts it into review cards (Accept / Edit / Skip per section) with plain rules or, optionally, the person's own AI (only words found in the file survive). Nothing is saved until the builder is finished.
+- Live CV preview (builder and CV page): the exact print page for the chosen look, in a no-permission sandboxed frame.
+- "Download CV and cover letter (zip)" per job: DOCX, plain text and Markdown; refuses anything flagged and unapproved.
+
 ## [Unreleased]
 
 - Launch kit: a new README top (what it is, screenshots, quick start, honest limits, measured sizes), a project site in `site/` published by `.github/workflows/pages.yml`, a release workflow that turns the matching changelog section into the GitHub release notes (`scripts/release_notes.py`, `docs/RELEASING.md`, a `VERSION` file), one-line update scripts (`deploy/update.sh`, `deploy/update.ps1`), a sponsor-button placeholder, blank issues off, and `pnpm readme:images`, which makes the README pictures from invented demo data (`manage.py e2e_seed --demo`).

@@ -7,6 +7,8 @@ import { CheckField, FormError, TextAreaField, TextField, useSubmit } from "@/co
 import { Link, navigate } from "@/lib/router";
 import { notify } from "@/lib/toast";
 import { cvApi } from "./api";
+import { ImportPanel } from "./import";
+import { PreviewDialog } from "./preview";
 import { DRAFT_KEY, emptyAnswers, emptyPublication, emptyReference, emptyRole, MAX_PUBLICATIONS, MAX_REFERENCES, MAX_ROLES, parseDraft, STEPS, stepProgress, toApiAnswers, validateStep, type BuilderAnswers } from "./quality";
 
 // The answers live in this tab's sessionStorage until the CV is built, never on the server. Storage can be blocked, so every use is guarded.
@@ -43,6 +45,8 @@ export function CvBuilder() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [polish, setPolish] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [look, setLook] = useState("classic");
   const heading = useRef<HTMLHeadingElement>(null);
   const form = useSubmit();
   const choices = useQuery({ queryKey: ["cv", "job-choices"], queryFn: cvApi.jobChoices, staleTime: 60_000 });
@@ -106,6 +110,18 @@ export function CvBuilder() {
           <Notice>You already have a CV. Building a new one adds a new version and makes it your current CV. Your earlier versions are kept.</Notice>
         </div>
       )}
+      <div className="mb-4">
+        <ImportPanel
+          aiAvailable={Boolean(ai?.available)}
+          current={a}
+          onFill={(filled, at) => {
+            setA(filled);
+            setErrors({});
+            setStep(at);
+            notify("Filled from your file. Check each step, then build your CV. Nothing is saved yet.");
+          }}
+        />
+      </div>
       <div className="mb-4" aria-live="polite">
         <p className="mb-1 text-sm font-medium">{progress.label}</p>
         <Progress value={progress.percent} label="Progress through the CV questions" />
@@ -316,6 +332,7 @@ export function CvBuilder() {
             ) : (
               <Button key="next" onClick={next}>Next</Button> /* a separate element from "Build my CV": the same one would turn into a submit button in the middle of the click */
             )}
+            <Button variant="outline" onClick={() => setPreviewing(true)}>Preview</Button>
             <Button
               variant="ghost"
               onClick={() => {
@@ -331,6 +348,7 @@ export function CvBuilder() {
           </div>
         </form>
       </Card>
+      {previewing && <PreviewDialog source={{ kind: "answers", answers: toApiAnswers(a) }} template={look} onTemplate={setLook} onClose={() => setPreviewing(false)} />}
     </>
   );
 }
