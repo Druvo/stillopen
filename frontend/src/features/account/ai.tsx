@@ -129,7 +129,7 @@ function AiScreen({ data }: { data: AiSettings }) {
             />
           </Card>
 
-          <details open={hasAdvancedError || undefined} className="rounded-2xl border border-border bg-surface p-4">
+          <details open={hasAdvancedError || undefined} className="rounded-md border border-border bg-surface p-4">
             <summary className="cursor-pointer font-semibold">Advanced options</summary>
             <p className="my-2 text-sm text-muted">Most people never need these. They set how StillOpen talks to the provider, how much of your CV the AI sees and how long it may take.</p>
 

@@ -58,6 +58,39 @@ class VendoredFiles(TestCase):
                 self.assertGreater(len(b"".join(response.streaming_content) if response.streaming else response.content), 100_000)
 
 
+FONTS_VENDOR = Path(__file__).resolve().parent.parent / "static" / "vendor" / "fonts"
+FONT_HASHES = {
+    "alumni-sans-variable.woff2": "49015c322cbd9ee7fbfbdb25295a57a5ba4b35e6f9c92c6d42fd570267e45c36",
+    "albert-sans-variable.woff2": "c2fb6fda415c7bf5926c15aa98f759da45cdc5ac4ac6925a72a84db4eb3862a3",
+}
+
+
+class VendoredFonts(TestCase):
+    """Alumni Sans and Albert Sans (the design.md typography), vendored the same way as Tabler: checked
+    against a recorded hash, never loaded from Google at runtime."""
+
+    def test_files_are_found_by_the_static_finders(self):
+        for name in FONT_HASHES:
+            self.assertIsNotNone(finders.find(f"vendor/fonts/{name}"), name)
+
+    def test_files_are_unmodified(self):
+        for name, digest in FONT_HASHES.items():
+            data = (FONTS_VENDOR / name).read_bytes()
+            self.assertEqual(hashlib.sha256(data).hexdigest(), digest, f"{name} no longer matches the vendored font")
+        self.assertTrue((FONTS_VENDOR / "NOTICE.md").exists())
+
+    def test_the_stylesheet_references_them_locally_not_from_google(self):
+        css = (Path(__file__).resolve().parent.parent / "static" / "css" / "stillopen.css").read_text(encoding="utf-8")
+        self.assertIn('url("/static/vendor/fonts/alumni-sans-variable.woff2")', css)
+        self.assertIn('url("/static/vendor/fonts/albert-sans-variable.woff2")', css)
+        self.assertIsNone(EXTERNAL_ASSET.search(css))
+
+    def test_the_same_files_are_copied_for_the_next_js_app(self):
+        copy = Path(__file__).resolve().parent.parent / "frontend" / "public" / "fonts"
+        for name, digest in FONT_HASHES.items():
+            self.assertEqual(hashlib.sha256((copy / name).read_bytes()).hexdigest(), digest, name)
+
+
 class NoThirdPartyAssets(TestCase):
     def setUp(self):
         SiteConfig.objects.filter(pk=1).update(signup_mode="open")

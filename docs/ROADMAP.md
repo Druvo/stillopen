@@ -304,6 +304,24 @@ the person's own target roles, needs the site's key to do anything, ships OFF by
 `SiteConfig` fields (`usajobs_api_key`, `usajobs_email`, both env-overridable) under Site configuration > Job
 search keys, and a dormant-source dashboard banner matching the existing Jooble one.
 
+### Typography/radius redesign, studied from impeccable.style (built, 2026-10-29)
+
+A full redesign request, scoped per the project's own discipline (ask before bulldozing a live, tested
+product): studied the reference's DNA live (exact fonts/colours read from its computed styles, not guessed --
+Alumni Sans + Albert Sans, near-achromatic palette, sharp 3px buttons), then applied it as a **theme-drift
+adoption** across both frontends via their shared token layers rather than rewriting every template/component:
+
+- Django: `static/css/stillopen.css`'s `--tblr-font-sans-serif`/`--tblr-border-radius`/`--so-radius` tokens,
+  plus swapping `fw-bold` for new `.so-display`/`.so-display-hero` classes on every public page's `<h1>`.
+- Next.js: `layout.tsx`'s `next/font/local` + `globals.css`'s `--font-sans`/`--font-display` tokens, plus
+  `ui.tsx`'s shared `PageHeader`/`buttonClass`/`Card`/`Notice`/`ErrorBox` primitives (used by nearly every
+  screen in the app) and a handful of panels with their own bespoke radius outside those primitives.
+
+Both fonts (Alumni Sans, Albert Sans -- OFL licensed) are vendored locally, never loaded from Google, same
+self-hosting discipline as Tabler (`static/vendor/fonts/NOTICE.md`, SHA-256 recorded). The brand blue, routes,
+copy and information architecture were deliberately left unchanged -- see `design.md` for the full system and
+what was and wasn't touched.
+
 ### A11y pass, API docs, sample questions and a browser extension (built, 2026-10-29)
 
 Four more candidate-facing additions:

@@ -3,10 +3,12 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /*
-  The look follows TailAdmin "free Next.js admin dashboard" (MIT, Copyright (c) 2023 TailAdmin,
-  https://github.com/TailAdmin/free-nextjs-admin-dashboard): its colour scales, shadows, type sizes, fixed sidebar with
-  a mobile drawer and its card, menu and header styles. See frontend/THIRD_PARTY.md for the licence text.
-  The font stays Geist, served from this site; nothing is loaded from another host.
+  The layout structure follows TailAdmin "free Next.js admin dashboard" (MIT, Copyright (c) 2023 TailAdmin,
+  https://github.com/TailAdmin/free-nextjs-admin-dashboard): shadows, type sizes, fixed sidebar with a mobile
+  drawer, card/menu/header structure. See frontend/THIRD_PARTY.md for the licence text.
+  Typography DNA studied from impeccable.style (2026-10-29): Albert Sans (body/UI) + Alumni Sans (display
+  headings, light weight) -- see layout.tsx for next/font/local. Corner radius sharpened to match. Colours and
+  the brand accent are unchanged. Both fonts are served from this site; nothing is loaded from another host.
 */
 
 /* Semantic colours the screens use (bg-surface, text-muted, border-border ...): light by default, dark when chosen. */
@@ -52,7 +54,8 @@
   --color-good: var(--good);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
-  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-sans: var(--font-albert-sans), system-ui, sans-serif;
+  --font-display: var(--font-alumni-sans), var(--font-albert-sans), system-ui, sans-serif;
 }
 
 @theme {

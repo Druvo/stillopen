@@ -10,7 +10,7 @@
 <section class="so-hero">
   <div class="container-xl py-4 py-lg-5">
     <span class="so-eyebrow">Job board</span>
-    <h1 class="fw-bold mt-1 mb-2">{% if country_name %}Jobs in {{ country_name }}{% elif remote %}Remote jobs{% else %}Browse open jobs{% endif %}</h1>
+    <h1 class="so-display so-display-hero mt-1 mb-2">{% if country_name %}Jobs in {{ country_name }}{% elif remote %}Remote jobs{% else %}Browse open jobs{% endif %}</h1>
     <p class="so-lead mb-4">{{ total|intcomma }} open job{{ total|pluralize }}{% if filtered %} match your filters{% else %} from {{ stats.companies|intcomma }} employers in {{ stats.countries }} countries, with new ones added through the day{% endif %}. Create a free account to see how well each one fits <em>you</em>.</p>
     <form method="get" class="card"><div class="card-body">
       <div class="row g-2 align-items-end">

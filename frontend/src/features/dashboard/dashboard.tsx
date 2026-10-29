@@ -313,7 +313,7 @@ export function Dashboard() {
       </div>
 
       {empty ? (
-        <div className="rounded-2xl border border-dashed border-border p-8 text-center text-theme-sm text-muted">
+        <div className="rounded-md border border-dashed border-border p-8 text-center text-theme-sm text-muted">
           {empty === "searching" && (
             <p className="flex items-center justify-center gap-2">
               <Spinner />

@@ -149,7 +149,7 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, d
       id={`job-${job.id}`}
       aria-label={`${job.role} at ${job.company}`}
       className={cn(
-        "scroll-mt-20 rounded-2xl border bg-surface p-3 text-theme-sm shadow-theme-xs sm:p-4",
+        "scroll-mt-20 rounded-md border bg-surface p-3 text-theme-sm shadow-theme-xs sm:p-4",
         job.urgent ? "border-warn" : "border-border",
         overlay && "rotate-1 shadow-lg",
       )}

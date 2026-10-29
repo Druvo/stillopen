@@ -18,6 +18,10 @@ supported version, so entries are grouped under **Unreleased** until the first t
   Labor's O*NET database (a real, CC-licensed, named-technology vocabulary), not generic word frequency --
   ESCO was tried for this earlier and rejected as a poor fit; O*NET live-checked well. Zero-token, works
   without an AI key.
+- A typography/radius redesign across both frontends, DNA studied from impeccable.style: display headings now
+  use Alumni Sans (a tall, light condensed grotesque) with Albert Sans for body/UI text, corners sharpened
+  (Tabler 8-12px / Tailwind rounded-2xl down to 4-6px). Both fonts are vendored locally (never loaded from
+  Google). Brand colour, routes and copy are unchanged. See `design.md`.
 - A browser extension (`browser-extension/`, not yet published to a store -- install unpacked) adds a one-click
   "Add this job" button: it opens the current tab's link in your own StillOpen's Add Job page, which now reads
   a `?url=` link automatically. The extension never reads page content or talks to any server directly; it only
