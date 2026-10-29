@@ -177,6 +177,13 @@ class Postings(Base):
         self.assertEqual([p["title"] for p in self.client.get(f"{BASE}/postings?source={mine.source_id}").json()["postings"]], ["Python Engineer"])
         self.assertEqual(self.client.get(f"{BASE}/postings?source=abc").status_code, 400)
 
+    def test_sort_by_company_or_title_or_an_unknown_order_is_refused(self):
+        self.posting(name="S1", token="s1", company="Zebra", title="Analyst", title_key="s1|analyst")
+        self.posting(name="S2", token="s2", company="Acme", title="Cook", title_key="s2|cook")
+        self.assertEqual([p["company"] for p in self.client.get(f"{BASE}/postings?sort=company").json()["postings"]], ["Acme", "Zebra"])
+        self.assertEqual([p["title"] for p in self.client.get(f"{BASE}/postings?sort=title").json()["postings"]], ["Analyst", "Cook"])
+        self.assertEqual(self.client.get(f"{BASE}/postings?sort=bogus").status_code, 400)
+
     def test_pages_of_fifty(self):
         source = JobSource.objects.create(name="Big", connector="greenhouse", board_token="big")
         Posting.objects.bulk_create([Posting(source=source, url=f"https://x.example.com/{n}", title=f"T{n}", title_key=f"big|{n}") for n in range(55)])

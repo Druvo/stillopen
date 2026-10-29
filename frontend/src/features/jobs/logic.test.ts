@@ -3,18 +3,19 @@ import { fileSize, mergePrefill, postingsQuery, readPostingsQuery } from "./logi
 
 describe("postingsQuery", () => {
   it("is empty when nothing is set", () => {
-    expect(postingsQuery({ q: "  ", source: "", page: 1 })).toBe("");
+    expect(postingsQuery({ q: "  ", source: "", page: 1, sort: "newest" })).toBe("");
   });
   it("keeps only what is set", () => {
-    expect(postingsQuery({ q: " python dev ", source: "3", page: 2 })).toBe("?q=python+dev&source=3&page=2");
+    expect(postingsQuery({ q: " python dev ", source: "3", page: 2, sort: "company" })).toBe("?q=python+dev&source=3&page=2&sort=company");
   });
   it("round-trips through the address", () => {
-    const state = { q: "c++ & more", source: "12", page: 4 };
+    const state = { q: "c++ & more", source: "12", page: 4, sort: "title" as const };
     expect(readPostingsQuery(postingsQuery(state))).toEqual(state);
   });
   it("ignores broken values", () => {
-    expect(readPostingsQuery("?source=abc&page=-2")).toEqual({ q: "", source: "", page: 1 });
-    expect(readPostingsQuery("?page=1.5")).toEqual({ q: "", source: "", page: 1 });
+    expect(readPostingsQuery("?source=abc&page=-2")).toEqual({ q: "", source: "", page: 1, sort: "newest" });
+    expect(readPostingsQuery("?page=1.5")).toEqual({ q: "", source: "", page: 1, sort: "newest" });
+    expect(readPostingsQuery("?sort=bogus")).toMatchObject({ sort: "newest" });
   });
 });
 

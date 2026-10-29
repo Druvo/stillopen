@@ -80,7 +80,7 @@ export function FilterBar({ filters, set, reset, jobs, buckets, bandLabels, show
           onClick={() => setOpen((v) => !v)}
           className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-theme-sm font-medium md:hidden"
         >
-          <SlidersHorizontal className="size-4" aria-hidden /> Filters
+          <SlidersHorizontal className="size-4" aria-hidden /> {open ? "Hide more filters" : "More filters"}
         </button>
       </div>
 
@@ -120,6 +120,7 @@ export function FilterBar({ filters, set, reset, jobs, buckets, bandLabels, show
           <option value="">Any</option>
           <option value="active">Open</option>
           <option value="expired">Closed</option>
+          <option value="uncertain">Unclear</option>
           <option value="unknown">Not checked</option>
         </Select>
         <Select label="Found" value={filters.found} onChange={(v) => set({ found: v as Filters["found"] })}>

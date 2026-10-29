@@ -6,7 +6,7 @@ import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
 import { jobsApi, type PostingRow } from "./api";
-import { postingsQuery, readPostingsQuery, repostHint } from "./logic";
+import { POSTINGS_SORT_OPTIONS, postingsQuery, readPostingsQuery, repostHint } from "./logic";
 
 const CONTROL = "rounded-md border border-border bg-surface px-3 py-1.5 text-sm";
 
@@ -67,12 +67,27 @@ export function Postings() {
           ))}
         </select>
         <Button type="submit">Filter</Button>
+        <label className="sr-only" htmlFor="postings-sort">
+          Sort by
+        </label>
+        <select
+          id="postings-sort"
+          value={state.sort}
+          onChange={(e) => setState((s) => ({ ...s, sort: e.target.value as (typeof POSTINGS_SORT_OPTIONS)[number]["value"], page: 1 }))}
+          className={CONTROL}
+        >
+          {POSTINGS_SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
         {filtered && (
           <Button
             variant="ghost"
             onClick={() => {
               setDraft("");
-              setState({ q: "", source: "", page: 1 });
+              setState((s) => ({ ...s, q: "", source: "", page: 1 }));
             }}
           >
             Clear
