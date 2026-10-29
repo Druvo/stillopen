@@ -570,6 +570,13 @@ class StandardLook(PublicTestCase):
         self.assertIn("localStorage", js)
         self.assertNotIn("prefers-color-scheme", js)
 
+    def test_the_hand_written_css_and_js_carry_a_cache_busting_version(self):
+        """Neither file's URL has a content hash (unlike the vendored, hash-verified Tabler files), so without
+        this a visitor's browser can keep serving a stylesheet from before the last deploy after a refresh."""
+        html = self.client.get(reverse("landing")).content.decode()
+        self.assertRegex(html, r'/static/css/stillopen\.css\?v=\d+')
+        self.assertRegex(html, r'/static/js/theme\.js\?v=\d+')
+
     def test_the_public_header_has_standard_navigation(self):
         html = self.client.get(reverse("landing")).content.decode()
         for text in ("Browse jobs", "How it works", "FAQ", "Sign in"):

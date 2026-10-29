@@ -13,9 +13,9 @@
 <meta property="og:description" content="{% block og_description %}{{ config.landing_subheadline }}{% endblock %}">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2311695f'/%3E%3Cpath d='M9 16.5l4.6 4.6L23 11.5' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<script src="{% static 'js/theme.js' %}"></script>
+<script src="{% static 'js/theme.js' %}?v={{ asset_v }}"></script>
 <link href="{% static 'vendor/tabler/tabler.min.css' %}" rel="stylesheet">
-<link href="{% static 'css/stillopen.css' %}" rel="stylesheet">
+<link href="{% static 'css/stillopen.css' %}?v={{ asset_v }}" rel="stylesheet">
 <script src="{% static 'vendor/tabler/tabler.min.js' %}" defer></script>
 {% block extra_head %}{% endblock %}
 </head>
