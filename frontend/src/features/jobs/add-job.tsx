@@ -27,15 +27,22 @@ export function AddJob() {
       setValues((v) => mergePrefill(v, found));
       setLink(found.url);
       setReadNote({ tone: "info", text: "We read this from the link. Please check the company and role before you save." });
+      return;
+    }
+    // A link opened with ?url=... (e.g. the browser extension's "Add this job" button): read it straight away.
+    const fromQuery = new URLSearchParams(window.location.search).get("url");
+    if (fromQuery) {
+      setLink(fromQuery);
+      void readLinkFor(fromQuery);
     }
   }, []);
   const set = (name: string) => (event: { target: { value: string } }) => setValues((v) => ({ ...v, [name]: event.target.value }));
 
-  async function readLink() {
+  async function readLinkFor(target: string) {
     setReading(true);
     setReadNote(null);
     try {
-      const prefill = await jobsApi.quickAdd(link);
+      const prefill = await jobsApi.quickAdd(target);
       setValues((v) => mergePrefill(v, prefill));
       setReadNote({ tone: "info", text: "We read this from the link. It is a best guess, so check the company, the role and the description before you save." });
     } catch (e) {
@@ -43,6 +50,10 @@ export function AddJob() {
     } finally {
       setReading(false);
     }
+  }
+
+  async function readLink() {
+    await readLinkFor(link);
   }
 
   return (

@@ -30,8 +30,23 @@
           <a class="btn btn-primary" href="{% url 'tool_offer_compare' %}">Compare offers</a>
         </div></div>
       </div>
+      <div class="col-12 col-md-4">
+        <div class="card h-100"><div class="card-body d-flex flex-column">
+          <h2 class="h4">Sample interview questions</h2>
+          <p class="text-secondary flex-grow-1">A few free sample questions per common role, each with a real source -- a taste of a full prep plan.</p>
+          <a class="btn btn-primary" href="{% url 'tool_sample_questions' %}">See sample questions</a>
+        </div></div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card h-100"><div class="card-body d-flex flex-column">
+          <h2 class="h4">API reference</h2>
+          <p class="text-secondary flex-grow-1">Every endpoint, listed straight from the running API's own schema. For developers wiring up their own tools.</p>
+          <a class="btn btn-primary" href="{% url 'api_reference' %}">Read the API docs</a>
+        </div></div>
+      </div>
     </div>
-    {% if config.signup_open %}<p class="text-secondary mt-4 mb-0">Want these checks to happen automatically as you track a whole job search? <a href="{% url 'account_signup' %}">Create a free account</a>.</p>{% endif %}
+    <p class="text-secondary mt-4 mb-0">Signed in already? A small browser extension adds the job you're looking at in one click -- <a href="{% firstof config.landing_github_url 'https://github.com/Druvo/stillopen' %}/tree/main/browser-extension" rel="noopener">install it from the source repo</a> (not yet in an extension store).</p>
+    {% if config.signup_open %}<p class="text-secondary mt-2 mb-0">Want these checks to happen automatically as you track a whole job search? <a href="{% url 'account_signup' %}">Create a free account</a>.</p>{% endif %}
   </div>
 </section>
 {% endblock %}

@@ -1,0 +1,39 @@
+{% extends "tracker/public_base.html" %}
+{% block title %}Sample interview questions | {{ config.site_title }}{% endblock %}
+{% block description %}A few free sample interview questions for common roles, each with a real source. No account needed.{% endblock %}
+
+{% block main %}
+<section class="so-hero">
+  <div class="container-xl py-4 py-lg-5" style="max-width:48rem">
+    <span class="so-eyebrow">Free sample</span>
+    <h1 class="fw-bold mt-1 mb-2">Sample interview questions</h1>
+    <p class="so-lead mb-4">A handful of hand-picked questions per role, each with a real source -- a taste of what a prep plan looks like. These are fixed samples, not generated for you; a free account turns this into a full plan built around your own skill gaps and the job you're preparing for.</p>
+
+    {% for role in roles %}
+    <h2 class="h4 mt-4" id="{{ role.slug }}">{{ role.title }}</h2>
+    {% for q in role.questions %}
+    <details class="card mb-2">
+      <summary class="card-body" style="cursor:pointer">{{ forloop.counter }}. {{ q.prompt }}</summary>
+      <div class="card-body pt-0">
+        <ol type="A">
+          {% for choice in q.choices %}
+          <li{% if forloop.counter0 == q.correct %} class="fw-bold text-success"{% endif %}>{{ choice }}{% if forloop.counter0 == q.correct %} &mdash; correct{% endif %}</li>
+          {% endfor %}
+        </ol>
+        <p class="mb-1">{{ q.explanation }}</p>
+        <p class="text-secondary mb-0" style="font-size:.85rem">Source: <a href="{{ q.source.url }}" rel="noopener">{{ q.source.title }}</a></p>
+      </div>
+    </details>
+    {% endfor %}
+    {% endfor %}
+
+    {% if config.signup_open %}
+    <div class="card mt-4"><div class="card-body">
+      <h2 class="h5">Want questions built around a real job and your own CV?</h2>
+      <p class="text-secondary mb-2">A free account turns a job's skill gaps into a short study plan with daily practice, cited questions and explanations -- written for that job, not a generic list.</p>
+      <a class="btn btn-primary" href="{% url 'account_signup' %}">Create a free account</a>
+    </div></div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

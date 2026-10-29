@@ -16,7 +16,8 @@
       <div class="card mb-3"><div class="card-body">
         <h2 class="h5 mb-3">In {{ group.currency }}</h2>
         <div class="table-responsive"><table class="table table-sm mb-0">
-          <thead><tr><th>Offer</th><th class="text-end">Yearly total</th><th class="text-end">First-year total</th><th class="text-end">Behind the best</th></tr></thead>
+          <caption class="visually-hidden">Offers compared in {{ group.currency }}</caption>
+          <thead><tr><th scope="col">Offer</th><th scope="col" class="text-end">Yearly total</th><th scope="col" class="text-end">First-year total</th><th scope="col" class="text-end">Behind the best</th></tr></thead>
           <tbody>
           {% for row in group.rows %}
             <tr{% if row.best %} class="table-success"{% endif %}>

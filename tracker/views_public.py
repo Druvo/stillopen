@@ -249,7 +249,12 @@ SITEMAP_LIMIT = 45000  # the protocol allows 50,000 per file
 @public_cache
 def sitemap(request):
     config = SiteConfig.load()
-    urls = [(request.build_absolute_uri(reverse(name)), None) for name in ("landing", "privacy", "terms", "tools_index", "tool_job_fit", "tool_liveness", "tool_offer_compare")]
+    urls = [
+        (request.build_absolute_uri(reverse(name)), None) for name in (
+            "landing", "privacy", "terms", "tools_index", "tool_job_fit", "tool_liveness", "tool_offer_compare",
+            "tool_sample_questions", "api_reference",
+        )
+    ]
     if config.public_board_enabled:
         urls.append((request.build_absolute_uri(reverse("openings")), None))
         if config.public_details_indexable:

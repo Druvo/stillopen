@@ -304,6 +304,36 @@ the person's own target roles, needs the site's key to do anything, ships OFF by
 `SiteConfig` fields (`usajobs_api_key`, `usajobs_email`, both env-overridable) under Site configuration > Job
 search keys, and a dormant-source dashboard banner matching the existing Jooble one.
 
+### A11y pass, API docs, sample questions and a browser extension (built, 2026-10-29)
+
+Four more candidate-facing additions:
+
+- **A11y audit of the public pages** -- the existing templates/CSS already had a strong baseline (skip link,
+  `:focus-visible` outline, inline-SVG charts with `<title>`/`<desc>` for screen readers, labelled forms,
+  AA-passing contrast on the muted text colour in both themes -- checked by computing WCAG relative-luminance
+  contrast ratios directly, not assumed). The one real gap found was in this session's own new offer-comparison
+  table: missing `scope="col"` and a caption -- fixed.
+- **Public API reference** (`/developers/`) -- every `/api/v1/` endpoint and MCP tool, read straight from the
+  running API's own OpenAPI schema and the MCP server's own tool list (same source `tests_api.routes()` already
+  uses for route-coverage tests), so the page can never list something the API doesn't actually have, or miss
+  something it does. Honest about the auth model: the REST API is session-cookie auth for the app itself, not a
+  public open API; MCP is bearer-token auth via a personal token made under Profile.
+- **Sample interview questions** (`/tools/sample-interview-questions/`) -- a real prep-plan question bank only
+  exists per person, per plan, AI-generated from their own CV and a specific job (`tracker/prep_models.py`'s
+  `PrepQuestion`) -- there is no pre-existing shared/curated bank to showcase. Rather than fake that provenance,
+  built a small, honestly-labelled, hand-picked set (`tracker/sample_questions.py`, 3 roles x 3 questions),
+  each with a real source (MDN, PostgreSQL/Docker/Kubernetes/Terraform's own docs) under the same discipline
+  `PrepQuestion` itself follows ("a question without a source is never saved").
+- **Browser extension** (`browser-extension/`) -- scoped to what's achievable without new backend auth: no
+  token-based write API exists for a browser extension to call directly (the REST API is session-cookie only,
+  MCP tokens are for AI assistants over `/mcp/`, not a REST write path), and building one is a materially bigger,
+  security-sensitive change (scoping, rate limits) left for a later call. Instead: a Manifest V3 extension with
+  `activeTab`+`storage` permissions only, no content-script injection into any site, that opens
+  `{your server}/app/jobs/add?url=<current tab>` in a new tab on one click. The Add Job page was taught to read
+  a `?url=` link automatically on load (`frontend/src/features/jobs/add-job.tsx`), the same `quickadd` read a
+  pasted link already gets -- genuinely one click, using the session already open in that tab, not a bypass of
+  anything.
+
 ### Free, no-sign-in tools + an RSS feed (built, 2026-10-27)
 
 Four public, candidate-friendly additions, none needing an account:
