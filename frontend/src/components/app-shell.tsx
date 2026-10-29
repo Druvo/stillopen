@@ -15,6 +15,23 @@ import { Loading, PageHeader } from "./ui";
 
 const SIDEBAR_KEY = "so-sidebar";
 
+/** The same "still open" door mark as the public pages' logo (templates/tracker/_logo.html): a door ajar, not
+    a generic checkmark or magnifying glass. */
+function Logo() {
+  return (
+    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand text-brand-contrast" aria-hidden>
+      <svg viewBox="0 0 32 32" className="size-6">
+        <g stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <line x1="10" y1="7" x2="10" y2="25" />
+          <line x1="10" y1="7" x2="21" y2="14" />
+          <line x1="10" y1="25" x2="22" y2="25" />
+        </g>
+        <circle cx="18.6" cy="12.6" r="1.4" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
 function toggleTheme() {
   const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   document.documentElement.dataset.theme = next;
@@ -217,9 +234,7 @@ export function AppShell() {
       >
         <div className={cn("flex h-16 items-center py-8", !wide && "justify-center")}>
           <Link to="/" className="flex items-center gap-2 text-xl font-semibold tracking-tight text-gray-800 dark:text-white/90">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-brand-500 text-white" aria-hidden>
-              S
-            </span>
+            <Logo />
             {wide && <span>{title}</span>}
           </Link>
         </div>

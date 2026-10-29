@@ -13,6 +13,19 @@ that default from **Site configuration > Appearance** in the Django admin -- see
 below. A visitor's own choice, once made, always wins over either default (the existing "so-theme"
 localStorage key, shared by both frontends, is untouched by this feature).
 
+## Logo: a door ajar, not a generic checkmark
+
+The previous mark was a plain checkmark in a coloured square -- a generic "done" glyph that said nothing
+about the product, and its colour (`#11695f`, a teal from the very first redesign pass) had been missed in
+both later colour changes. Replaced with a literal mark tied to the brand's own name: a door standing ajar
+(a vertical frame, a diagonal leaf swung open, a floor line, a small handle dot) -- "still open" as a picture,
+not a magnifying glass (generic for any job board) or an arbitrary abstract shape. Drawn in
+`templates/tracker/_logo.html` and `frontend/src/components/app-shell.tsx`'s `Logo()` using `currentColor`
+inside a `bg-brand text-brand-contrast` badge, so it automatically takes each theme's own accent and
+foreground colour -- no separate light/dark artwork to keep in sync. The favicon (a `data:` URI, which can't
+reference a CSS variable) uses a fixed colour: the light-mode accessible olive, since a favicon renders in
+neutral browser chrome regardless of the page's own theme.
+
 ## What changed, and why
 
 - **One accent hue, two brightnesses.** Both themes use the same hue family (an olive/lime green) but tuned
