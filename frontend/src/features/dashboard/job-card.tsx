@@ -213,7 +213,7 @@ export function JobCard({ job, statuses, extras, onMove, onCheckFit, checking, v
     <article
       id={`job-${job.id}`}
       aria-label={name}
-      className={cn("so-job scroll-mt-20 rounded-2xl border bg-surface p-3 text-theme-sm shadow-theme-xs sm:p-4", job.urgent ? "border-warn" : "border-border", overlay && "rotate-1 shadow-lg")}
+      className={cn("so-job scroll-mt-20 rounded-md border bg-surface p-3 text-theme-sm shadow-theme-xs sm:p-4", job.urgent ? "border-warn" : "border-border", overlay && "rotate-1 shadow-lg")}
     >
       <div className={cn("flex gap-3", compact ? "flex-col" : "flex-col md:flex-row md:items-start md:justify-between")}>
         <div className="flex min-w-0 flex-1 items-start gap-3">

@@ -1,14 +1,33 @@
 /* StillOpen look: a standard, familiar SaaS / job-site style layered on Tabler.
-   System fonts only and no external requests (nothing here loads from another host). */
+   Typography DNA studied from impeccable.style (2026-10-29): a tall, ultralight condensed display face paired
+   with a plain humanist body face, and sharp (not pill) corners. Both fonts are vendored locally, never loaded
+   from Google -- see static/vendor/fonts/NOTICE.md. The brand colour and information architecture are kept
+   unchanged; only the type pairing and corner radius carry the studied DNA (see docs/ROADMAP.md). */
+
+@font-face {
+  font-family: "Alumni Sans";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/static/vendor/fonts/alumni-sans-variable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Albert Sans";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/static/vendor/fonts/albert-sans-variable.woff2") format("woff2");
+}
 
 :root,
 [data-bs-theme] {
   --tblr-primary: #2563eb;
   --tblr-primary-rgb: 37, 99, 235;
   --tblr-primary-fg: #fff;
-  --tblr-font-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --tblr-border-radius: 8px;
-  --so-radius: 12px;
+  --tblr-font-sans-serif: "Albert Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --so-display-font: "Alumni Sans", var(--tblr-font-sans-serif);
+  --tblr-border-radius: 4px;
+  --so-radius: 6px;
   --so-success: #16a34a;
   --so-warning: #d97706;
   --so-c1: #2563eb;
@@ -44,15 +63,20 @@
 html, body { overflow-x: clip; }  /* wide row gutters (g-4, g-5) must never create a sideways scrollbar */
 body { font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
 h1, h2, h3, .h1, .h2, .h3 { letter-spacing: -.015em; }
+/* Display face: a tall, light grotesque for headings -- the studied DNA's most distinctive move.
+   .so-display-hero goes all the way to the variable font's lightest cut for the page's single biggest statement;
+   plain .so-display (every other heading) stays at a still-light but more legible weight. */
+.so-display { font-family: var(--so-display-font); font-weight: 340; letter-spacing: -.01em; }
+.so-display-hero { font-weight: 230; }
 .card { border-radius: var(--so-radius); box-shadow: var(--so-shadow); }
-.btn { border-radius: 8px; font-weight: 600; }
+.btn { border-radius: var(--tblr-border-radius); font-weight: 600; }
 .btn-primary { box-shadow: 0 1px 2px rgba(37, 99, 235, .35); }
-.form-control, .form-select { border-radius: 8px; }
+.form-control, .form-select { border-radius: var(--tblr-border-radius); }
 :focus-visible { outline: 3px solid rgba(37, 99, 235, .55); outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 
 /* skip link: visible only when focused (keyboard users) */
-.so-skip { position: absolute; left: -999px; top: 8px; z-index: 1000; background: #111827; color: #fff; padding: 10px 16px; border-radius: 8px; }
+.so-skip { position: absolute; left: -999px; top: 8px; z-index: 1000; background: #111827; color: #fff; padding: 10px 16px; border-radius: var(--tblr-border-radius); }
 .so-skip:focus { left: 8px; color: #fff; }
 
 /* logo */
@@ -64,7 +88,7 @@ h1, h2, h3, .h1, .h2, .h3 { letter-spacing: -.015em; }
 .so-nav { background: var(--so-surface); border-bottom: 1px solid var(--so-border); position: sticky; top: 0; z-index: 50; }
 .so-nav .nav-link { font-weight: 600; color: var(--so-muted); }
 .so-nav .nav-link:hover { color: var(--tblr-primary); }
-.so-theme { border: 1px solid var(--so-border); background: transparent; color: var(--so-muted); border-radius: 8px; width: 38px; height: 38px; line-height: 1; }
+.so-theme { border: 1px solid var(--so-border); background: transparent; color: var(--so-muted); border-radius: var(--so-radius); width: 38px; height: 38px; line-height: 1; }
 .so-theme:hover { color: var(--tblr-primary); border-color: var(--tblr-primary); }
 .so-theme { display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 [data-bs-theme="light"] .so-ic-sun, [data-bs-theme="dark"] .so-ic-moon { display: none; }
@@ -82,7 +106,7 @@ h1, h2, h3, .h1, .h2, .h3 { letter-spacing: -.015em; }
 .so-stat .so-cap { color: var(--so-muted); font-size: .9rem; }
 .so-step { position: relative; height: 100%; }
 .so-step .so-badge { width: 36px; height: 36px; border-radius: 999px; background: var(--tblr-primary); color: #fff; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
-.so-feature .so-icon { width: 44px; height: 44px; border-radius: 12px; background: var(--so-soft); color: var(--tblr-primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: .75rem; }
+.so-feature .so-icon { width: 44px; height: 44px; border-radius: var(--so-radius); background: var(--so-soft); color: var(--tblr-primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: .75rem; }
 .so-feature .so-icon svg { width: 22px; height: 22px; }
 
 /* charts (inline SVG, drawn on the server) */
@@ -103,10 +127,10 @@ h1, h2, h3, .h1, .h2, .h3 { letter-spacing: -.015em; }
 .so-dot.so-c4 { background: var(--so-c4); } .so-dot.so-c5 { background: var(--so-c5); } .so-dot.so-c6 { background: var(--so-c6); }
 
 /* before / after and funnel diagrams */
-.so-tab { background: var(--so-surface); border: 1px solid var(--so-border); border-radius: 8px; padding: .4rem .7rem; font-size: .85rem; color: var(--so-muted); display: inline-block; margin: .25rem; box-shadow: var(--so-shadow); }
+.so-tab { background: var(--so-surface); border: 1px solid var(--so-border); border-radius: var(--so-radius); padding: .4rem .7rem; font-size: .85rem; color: var(--so-muted); display: inline-block; margin: .25rem; box-shadow: var(--so-shadow); }
 .so-tab:nth-child(odd) { transform: rotate(-2deg); } .so-tab:nth-child(even) { transform: rotate(1.5deg); }
 .so-funnel-row { display: flex; align-items: center; gap: 1rem; margin-bottom: .6rem; }
-.so-funnel-bar { height: 34px; border-radius: 8px; background: var(--so-c1); color: #fff; font-weight: 700; display: flex; align-items: center; padding: 0 .8rem; min-width: 64px; white-space: nowrap; }
+.so-funnel-bar { height: 34px; border-radius: var(--so-radius); background: var(--so-c1); color: #fff; font-weight: 700; display: flex; align-items: center; padding: 0 .8rem; min-width: 64px; white-space: nowrap; }
 .so-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .82rem; margin: 2px; background: var(--so-soft); color: var(--tblr-body-color); border: 1px solid var(--so-border); }
 .so-chip.so-hit { background: rgba(22, 163, 74, .14); border-color: rgba(22, 163, 74, .5); font-weight: 700; }
 

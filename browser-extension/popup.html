@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>StillOpen</title>
+<style>
+  body { font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; width: 260px; margin: 0; padding: 14px; color: #0f172a; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  p { color: #475569; margin: 0 0 10px; }
+  button { width: 100%; padding: 9px 12px; background: #2563eb; color: #fff; border: 0; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }
+  button:disabled { background: #94a3b8; cursor: not-allowed; }
+  a { color: #2563eb; }
+  #status { margin-top: 8px; font-size: 12.5px; }
+  #setup { display: none; }
+</style>
+</head>
+<body>
+  <h1>StillOpen</h1>
+  <div id="ready">
+    <p>Add this page to your job tracker as a new job, link pre-filled and read for you.</p>
+    <button id="add">Add this job</button>
+  </div>
+  <div id="setup">
+    <p>Set your StillOpen server address first.</p>
+    <a href="#" id="open-options">Open settings</a>
+  </div>
+  <div id="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

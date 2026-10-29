@@ -69,3 +69,43 @@ def offer_compare(request):
 @public_cache
 def tools_index(request):
     return render(request, "tracker/tools_index.html", {"config": SiteConfig.load()})
+
+
+def _endpoints() -> list[dict]:
+    """Every operation in the REST API's own OpenAPI schema -- never listed by hand, so this can't drift from
+    what `/api/v1/` actually serves (the same approach `tracker.tests_api.routes()` uses to check route coverage)."""
+    from .api.routes import api
+
+    rows = []
+    for path, methods in api.get_openapi_schema()["paths"].items():
+        for method, op in methods.items():
+            rows.append({"method": method.upper(), "path": path, "summary": op.get("summary", "")})
+    rows.sort(key=lambda r: (r["path"], r["method"]))
+    return rows
+
+
+def _mcp_tools() -> list[dict]:
+    from asgiref.sync import async_to_sync
+
+    from .mcp_registry import build_server
+
+    server = build_server()
+    tools = async_to_sync(server.list_tools)()
+    return [
+        {"name": t.name, "description": t.description, "read_only": bool(t.annotations and t.annotations.read_only_hint)}
+        for t in tools
+    ]
+
+
+@public_cache
+def api_reference(request):
+    return render(request, "tracker/tools_api_reference.html", {
+        "config": SiteConfig.load(), "endpoints": _endpoints(), "mcp_tools": _mcp_tools(),
+    })
+
+
+@public_cache
+def sample_questions(request):
+    from . import sample_questions as data
+
+    return render(request, "tracker/tools_sample_questions.html", {"config": SiteConfig.load(), "roles": data.ROLES})
