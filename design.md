@@ -13,6 +13,26 @@ that default from **Site configuration > Appearance** in the Django admin -- see
 below. A visitor's own choice, once made, always wins over either default (the existing "so-theme"
 localStorage key, shared by both frontends, is untouched by this feature).
 
+## Full-site sweep: two leftover-blue bugs found after the redesign shipped
+
+A full page-by-page sweep (every Django public page and every Next.js app screen, both themes) turned up two
+real bugs the earlier verification missed -- both "stock browser/framework blue" that the redesign's token
+changes never touched because neither goes through `--tblr-primary`/`--brand`:
+
+- **Native checkboxes and radios** render in the browser's own default blue `accent-color` unless a stylesheet
+  sets it explicitly. Fixed with one rule in each stylesheet: `input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--tblr-primary); }` (Django) / `var(--brand)` (Next.js).
+- **`bg-blue-lt` badges** (`tracker/templates/tracker/openings.html`'s "via `<source>`" credit badge,
+  `landing.html`'s "CV tailored" example chip) used Tabler's literal blue utility class rather than
+  `bg-primary-lt`, which is the one that actually derives from `--tblr-primary`. Tabler's own semantic colour
+  utilities (`bg-green-lt`, `bg-warning-lt`, etc.) are deliberately left alone -- green for "fits/remote",
+  amber for "closing soon" are universal conventions independent of the brand accent, not a leftover bug.
+
+Also caught: the logo (`_logo.html`/favicon) was still hardcoded to `#11695f`, the *first* redesign's teal,
+missed by both the "Quiet Confidence" and the Bento/Command Center passes -- now fixed alongside the logo
+redesign below, using CSS variables so this class of bug (a hardcoded hex surviving a later palette change)
+can't recur for that element.
+
 ## Logo: a door ajar, not a generic checkmark
 
 The previous mark was a plain checkmark in a coloured square -- a generic "done" glyph that said nothing

@@ -63,6 +63,7 @@
 }
 
 html, body { overflow-x: clip; }  /* wide row gutters (g-4, g-5) must never create a sideways scrollbar */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--tblr-primary); }  /* Tabler's own .form-check-input already themes itself; this covers any plain, unwrapped checkbox/radio */
 body { font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
 h1, h2, h3, .h1, .h2, .h3 { letter-spacing: -.015em; }
 /* Display face: the same grotesque as the body, just bolder and tighter -- Bento's confident, modular-tile
