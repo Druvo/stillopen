@@ -4,15 +4,47 @@
 
 [![Tests](https://github.com/Druvo/stillopen/actions/workflows/tests.yml/badge.svg)](https://github.com/Druvo/stillopen/actions/workflows/tests.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/Druvo/stillopen?style=flat&color=yellow)](https://github.com/Druvo/stillopen/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/Druvo/stillopen)](https://github.com/Druvo/stillopen/commits/main)
+[![Django](https://img.shields.io/badge/Django-5.2-0C4B33?logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![MCP](https://img.shields.io/badge/MCP-Claude%20Code-D97757)](docs/MCP.md)
 
-![StillOpen landing page](docs/images/landing.jpg)
+![StillOpen: browse the public job board, filter, open a posting](docs/images/demo.gif)
 
-## Why run your own
+<sub>Public job board — no sign-in. Signed in, the same list is ranked against your own CV and places, with a tailored CV and cover letter per job.</sub>
 
-- **Your data stays yours.** CV, notes and applications live in one database on your machine or server. Export or delete everything any time.
-- **No subscription, no lock-in, no tracking.** No ads and no third-party scripts, fonts or images on any page.
-- **No AI key needed.** Search, fit scoring, CV tailoring and cover letters all work without one. Bring your own key later for a deeper read.
-- **Read every line.** Apache-2.0 licensed. Contributions welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+### Why run your own
+
+- 🔒 **Your data stays yours.** CV, notes and applications live in one database on your machine or server. Export or delete everything any time.
+- 🚫 **No subscription, no lock-in, no tracking.** No ads and no third-party scripts, fonts or images on any page.
+- 🆓 **No AI key needed.** Search, fit scoring, CV tailoring and cover letters all work without one. Bring your own key later for a deeper read.
+- 🤖 **Talks to Claude Code.** An MCP server lets an AI assistant read and update your own job search, nothing more.
+- 📖 **Read every line.** Apache-2.0 licensed. Contributions welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+<details>
+<summary><strong>📑 Table of contents</strong></summary>
+
+- [Quick start](#quick-start)
+- [Use it from Claude Code or any AI assistant](#use-it-from-claude-code-or-any-ai-assistant)
+- [What it is](#what-it-is)
+- [For people using it](#for-people-using-it)
+- [Run it](#run-it)
+- [What you can change in the admin](#what-you-can-change-in-the-admin)
+- [The public site: landing page and job board](#the-public-site-landing-page-and-job-board)
+- [The dashboard: everything first, then filters](#the-dashboard-everything-first-then-filters)
+- [Jobs found for you, with no setup and no AI](#jobs-found-for-you-with-no-setup-and-no-ai)
+- [Your own company job boards](#your-own-company-job-boards)
+- [After you apply: interviews, contacts, offers](#after-you-apply-interviews-contacts-offers)
+- [Tailored CVs and versions](#tailored-cvs-and-versions)
+- [Applying](#applying)
+- [Retrieval (RAG)](#retrieval-rag)
+- [AI evaluation: connect any AI](#ai-evaluation-connect-any-ai)
+- [Claude Code and other AI clients (MCP)](#claude-code-and-other-ai-clients-mcp)
+- [Security notes](#security-notes)
+- [Tests](#tests)
+- [License](#license)
+
+</details>
 
 ## Quick start
 
