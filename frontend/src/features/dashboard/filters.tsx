@@ -41,7 +41,7 @@ export function FilterPanel({ id, filters, set, reset, jobs, bandLabels, inStage
   const countries = countryOptions(jobs);
   const filtered = isFiltered(filters);
   return (
-    <section id={id} aria-label="Filters" className="so-card rounded-2xl border border-border bg-surface p-3 sm:p-4">
+    <section id={id} aria-label="Filters" className="so-card rounded-md border border-border bg-surface p-3 sm:p-4">
       <div className="grid grid-cols-1 gap-2 min-[425px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <Select label="Fits your places" value={filters.fit} onChange={(v) => set({ fit: v as Filters["fit"] })}>
           <option value="">Any</option>

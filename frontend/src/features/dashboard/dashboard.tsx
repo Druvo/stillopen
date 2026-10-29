@@ -319,7 +319,7 @@ export function Dashboard() {
 
           <div role="tabpanel" id={TAB_PANEL_ID} aria-labelledby={tabId(activeTab.key)} className="min-w-0">
             {empty ? (
-              <div className="rounded-2xl border border-dashed border-border p-8 text-center text-theme-sm text-muted">
+              <div className="rounded-md border border-dashed border-border p-8 text-center text-theme-sm text-muted">
                 {empty === "searching" && (
                   <p className="flex items-center justify-center gap-2">
                     <Spinner />
@@ -359,7 +359,7 @@ export function Dashboard() {
                 )}
               </div>
             ) : view === "board" ? (
-              <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-surface-2" role="status" aria-label="Loading the board" />}>
+              <Suspense fallback={<div className="h-64 animate-pulse rounded-md bg-surface-2" role="status" aria-label="Loading the board" />}>
                 <Board buckets={boardColumns} jobs={jobs} {...common} />
               </Suspense>
             ) : (

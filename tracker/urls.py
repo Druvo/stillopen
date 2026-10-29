@@ -20,6 +20,8 @@ urlpatterns = [
     path("tools/job-fit/", views_tools.job_fit, name="tool_job_fit"),
     path("tools/is-it-still-open/", views_tools.liveness_check, name="tool_liveness"),
     path("tools/compare-offers/", views_tools.offer_compare, name="tool_offer_compare"),
+    path("developers/", views_tools.api_reference, name="api_reference"),
+    path("tools/sample-interview-questions/", views_tools.sample_questions, name="tool_sample_questions"),
     path("mcp/", views_mcp.mcp_endpoint, name="mcp_endpoint"),
     # files the app links to by these addresses (not JSON, so they are not in /api/v1/)
     path("profile/export/", views.export_data, name="export_data"),

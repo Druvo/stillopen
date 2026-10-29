@@ -65,7 +65,7 @@ function UserMenu({ me }: { me?: Me }) {
         <ChevronDown className={cn("hidden size-4 transition-transform sm:block", open && "rotate-180")} aria-hidden />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-50 mt-3 w-64 rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-900">
+        <div role="menu" className="absolute right-0 z-50 mt-3 w-64 rounded-md border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-900">
           <div className="border-b border-gray-200 px-3 pb-3 dark:border-gray-800">
             <p className="text-theme-sm font-medium text-gray-700 dark:text-gray-200">{me?.name}</p>
             <p className="truncate text-theme-xs text-gray-500 dark:text-gray-400">{me?.email}</p>

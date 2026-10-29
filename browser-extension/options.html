@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>StillOpen settings</title>
+<style>
+  body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 16px; color: #0f172a; }
+  h1 { font-size: 20px; }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  input { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+  button { margin-top: 12px; padding: 9px 16px; background: #2563eb; color: #fff; border: 0; border-radius: 8px; font-weight: 600; cursor: pointer; }
+  p.hint { color: #475569; font-size: 13px; }
+  #saved { color: #16a34a; font-size: 13px; margin-top: 8px; display: none; }
+</style>
+</head>
+<body>
+  <h1>StillOpen settings</h1>
+  <p class="hint">StillOpen is self-hosted: there is no single site this extension talks to. Enter the address of your own StillOpen install (the one you already sign in to). Nothing you browse is sent to it automatically -- this address is only used to build the one link the "Add this job" button opens.</p>
+  <label for="server-url">Your StillOpen address</label>
+  <input id="server-url" type="url" placeholder="https://jobs.example.com" autocomplete="off">
+  <div><button id="save">Save</button></div>
+  <p id="saved">Saved.</p>
+  <script src="options.js"></script>
+</body>
+</html>
