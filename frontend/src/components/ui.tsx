@@ -13,7 +13,11 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 export function buttonClass(variant: Variant = "primary", small = false) {
-  return cn("inline-flex items-center justify-center gap-1 rounded-sm font-medium disabled:opacity-60", small ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm", VARIANTS[variant]);
+  return cn(
+    "inline-flex items-center justify-center gap-1 rounded-lg font-medium transition-colors disabled:opacity-60",
+    small ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm",
+    VARIANTS[variant],
+  );
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; small?: boolean }>(function Button(
@@ -24,7 +28,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
 });
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-md border border-border bg-surface p-4 sm:p-5", className)} {...props} />;
+  return <div className={cn("rounded-2xl border border-border bg-surface p-4 sm:p-5", className)} {...props} />;
 }
 
 export function Badge({ children, tone = "muted", className }: { children: ReactNode; tone?: "muted" | "good" | "warn" | "bad" | "brand"; className?: string }) {
@@ -35,7 +39,7 @@ export function Badge({ children, tone = "muted", className }: { children: React
 export function Notice({ children, tone = "info" }: { children: ReactNode; tone?: "info" | "error" | "success" }) {
   const tones = { info: "border-border", error: "border-bad", success: "border-good" };
   return (
-    <div role={tone === "error" ? "alert" : "status"} className={cn("rounded-md border bg-surface p-3 text-sm", tones[tone])}>
+    <div role={tone === "error" ? "alert" : "status"} className={cn("rounded-lg border bg-surface p-3 text-sm", tones[tone])}>
       {children}
     </div>
   );
@@ -45,7 +49,7 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
   return (
     <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="font-display text-[2rem] font-light tracking-tight">{title}</h1>
+        <h1 className="font-display text-[2rem] font-bold tracking-tight">{title}</h1>
         {subtitle && <div className="text-sm text-muted">{subtitle}</div>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -67,7 +71,7 @@ export function Loading({ what = "this page" }: { what?: string }) {
 
 export function ErrorBox({ message, onRetry }: { message?: string; onRetry?: () => void }) {
   return (
-    <div role="alert" className="rounded-md border border-border bg-surface p-4">
+    <div role="alert" className="rounded-2xl border border-border bg-surface p-4">
       <p className="font-medium">{message || "We could not load this."}</p>
       {onRetry && (
         <Button className="mt-2" onClick={onRetry}>

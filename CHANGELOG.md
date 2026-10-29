@@ -5,6 +5,16 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Full visual redesign (`design.md`): Bento Grid in light mode (clean modular tiles on neutral paper, an
+  accessible dark-olive accent), Dark Command Center in dark mode (near-black, the same hue at full glowing
+  lime brightness), one humanist sans (Albert Sans) for both headings and body text, moderate 12-18px corner
+  radius, admin-selectable default (Site configuration > Appearance, dark out of the box) applied to both
+  frontends -- the Next.js app's static export is patched per-request with the admin's choice, so it takes
+  effect with no rebuild. Also fixed two real dashboard filter bugs found along the way: the "Posting" filter
+  was missing its "Unclear" option (`live_state: "uncertain"` had no matching dropdown entry, so it could
+  never be selected), and the mobile "Filters" toggle button was ambiguously labelled next to the
+  always-visible search box; and added sort (newest/oldest/company/title) to the "All postings" page, which
+  previously had none.
 - Optional shared cache: set `REDIS_URL` and `pip install -r requirements-redis.txt` so per-person rate limits
   and the search-source cache are shared across every process/machine instead of split per worker. Unset,
   nothing changes. Fixed two Playwright e2e specs left broken by the earlier quick-add-bar removal (CI on

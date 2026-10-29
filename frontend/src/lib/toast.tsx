@@ -36,7 +36,7 @@ export function Toasts() {
           key={t.id}
           role={t.tone === "error" ? "alert" : "status"}
           className={cn(
-            "pointer-events-auto flex max-w-xl items-start gap-3 rounded-md border bg-white px-4 py-3 text-theme-sm shadow-theme-lg dark:bg-gray-900",
+            "pointer-events-auto flex max-w-xl items-start gap-3 rounded-xl border bg-white px-4 py-3 text-theme-sm shadow-theme-lg dark:bg-gray-900",
             t.tone === "error" ? "border-error-500" : t.tone === "success" ? "border-success-500" : "border-gray-200 dark:border-gray-800",
           )}
         >

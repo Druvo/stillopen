@@ -2,8 +2,9 @@
 
 Django 5.2 app: job-search app, admin-configurable, with an MCP server. See README.md for features.
 
-The visual design system (fonts, corner radius -- studied from impeccable.style, 2026-10-29) is locked in
-`design.md` at the project root. Read it before any further visual change to either frontend.
+The visual design system (Bento Grid in light mode, Dark Command Center in dark mode, one shared Albert Sans
+grotesque, dark the admin-configurable default, 2026-10-29) is locked in `design.md` at the project root.
+Read it before any further visual change to either frontend.
 
 ## Commands
 

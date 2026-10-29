@@ -553,20 +553,20 @@ class KeepingItFresh(PublicTestCase):
 
 
 class StandardLook(PublicTestCase):
-    def test_light_by_default_with_the_theme_script_and_brand_css_on_every_kind_of_page(self):
+    def test_dark_by_default_with_the_theme_script_and_brand_css_on_every_kind_of_page(self):
         pages = [self.client.get(reverse(n)) for n in ("landing", "openings", "privacy", "terms", "account_login", "account_signup")]
         for r in pages:
             html = r.content.decode()
             self.assertEqual(r.status_code, 200)
-            self.assertIn('data-bs-theme="light"', html)
+            self.assertIn('data-bs-theme="dark"', html)
             self.assertIn("/static/js/theme.js", html)
             self.assertIn("/static/css/stillopen.css", html)
             self.assertIn("data-theme-toggle", html)
 
-    def test_the_theme_script_defaults_to_light_and_remembers_a_dark_choice(self):
+    def test_the_theme_script_only_overrides_the_servers_default_once_a_choice_is_stored(self):
         from pathlib import Path
         js = (Path(__file__).resolve().parent.parent / "static" / "js" / "theme.js").read_text(encoding="utf-8")
-        self.assertIn("saved === 'dark' ? 'dark' : 'light'", js)
+        self.assertIn("saved === 'dark' || saved === 'light'", js)
         self.assertIn("localStorage", js)
         self.assertNotIn("prefers-color-scheme", js)
 

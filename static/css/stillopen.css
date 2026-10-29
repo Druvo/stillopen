@@ -1,16 +1,11 @@
-/* StillOpen look: a standard, familiar SaaS / job-site style layered on Tabler.
-   Typography DNA studied from impeccable.style (2026-10-29): a tall, ultralight condensed display face paired
-   with a plain humanist body face, and sharp (not pill) corners. Both fonts are vendored locally, never loaded
-   from Google -- see static/vendor/fonts/NOTICE.md. The brand colour and information architecture are kept
-   unchanged; only the type pairing and corner radius carry the studied DNA (see docs/ROADMAP.md). */
+/* StillOpen look: Bento Grid in light mode, Dark Command Center in dark mode -- two distinct, modern 2026
+   surfaces sharing one component system and one humanist sans (Albert Sans, vendored locally, never loaded
+   from Google -- see static/vendor/fonts/NOTICE.md). Light reads as clean modular tiles on neutral paper with
+   an olive-lime accent; dark reads as a near-black pro-tool with the same hue at full, glowing brightness
+   (readable in both directions because the accent only needs to pass contrast against its own surface, not
+   the other theme's). Admin-configurable default (Site configuration > Appearance), dark out of the box.
+   Full system recorded in design.md at the project root. */
 
-@font-face {
-  font-family: "Alumni Sans";
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url("/static/vendor/fonts/alumni-sans-variable.woff2") format("woff2");
-}
 @font-face {
   font-family: "Albert Sans";
   font-style: normal;
@@ -21,58 +16,64 @@
 
 :root,
 [data-bs-theme] {
-  --tblr-primary: #2563eb;
-  --tblr-primary-rgb: 37, 99, 235;
-  --tblr-primary-fg: #fff;
   --tblr-font-sans-serif: "Albert Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --so-display-font: "Alumni Sans", var(--tblr-font-sans-serif);
-  --tblr-border-radius: 4px;
-  --so-radius: 6px;
-  --so-success: #16a34a;
-  --so-warning: #d97706;
-  --so-c1: #2563eb;
-  --so-c2: #0ea5e9;
-  --so-c3: #14b8a6;
-  --so-c4: #8b5cf6;
-  --so-c5: #f59e0b;
-  --so-c6: #64748b;
+  --so-display-font: var(--tblr-font-sans-serif);
+  --tblr-border-radius: 12px;
+  --so-radius: 18px;
+  --so-c1: #5b8c3f;
+  --so-c2: #c97a2e;
+  --so-c3: #3f8fa8;
+  --so-c4: #8a5fb0;
+  --so-c5: #b2555f;
+  --so-c6: #6b6b63;
 }
 [data-bs-theme="light"] {
-  --tblr-body-bg: #f6f8fb;
-  --tblr-link-color: #1d4ed8;
-  --tblr-link-hover-color: #1e40af;
+  --tblr-primary: #4a6400;
+  --tblr-primary-rgb: 74, 100, 0;
+  --tblr-primary-fg: #fff;
+  --tblr-body-bg: #f2f2f0;
+  --tblr-link-color: #4a6400;
+  --tblr-link-hover-color: #334700;
   --so-surface: #ffffff;
-  --so-border: #e2e8f0;
-  --so-muted: #475569;
-  --so-soft: #eff4ff;
-  --so-hero: linear-gradient(180deg, #eaf1ff 0%, #f6f8fb 100%);
-  --so-shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 1px 3px rgba(15, 23, 42, .08);
+  --so-border: #e3e3e0;
+  --so-muted: #68685f;
+  --so-soft: #eef2df;
+  --so-hero: linear-gradient(180deg, #ececea 0%, #f2f2f0 100%);
+  --so-shadow: 0 1px 2px rgba(20, 20, 15, .06), 0 2px 8px rgba(20, 20, 15, .07);
+  --so-success: #3f7d4a;
+  --so-success-rgb: 63, 125, 74;
+  --so-warning: #9c5f1f;
 }
 [data-bs-theme="dark"] {
-  --tblr-body-bg: #0f172a;
-  --tblr-link-color: #8ab4ff;
-  --tblr-link-hover-color: #b6cdff;
-  --so-surface: #1e293b;
-  --so-border: #334155;
-  --so-muted: #a7b3c6;
-  --so-soft: #172554;
-  --so-hero: linear-gradient(180deg, #14213f 0%, #0f172a 100%);
-  --so-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  --tblr-primary: #c6ff3d;
+  --tblr-primary-rgb: 198, 255, 61;
+  --tblr-primary-fg: #0a0a0b;
+  --tblr-body-bg: #0a0a0b;
+  --tblr-link-color: #c6ff3d;
+  --tblr-link-hover-color: #a8e02f;
+  --so-surface: #141416;
+  --so-border: #232326;
+  --so-muted: #a0a0a6;
+  --so-soft: rgba(198, 255, 61, .12);
+  --so-hero: linear-gradient(180deg, #111113 0%, #0a0a0b 100%);
+  --so-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 2px 10px rgba(0, 0, 0, .35);
+  --so-success: #7ad184;
+  --so-success-rgb: 122, 209, 132;
+  --so-warning: #e0a458;
 }
 
 html, body { overflow-x: clip; }  /* wide row gutters (g-4, g-5) must never create a sideways scrollbar */
 body { font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
 h1, h2, h3, .h1, .h2, .h3 { letter-spacing: -.015em; }
-/* Display face: a tall, light grotesque for headings -- the studied DNA's most distinctive move.
-   .so-display-hero goes all the way to the variable font's lightest cut for the page's single biggest statement;
-   plain .so-display (every other heading) stays at a still-light but more legible weight. */
-.so-display { font-family: var(--so-display-font); font-weight: 340; letter-spacing: -.01em; }
-.so-display-hero { font-weight: 230; }
+/* Display face: the same grotesque as the body, just bolder and tighter -- Bento's confident, modular-tile
+   headline voice rather than a separate serif. .so-display-hero is the page's single biggest statement. */
+.so-display { font-family: var(--so-display-font); font-weight: 700; letter-spacing: -.02em; }
+.so-display-hero { font-weight: 800; }
 .card { border-radius: var(--so-radius); box-shadow: var(--so-shadow); }
-.btn { border-radius: var(--tblr-border-radius); font-weight: 600; }
-.btn-primary { box-shadow: 0 1px 2px rgba(37, 99, 235, .35); }
-.form-control, .form-select { border-radius: var(--tblr-border-radius); }
-:focus-visible { outline: 3px solid rgba(37, 99, 235, .55); outline-offset: 2px; }
+.btn { border-radius: var(--tblr-border-radius); font-weight: 600; transition: box-shadow .15s, border-color .15s, background-color .15s; }
+.btn-primary { box-shadow: 0 1px 2px rgba(var(--tblr-primary-rgb), .35); }
+.form-control, .form-select { border-radius: var(--tblr-border-radius); transition: border-color .15s, box-shadow .15s; }
+:focus-visible { outline: 3px solid rgba(var(--tblr-primary-rgb), .55); outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 
 /* skip link: visible only when focused (keyboard users) */
@@ -105,7 +106,7 @@ h1, h2, h3, .h1, .h2, .h3 { letter-spacing: -.015em; }
 .so-stat .so-num { font-size: 2.1rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.1; color: var(--tblr-body-color); }
 .so-stat .so-cap { color: var(--so-muted); font-size: .9rem; }
 .so-step { position: relative; height: 100%; }
-.so-step .so-badge { width: 36px; height: 36px; border-radius: 999px; background: var(--tblr-primary); color: #fff; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+.so-step .so-badge { width: 36px; height: 36px; border-radius: 999px; background: var(--tblr-primary); color: var(--tblr-primary-fg); font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
 .so-feature .so-icon { width: 44px; height: 44px; border-radius: var(--so-radius); background: var(--so-soft); color: var(--tblr-primary); display: inline-flex; align-items: center; justify-content: center; margin-bottom: .75rem; }
 .so-feature .so-icon svg { width: 22px; height: 22px; }
 
@@ -132,11 +133,11 @@ h1, h2, h3, .h1, .h2, .h3 { letter-spacing: -.015em; }
 .so-funnel-row { display: flex; align-items: center; gap: 1rem; margin-bottom: .6rem; }
 .so-funnel-bar { height: 34px; border-radius: var(--so-radius); background: var(--so-c1); color: #fff; font-weight: 700; display: flex; align-items: center; padding: 0 .8rem; min-width: 64px; white-space: nowrap; }
 .so-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .82rem; margin: 2px; background: var(--so-soft); color: var(--tblr-body-color); border: 1px solid var(--so-border); }
-.so-chip.so-hit { background: rgba(22, 163, 74, .14); border-color: rgba(22, 163, 74, .5); font-weight: 700; }
+.so-chip.so-hit { background: rgba(var(--so-success-rgb), .14); border-color: rgba(var(--so-success-rgb), .5); font-weight: 700; }
 
 /* job cards on public pages */
 .so-job { transition: box-shadow .15s, border-color .15s; }
-.so-job:hover { border-color: var(--tblr-primary); box-shadow: 0 4px 14px rgba(37, 99, 235, .14); }
+.so-job:hover { border-color: var(--tblr-primary); box-shadow: 0 4px 14px rgba(var(--tblr-primary-rgb), .14); }
 .so-job a.stretched-link { color: var(--tblr-body-color); text-decoration: none; }
 .so-job a.stretched-link:hover { color: var(--tblr-primary); }
 .so-footer { background: var(--so-surface); border-top: 1px solid var(--so-border); }

@@ -32,9 +32,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## Alumni Sans and Albert Sans (SIL Open Font License 1.1)
+## Albert Sans (SIL Open Font License 1.1)
 
-The display and body typefaces (see `src/app/layout.tsx`, loaded with `next/font/local`) are Google Fonts'
-Alumni Sans and Albert Sans, vendored as `public/fonts/*.woff2` -- the same files as the public pages'
-`static/vendor/fonts/`, see that folder's `NOTICE.md` for the source and SHA-256 hashes. Licensed under the
+The display and body typeface (see `src/app/layout.tsx`, loaded with `next/font/local`) is Google Fonts'
+Albert Sans, vendored as `public/fonts/albert-sans-variable.woff2` -- the same file as the public pages'
+`static/vendor/fonts/`, see that folder's `NOTICE.md` for the source and SHA-256 hash. Licensed under the
 SIL Open Font License, 1.1: https://openfontlicense.org/

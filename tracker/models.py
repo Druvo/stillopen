@@ -325,6 +325,12 @@ class SiteConfig(PersonalSettings):
     privacy_text = models.TextField(default=DEFAULT_PRIVACY, help_text="Shown at /privacy/. Replace with your own policy.")
     terms_text = models.TextField(default=DEFAULT_TERMS, help_text="Shown at /terms/. Replace with your own terms.")
 
+    THEMES = [("dark", "Dark"), ("light", "Light")]
+    default_theme = models.CharField(
+        max_length=5, choices=THEMES, default="dark",
+        help_text="What a first-time visitor sees before they pick for themselves (their own choice, once made, always wins, remembered in their browser).",
+    )
+
     class Meta:
         verbose_name = "Site configuration"
         verbose_name_plural = "Site configuration"

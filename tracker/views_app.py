@@ -16,8 +16,10 @@ from django.utils._os import safe_join
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
+from .models import SiteConfig
 
 _INLINE_SCRIPT = re.compile(rb"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S)
+_DEFAULT_THEME_ATTR = re.compile(rb'data-default-theme="[a-z]+"')
 
 
 @functools.lru_cache(maxsize=4)
@@ -89,7 +91,15 @@ def app_shell(request, path=""):
     index = build_dir() / "index.html"
     if not index.is_file():
         return HttpResponse(_NOT_BUILT, status=503, content_type="text/html; charset=utf-8")
-    response = FileResponse(open(index, "rb"), content_type="text/html; charset=utf-8")
+    html = index.read_bytes()
+    # The build's own `data-default-theme="dark"` is only a fallback; an admin's Site configuration >
+    # Appearance choice (checked at request time, so it applies without a rebuild) overrides it here. The
+    # CSP below is keyed on the file's own bytes/mtime, not this patched copy -- safe, since the patch only
+    # touches an attribute value, never the inline <script> tags the policy hashes.
+    theme = SiteConfig.load().default_theme
+    if theme in ("dark", "light"):
+        html = _DEFAULT_THEME_ATTR.sub(f'data-default-theme="{theme}"'.encode(), html, count=1)
+    response = HttpResponse(html, content_type="text/html; charset=utf-8")
     response["Cache-Control"] = "no-store"
     if settings.STILLOPEN_APP_CSP:
         response["Content-Security-Policy"] = _policy(str(index), index.stat().st_mtime_ns)

@@ -134,6 +134,14 @@ class SiteConfigAdmin(ModelAdmin):
                 ),
             },
         ),
+        (
+            "Appearance",
+            {
+                "classes": ("tab",),
+                "fields": ("default_theme",),
+                "description": "What a first-time visitor sees before they pick for themselves. A visitor's own light/dark choice, once made, always wins over this.",
+            },
+        ),
         ("Landing page", {"classes": ("tab",), "fields": ("landing_enabled", "landing_headline", "landing_subheadline", "landing_github_url")}),
         (
             "Job board",
