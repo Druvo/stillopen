@@ -16,7 +16,7 @@ from ninja.errors import HttpError
 from .. import forms
 from ..models import Application, JobSource, Posting, SiteConfig
 from ..services import fit as fit_service
-from ..services import adzuna, blockedhosts, jobtext, libretranslate, scan, tracking
+from ..services import adzuna, ai, blockedhosts, jobtext, libretranslate, scan, tracking
 from .common import ApiFormError, owned_job, throttle, validate_form
 
 router = Router()
@@ -196,6 +196,16 @@ def list_postings(request, q: str = "", source: str = "", page: int = 1, sort: s
             for p in paged
         ],
     }
+
+
+@router.post("/postings/{posting_id}/fit-check", summary="Check my fit: a free, zero-token keyword match against this posting, without tracking it first")
+def fit_check_posting(request, posting_id: int):
+    throttle(request, "fitcheck", settings.STILLOPEN_FITCHECK_PER_HOUR)
+    posting = get_object_or_404(Posting, pk=posting_id, source__in=JobSource.for_user(request.user))
+    try:
+        return tracking.fit_check_posting(posting, request.user, SiteConfig.for_user(request.user))
+    except (jobtext.FetchError, ai.AIError) as exc:
+        raise HttpError(400, str(exc))
 
 
 @router.post("/postings/{posting_id}/add", summary="Add a posting a search found to the tracker")

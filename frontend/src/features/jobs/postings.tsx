@@ -8,7 +8,7 @@ import { Badge, Button, buttonClass, Card, ErrorBox, Loading, Notice, PageHeader
 import { errorText } from "@/lib/api";
 import { Link } from "@/lib/router";
 import { applyHref } from "@/lib/utils";
-import { jobsApi, type Duplicate, type PostingRow } from "./api";
+import { jobsApi, type Duplicate, type FitCheck, type PostingRow } from "./api";
 import { duplicateMessage, duplicateOf } from "./jobmgmt";
 import { POSTINGS_SORT_OPTIONS, postingsQuery, readPostingsQuery, repostHint } from "./logic";
 
@@ -22,6 +22,12 @@ export function Postings() {
   const search = postingsQuery(state);
   // The same company and role is already tracked under another link: say so, and let the person open it or add this one anyway.
   const [dup, setDup] = useState<{ row: PostingRow; same: Duplicate } | null>(null);
+  const [fits, setFits] = useState<Record<number, FitCheck | string>>({});
+  const fitCheck = useMutation({
+    mutationFn: (id: number) => jobsApi.checkPostingFit(id),
+    onSuccess: (result, id) => setFits((f) => ({ ...f, [id]: result })),
+    onError: (e, id) => setFits((f) => ({ ...f, [id]: errorText(e) })),
+  });
 
   useEffect(() => {
     window.history.replaceState(null, "", `${window.location.pathname}${search}`);
@@ -178,12 +184,28 @@ export function Postings() {
                       <p className="mt-1 text-xs text-muted">{repostHint(p.repost)}</p>
                     </>
                   )}
+                  {fits[p.id] !== undefined &&
+                    (typeof fits[p.id] === "string" ? (
+                      <p className="mt-1 text-sm text-bad">{fits[p.id] as string}</p>
+                    ) : (
+                      <p className="mt-1 text-sm">
+                        <Badge tone={(fits[p.id] as FitCheck).match_percent >= 70 ? "good" : (fits[p.id] as FitCheck).match_percent >= 50 ? "muted" : "warn"}>
+                          {(fits[p.id] as FitCheck).match_percent}% match
+                        </Badge>{" "}
+                        {(fits[p.id] as FitCheck).summary}
+                      </p>
+                    ))}
                 </div>
                 <div className="flex items-center gap-2">
                   {p.url && (
                     <a href={p.url} target="_blank" rel="noopener noreferrer" className={buttonClass("ghost", true)}>
                       Open
                     </a>
+                  )}
+                  {!p.tracked && (
+                    <Button small variant="outline" disabled={fitCheck.isPending && fitCheck.variables === p.id} onClick={() => fitCheck.mutate(p.id)}>
+                      {fitCheck.isPending && fitCheck.variables === p.id ? "Checking…" : "Check my fit"}
+                    </Button>
                   )}
                   {p.tracked ? (
                     p.job_id ? (

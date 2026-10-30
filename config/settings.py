@@ -288,6 +288,7 @@ STILLOPEN_EVALS_PER_HOUR = int(os.environ.get("STILLOPEN_EVALS_PER_HOUR", "30"))
 STILLOPEN_CHECKS_PER_HOUR = int(os.environ.get("STILLOPEN_CHECKS_PER_HOUR", "12"))
 STILLOPEN_SCANS_PER_HOUR = int(os.environ.get("STILLOPEN_SCANS_PER_HOUR", "6"))
 STILLOPEN_QUICKADD_PER_HOUR = int(os.environ.get("STILLOPEN_QUICKADD_PER_HOUR", "30"))
+STILLOPEN_FITCHECK_PER_HOUR = int(os.environ.get("STILLOPEN_FITCHECK_PER_HOUR", "30"))  # "Check my fit" on an untracked posting (All postings)
 # The public, no-sign-in tools (/tools/...): per-IP, since nobody is signed in to rate-limit by account.
 STILLOPEN_PUBLIC_TOOL_RATE_PER_HOUR = int(os.environ.get("STILLOPEN_PUBLIC_TOOL_RATE_PER_HOUR", "20"))
 STILLOPEN_PUBLIC_TOOL_MIN_SECONDS = int(os.environ.get("STILLOPEN_PUBLIC_TOOL_MIN_SECONDS", "2"))

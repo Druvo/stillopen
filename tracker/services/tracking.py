@@ -247,6 +247,29 @@ def fetch_prefill(url: str, config: SiteConfig) -> dict:
     return {"url": url, "role": role, "company": company, "description": posting["description"][:30000]}
 
 
+def fit_check_posting(posting: Posting, owner, config: SiteConfig) -> dict:
+    """"Check my fit" on a posting nobody has tracked yet: the same free, zero-token keyword match the dashboard
+    uses once a job is tracked, run against the posting's own text. The full text is fetched on demand (same
+    guarded path as the quick-add bar) since only a short `Posting.excerpt` is kept once a scan is done; the
+    fetch is cached per posting for a day so repeat checks (or several people checking the same posting) don't
+    re-fetch. Nothing is saved to the posting or the person's account.
+
+    Raises `jobtext.FetchError` (private addresses, unreadable pages) or `ai.AIError` (no CV/notes yet) in plain words."""
+    from django.core.cache import cache
+
+    from tracker.services import ai, knowledge as knowledge_service
+
+    key = f"postingfit:{posting.pk}"
+    description = cache.get(key)
+    if description is None:
+        try:
+            description = jobtext.fetch_posting(posting.url, config)["description"]
+        except jobtext.FetchError:
+            description = posting.excerpt
+        cache.set(key, description, 24 * 3600)
+    return ai.keyword_match(description, knowledge_service.all_candidate_text(config, owner))
+
+
 def knowledge_limit_message() -> str:
     return f"You have reached the limit of {settings.STILLOPEN_MAX_KNOWLEDGE} documents."
 

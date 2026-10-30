@@ -230,6 +230,53 @@ class Postings(Base):
         self.assertFalse(Application.objects.exists())
 
 
+class FitCheckPosting(Base):
+    def setUp(self):
+        super().setUp()
+        from tracker.models import UserProfile
+
+        UserProfile.objects.filter(user=self.a).update(profile_cv="I build backend systems with Django and Python.")
+
+    def test_checks_the_fit_without_tracking_the_posting(self):
+        p = self.posting(title="Backend Engineer")
+        with mock.patch("tracker.services.tracking.jobtext.fetch_posting", return_value={"title": "", "description": "Backend Engineer. Django and Python required. " * 10}):
+            r = self.post(f"/postings/{p.pk}/fit-check")
+        self.assertEqual(r.status_code, 200, r.content)
+        data = r.json()
+        self.assertIn("match_percent", data)
+        self.assertIn("verdict", data)
+        self.assertFalse(Application.objects.exists())
+
+    def test_falls_back_to_the_excerpt_when_the_fetch_fails(self):
+        from tracker.services.jobtext import FetchError
+
+        p = self.posting(title="Backend Engineer", excerpt="Backend Engineer. Django and Python required. " * 10)
+        with mock.patch("tracker.services.tracking.jobtext.fetch_posting", side_effect=FetchError("nope")):
+            r = self.post(f"/postings/{p.pk}/fit-check")
+        self.assertEqual(r.status_code, 200, r.content)
+
+    def test_no_material_yet_is_a_plain_message_not_a_crash(self):
+        from tracker.models import UserProfile
+
+        UserProfile.objects.filter(user=self.a).update(profile_cv="")
+        p = self.posting(title="Backend Engineer")
+        with mock.patch("tracker.services.tracking.jobtext.fetch_posting", return_value={"title": "", "description": "Backend Engineer. " * 10}):
+            r = self.post(f"/postings/{p.pk}/fit-check")
+        self.assertEqual(r.status_code, 400)
+
+    def test_someone_elses_own_source_posting_is_a_404(self):
+        p = self.posting(owner=self.b, token="bobs")
+        self.assertEqual(self.post(f"/postings/{p.pk}/fit-check").status_code, 404)
+
+    def test_throttled(self):
+        p = self.posting(title="Backend Engineer")
+        with override_settings(STILLOPEN_FITCHECK_PER_HOUR=1), mock.patch(
+            "tracker.services.tracking.jobtext.fetch_posting", return_value={"title": "", "description": "Backend Engineer. Django and Python required. " * 10}
+        ):
+            self.assertEqual(self.post(f"/postings/{p.pk}/fit-check").status_code, 200)
+            self.assertEqual(self.post(f"/postings/{p.pk}/fit-check").status_code, 429)
+
+
 class Documents(Base):
     def test_list_with_limits_and_cv(self):
         KnowledgeSource.objects.create(owner=self.a, title="Mine", kind="project", text="abc")

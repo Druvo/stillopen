@@ -154,6 +154,8 @@ export type MatchCardData = {
 };
 export type Strength = { percent: number; missing: { key: string; label: string; why: string; to: string }[]; complete: boolean };
 
+export type FitCheck = { match_percent: number; verdict: string; summary: string };
+
 export const jobsApi = {
   matchCard: (id: number) => request<MatchCardData>("GET", `/jobs/${id}/match-card`),
   matchCardAi: (id: number) => request<MatchCardData>("POST", `/jobs/${id}/match-card/ai`),
@@ -173,6 +175,7 @@ export const jobsApi = {
   postings: (query: string) => request<PostingPage>("GET", `/postings${query}`),
   addPosting: (id: number, allowDuplicate = false) =>
     request<{ id: number; created: boolean; company: string; role: string }>("POST", `/postings/${id}/add`, allowDuplicate ? { allow_duplicate: true } : {}),
+  checkPostingFit: (id: number) => request<FitCheck>("POST", `/postings/${id}/fit-check`),
   documents: () => request<Documents>("GET", "/documents"),
   addDocument: (form: FormData) => request<DocumentRow>("POST", "/documents", form),
   toggleDocument: (id: number) => request<{ ok: true; enabled: boolean }>("POST", `/documents/${id}/toggle`),
