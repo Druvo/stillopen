@@ -1,4 +1,4 @@
-Django>=5.2,<5.3
+Django>=6.1.2,<6.2
 django-unfold>=0.91,<1
 requests>=2.32
 django-allauth[socialaccount,mfa]>=65,<66
