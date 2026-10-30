@@ -1,0 +1,39 @@
+{% extends "tracker/public_base.html" %}
+{% block title %}API reference | {{ config.site_title }}{% endblock %}
+{% block description %}How to call {{ config.site_title }}'s JSON API and MCP tools: every endpoint, listed from the API's own schema.{% endblock %}
+
+{% block main %}
+<section class="so-hero">
+  <div class="container-xl py-4 py-lg-5" style="max-width:52rem">
+    <span class="so-eyebrow">For developers</span>
+    <h1 class="so-display so-display-hero mt-1 mb-2">API reference</h1>
+    <p class="so-lead mb-4">{{ config.site_title }} is open source. Everything below is listed straight from the running API's own schema, so it can't drift out of date.</p>
+
+    <h2 class="h4">The JSON API (<code>/api/v1/</code>)</h2>
+    <p>This is the same API the signed-in app itself calls -- not a separate public API. Every request needs a signed-in session cookie plus a CSRF token, exactly like a normal browser visit; there is no API key for it, and a script running outside a browser session cannot call it. Another person's data is always a 404, never a permissions error that would confirm it exists.</p>
+    <div class="table-responsive mb-4"><table class="table table-sm">
+      <caption class="visually-hidden">Every /api/v1/ endpoint, method and purpose</caption>
+      <thead><tr><th scope="col">Method</th><th scope="col">Path</th><th scope="col">Purpose</th></tr></thead>
+      <tbody>
+      {% for e in endpoints %}
+        <tr><td><code>{{ e.method }}</code></td><td><code>{{ e.path }}</code></td><td>{{ e.summary }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+
+    <h2 class="h4">MCP tools (<code>/mcp/</code>)</h2>
+    <p>For AI assistants and automation (Claude Code, or any MCP client): a deliberately small, read-mostly tool list, authenticated with a personal token you make under Profile &gt; Connect an AI assistant (read-only or read-and-change, with an expiry, revocable any time). No cookies are accepted here, so there is no CSRF exposure, and there is no delete tool and no way to read settings, keys or file contents.</p>
+    <div class="table-responsive"><table class="table table-sm">
+      <caption class="visually-hidden">Every MCP tool and whether it only reads data</caption>
+      <thead><tr><th scope="col">Tool</th><th scope="col">What it does</th><th scope="col">Access</th></tr></thead>
+      <tbody>
+      {% for t in mcp_tools %}
+        <tr><td><code>{{ t.name }}</code></td><td>{{ t.description }}</td><td>{% if t.read_only %}Read only{% else %}Read &amp; change{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+
+    <p class="text-secondary mt-4" style="font-size:.85rem">{{ config.site_title }} is open source under the Apache-2.0 licence -- see the source for the full request/response shapes.</p>
+  </div>
+</section>
+{% endblock %}

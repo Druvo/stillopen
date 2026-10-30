@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "StillOpen: Add this job",
+  "version": "1.0.0",
+  "description": "One click opens this job in your own StillOpen tracker, link pre-filled and read for you.",
+  "permissions": ["storage", "activeTab"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Add this job to StillOpen",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

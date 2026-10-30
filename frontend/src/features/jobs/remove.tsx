@@ -64,7 +64,7 @@ export function RemoveDialog({
       onCancel={(e) => {
         if (busy) e.preventDefault();
       }}
-      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-2xl border border-border bg-surface p-5 text-theme-sm text-fg shadow-theme-lg backdrop:bg-black/40"
+      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-md border border-border bg-surface p-5 text-theme-sm text-fg shadow-theme-lg backdrop:bg-black/40"
     >
       <h2 id={titleId} className="text-lg font-semibold">
         {many ? `Remove ${ids.length} jobs for good?` : `Remove ${name} for good?`}

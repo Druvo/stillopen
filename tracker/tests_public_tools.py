@@ -148,3 +148,46 @@ class ToolsIndex(TestCase):
         self.assertIn(reverse("tool_job_fit"), page)
         self.assertIn(reverse("tool_liveness"), page)
         self.assertIn(reverse("tool_offer_compare"), page)
+
+
+class SampleInterviewQuestions(TestCase):
+    def test_shows_questions_for_each_role_with_a_real_source(self):
+        page = self.client.get(reverse("tool_sample_questions")).content.decode()
+        self.assertIn("Backend Engineer", page)
+        self.assertIn("ACID", page)
+        self.assertIn("postgresql.org", page)
+
+    def test_every_sample_question_has_a_correct_answer_and_a_source(self):
+        from tracker import sample_questions
+
+        for role in sample_questions.ROLES:
+            for q in role["questions"]:
+                self.assertTrue(0 <= q["correct"] < len(q["choices"]), q["prompt"])
+                self.assertTrue(q["source"].get("url", "").startswith("https://"), q["prompt"])
+                self.assertTrue(q["explanation"])
+
+
+class ApiReference(TestCase):
+    def test_lists_rest_endpoints_from_the_apis_own_schema_without_sign_in(self):
+        page = self.client.get(reverse("api_reference")).content.decode()
+        self.assertEqual(self.client.get(reverse("api_reference")).status_code, 200)
+        self.assertIn("/api/v1/me", page)
+        self.assertIn("/api/v1/dashboard", page)
+        self.assertIn("The signed-in person", page)  # a real summary from the schema, not hand-written
+
+    def test_lists_mcp_tools_with_their_read_only_access(self):
+        page = self.client.get(reverse("api_reference")).content.decode()
+        self.assertIn("summary", page)  # a real tool name
+        self.assertIn("Read only", page)
+
+    def test_never_lists_a_delete_tool(self):
+        from tracker.mcp_registry import build_server
+
+        tools = [t.name for t in self._list_tools(build_server())]
+        self.assertFalse(any("delete" in name for name in tools))
+
+    @staticmethod
+    def _list_tools(server):
+        from asgiref.sync import async_to_sync
+
+        return async_to_sync(server.list_tools)()

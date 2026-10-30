@@ -19,7 +19,11 @@ tailors your CV with a fact check, and tracks every application. Free, open sour
   <img alt="Self-hosted with Docker" src="https://img.shields.io/badge/self--hosted-Docker-blue">
 </p>
 
-![StillOpen: the dashboard, the board, a tailored CV with a flagged claim and the numbers, as a short slideshow](docs/images/demo.gif)
+![StillOpen: the dashboard, the board, a tailored CV with a flagged claim and the numbers, as a short slideshow](docs/images/demo-app.gif)
+
+![StillOpen: browse the public job board, filter, open a posting](docs/images/demo.gif)
+
+<sub>The public job board: no sign-in needed. Signed in, the same list is ranked against your own CV and places.</sub>
 
 > If StillOpen saves you a few hours of clicking through job sites, a star on GitHub helps other job seekers find it.
 
@@ -41,6 +45,32 @@ The pictures on this page come from invented demo data ("Jane Doe"), made by `pn
 - **It never applies for you.** It never submits an application. The only message it can send is an email from your own connected Google account, after you preview the exact text and press Send.
 - **Works with your assistant.** An MCP server lets Claude Code or any MCP client work with your search. It can read and organise, never send or delete.
 - **Apache-2.0.** Read every line; contributions welcome ([CONTRIBUTING.md](CONTRIBUTING.md)).
+
+<details>
+<summary><strong>📑 Table of contents</strong></summary>
+
+- [Quick start](#quick-start)
+- [Use it from Claude Code or any AI assistant](#use-it-from-claude-code-or-any-ai-assistant)
+- [What it is](#what-it-is)
+- [For people using it](#for-people-using-it)
+- [Run it](#run-it)
+- [What you can change in the admin](#what-you-can-change-in-the-admin)
+- [The public site: landing page and job board](#the-public-site-landing-page-and-job-board)
+- [The dashboard: everything first, then filters](#the-dashboard-everything-first-then-filters)
+- [Jobs found for you, with no setup and no AI](#jobs-found-for-you-with-no-setup-and-no-ai)
+- [Your own company job boards](#your-own-company-job-boards)
+- [After you apply: interviews, contacts, offers](#after-you-apply-interviews-contacts-offers)
+- [Tailored CVs and versions](#tailored-cvs-and-versions)
+- [Applying](#applying)
+- [Retrieval (RAG)](#retrieval-rag)
+- [AI evaluation: connect any AI](#ai-evaluation-connect-any-ai)
+- [Claude Code and other AI clients (MCP)](#claude-code-and-other-ai-clients-mcp)
+- [Security notes](#security-notes)
+- [Tests](#tests)
+- [License](#license)
+
+</details>
+
 
 ## Quick start
 

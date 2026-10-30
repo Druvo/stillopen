@@ -33,7 +33,7 @@ export function TimezonePrompt() {
   });
 
   return (
-    <section aria-labelledby="tz-prompt-h" className="rounded-2xl border border-border bg-surface p-4">
+    <section aria-labelledby="tz-prompt-h" className="rounded-md border border-border bg-surface p-4">
       <h2 id="tz-prompt-h" className="font-semibold">
         Is this the right time zone for you?
       </h2>

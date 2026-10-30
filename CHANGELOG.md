@@ -53,6 +53,20 @@ supported version, so entries are grouped under **Unreleased** until the first t
   Labor's O*NET database (a real, CC-licensed, named-technology vocabulary), not generic word frequency --
   ESCO was tried for this earlier and rejected as a poor fit; O*NET live-checked well. Zero-token, works
   without an AI key.
+- A typography/radius redesign across both frontends, DNA studied from impeccable.style: display headings now
+  use Alumni Sans (a tall, light condensed grotesque) with Albert Sans for body/UI text, corners sharpened
+  (Tabler 8-12px / Tailwind rounded-2xl down to 4-6px). Both fonts are vendored locally (never loaded from
+  Google). Brand colour, routes and copy are unchanged. See `design.md`.
+- A browser extension (`browser-extension/`, not yet published to a store -- install unpacked) adds a one-click
+  "Add this job" button: it opens the current tab's link in your own StillOpen's Add Job page, which now reads
+  a `?url=` link automatically. The extension never reads page content or talks to any server directly; it only
+  ever opens one URL in a new tab, using the session you already have open there.
+- A public API reference page (`/developers/`) lists every `/api/v1/` endpoint and MCP tool straight from the
+  running API's own schema, so it can't go stale. Honest about the auth model: the REST API needs a signed-in
+  session, same as the app itself; MCP needs a personal token.
+- Sample interview questions (`/tools/sample-interview-questions/`) -- a few hand-picked, sourced questions per
+  common role, clearly labelled as fixed samples (not AI-generated, not from a real plan), with a link to build
+  a real prep plan.
 - Four free, no-sign-in tools at `/tools/`: a job-fit checker (the same free keyword match, paste a posting and
   a CV), "is this job still open?" (the same liveness check, paste a link), an offer comparator (the same
   per-currency comparison, never converted) and an RSS feed of the public job board. Nothing is saved; each is

@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Makes the pictures in the README (docs/images/*.png and the frames for demo.gif) from the real app on a throwaway database with an
+// Makes the pictures in the README (docs/images/*.png and the frames for demo-app.gif) from the real app on a throwaway database with an
 // invented person, "Jane Doe" (`manage.py e2e_seed --demo`). Not part of the normal test run (the default config only reads *.spec.ts);
 // run it with `pnpm readme:images` after `pnpm build`. Uses the Chrome that is already installed. E2E_PYTHON picks the interpreter.
 const port = Number(process.env.E2E_PORT || 8788);

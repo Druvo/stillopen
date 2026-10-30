@@ -39,7 +39,7 @@ class Readme(SimpleTestCase):
     def test_pictures_exist_and_are_small(self):
         text = (ROOT / "README.md").read_text(encoding="utf-8")
         images = set(re.findall(r"\(docs/images/([\w.-]+\.(?:png|gif|jpg))\)", text))
-        self.assertTrue({"dashboard.png", "board.png", "cv-fact-check.png", "insights.png", "openings.png", "mobile.png", "demo.gif"} <= images)
+        self.assertTrue({"dashboard.png", "board.png", "cv-fact-check.png", "insights.png", "openings.png", "mobile.png", "demo-app.gif", "demo.gif"} <= images)
         for name in images:
             size = (ROOT / "docs" / "images" / name).stat().st_size
             self.assertLess(size, 5_000_000 if name.endswith(".gif") else 400_000, name)

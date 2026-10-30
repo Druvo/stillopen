@@ -31,7 +31,7 @@ export function SelectionBar({
   const items: MenuItem[] = statuses.map((s) => ({ key: String(s.id), label: statusLabel(s), onSelect: () => onSetStatus(s.id), disabled: busy }));
   const none = count === 0 || busy;
   return (
-    <section aria-label="Actions for the chosen jobs" className="so-card sticky top-2 z-30 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-brand bg-surface p-3 shadow-theme-md">
+    <section aria-label="Actions for the chosen jobs" className="so-card sticky top-2 z-30 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-brand bg-surface p-3 shadow-theme-md">
       <label className="flex min-h-11 items-center gap-2 text-theme-sm sm:min-h-9">
         <input type="checkbox" checked={allChecked} onChange={onToggleAll} disabled={total === 0 || busy} />
         <span>Select all in this tab ({total})</span>

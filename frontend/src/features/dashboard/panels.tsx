@@ -108,7 +108,7 @@ export function AsideCard({ title, defaultOpen = false, accent = false, hint, ch
   const id = useId();
   const shown = wide || open;
   return (
-    <section aria-labelledby={`${id}-h`} className={cn("so-card rounded-2xl border bg-surface", accent ? "border-brand-300 dark:border-brand-500/40" : "border-border")}>
+    <section aria-labelledby={`${id}-h`} className={cn("so-card rounded-md border bg-surface", accent ? "border-brand-300 dark:border-brand-500/40" : "border-border")}>
       <h2 id={`${id}-h`} className="text-theme-sm font-semibold text-gray-800 dark:text-white/90">
         {wide ? (
           <span className="flex items-center justify-between gap-2 px-4 pt-4">
@@ -137,7 +137,7 @@ export function AsideCard({ title, defaultOpen = false, accent = false, hint, ch
  */
 export function AiKeyPrompt({ onDismiss }: { onDismiss: () => void }) {
   return (
-    <section aria-labelledby="ai-prompt-h" className="rounded-2xl border border-brand-300 bg-brand-50 p-4 sm:p-5 dark:border-brand-500/40 dark:bg-brand-500/10">
+    <section aria-labelledby="ai-prompt-h" className="rounded-md border border-brand-300 bg-brand-50 p-4 sm:p-5 dark:border-brand-500/40 dark:bg-brand-500/10">
       <h2 id="ai-prompt-h" className="text-lg font-semibold text-gray-800 dark:text-white/90">
         First, add a free Google AI Studio key
       </h2>
@@ -462,7 +462,7 @@ export function DraftsBody({ items, onChanged }: { items: DraftWaiting[]; onChan
 
 function Tile({ value, label }: { value: ReactNode; label: string }) {
   return (
-    <div className="so-card flex flex-col-reverse rounded-2xl border border-border bg-surface px-3 py-2.5">
+    <div className="so-card flex flex-col-reverse rounded-md border border-border bg-surface px-3 py-2.5">
       <dt className="text-theme-xs text-muted">{label}</dt>
       <dd className="text-xl font-semibold leading-tight text-gray-800 dark:text-white/90">{value}</dd>
     </div>

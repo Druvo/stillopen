@@ -15,7 +15,7 @@ This writes `dashboard.png`, `board.png`, `cv-fact-check.png`, `insights.png`, `
 The GIF needs [ffmpeg](https://ffmpeg.org/) (nothing else uses it; no test needs it). From this folder:
 
 ```bash
-ffmpeg -y -framerate 0.5 -i .frames/frame-%02d.png -vf "scale=900:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer" demo.gif
+ffmpeg -y -framerate 0.5 -i .frames/frame-%02d.png -vf "scale=900:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer" demo-app.gif
 ```
 
 (`-framerate 0.5` shows each frame for two seconds; keep the result under 5 MB.) Re-run both steps whenever the screens change.

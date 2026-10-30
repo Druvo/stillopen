@@ -47,6 +47,13 @@ export function AddJob() {
       } else {
         setReadNote({ tone: "info", text: "We read this from the link. Please check the company and role before you save." });
       }
+      return;
+    }
+    // A link opened with ?url=... (e.g. the browser extension's "Add this job" button): read it straight away.
+    const fromQuery = new URLSearchParams(window.location.search).get("url");
+    if (fromQuery) {
+      setLink(fromQuery);
+      void readLinkFor(fromQuery);
     }
   }, []);
   const set = (name: string) => (event: { target: { value: string } }) => {
@@ -70,11 +77,11 @@ export function AddJob() {
     navigate("/");
   }
 
-  async function readLink() {
+  async function readLinkFor(target: string) {
     setReading(true);
     setReadNote(null);
     try {
-      const prefill = await jobsApi.quickAdd(link);
+      const prefill = await jobsApi.quickAdd(target);
       setDuplicate(prefill.duplicate ?? null);
       if (prefill.blocked_host) {
         // LinkedIn, Indeed, Glassdoor...: nothing was fetched. Keep the (cleaned) link and ask for the text.
@@ -91,6 +98,10 @@ export function AddJob() {
     } finally {
       setReading(false);
     }
+  }
+
+  async function readLink() {
+    await readLinkFor(link);
   }
 
   return (
