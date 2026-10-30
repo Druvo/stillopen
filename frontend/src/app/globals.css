@@ -9,12 +9,31 @@
   Design system (design.md, 2026-10-29): Bento Grid in light mode (clean modular tiles on neutral paper, an
   accessible dark-olive accent), Dark Command Center in dark mode (near-black, the same hue at full glowing
   lime brightness), one humanist sans (Albert Sans) for both display and body text -- see layout.tsx for
-  next/font/local. Dark is the default (admin-configurable, Site configuration > Appearance on the Django
-  side; this build's own fallback is set in layout.tsx's `data-default-theme`).
+  next/font/local. The CSS default here is light, matching this codebase's own convention throughout
+  (DEFAULT_PREFERENCES.theme, applyDisplay() in lib/preferences.ts): a saved "light" preference deletes the
+  data-theme attribute rather than setting it, so :root must resolve to light when the attribute is absent.
+  A first-time, not-yet-signed-in visitor still sees dark by default (admin-configurable, Site configuration >
+  Appearance on the Django side) via the literal data-theme="dark" this build's own shell ships with
+  (layout.tsx) -- that is overridden the moment a signed-in person's own saved preference (light by default)
+  is applied.
 */
 
-/* Semantic colours the screens use (bg-surface, text-muted, border-border ...): dark by default, light when chosen. */
+/* Semantic colours the screens use (bg-surface, text-muted, border-border ...): light by default, dark when chosen. */
 :root {
+  --bg: #f2f2f0; /* gray-50 */
+  --surface: #ffffff;
+  --surface-2: #e9e9e6; /* gray-100 */
+  --border: #e3e3e0; /* gray-200 */
+  --text: #16160f; /* gray-900 */
+  --muted: #68685f; /* gray-600 */
+  --brand: #4a6400; /* brand-500 -- same hex as the public pages' --tblr-primary */
+  --brand-soft: #eef2df; /* brand-50 */
+  --brand-contrast: #ffffff;
+  --good: #2f6239; /* success-600 */
+  --warn: #8f5518; /* warning-600 */
+  --bad: #a8443a; /* error-600 */
+}
+:root[data-theme="dark"] {
   --bg: #0a0a0b; /* gray-950 */
   --surface: #141416; /* gray-900 */
   --surface-2: #1c1c1f;
@@ -27,20 +46,6 @@
   --good: #7ad184; /* success-400 */
   --warn: #e0a458; /* warning-400 */
   --bad: #e08478; /* error-400 */
-}
-:root[data-theme="light"] {
-  --bg: #f2f2f0; /* gray-50 */
-  --surface: #ffffff;
-  --surface-2: #e9e9e6; /* gray-100 */
-  --border: #e3e3e0; /* gray-200 */
-  --text: #16160f; /* gray-900 */
-  --muted: #68685f; /* gray-600 */
-  --brand: #4a6400; /* brand-500 -- same hex as the public pages' --tblr-primary */
-  --brand-soft: #eef2df; /* brand-50 */
-  --brand-contrast: #ffffff;
-  --good: #3f7d4a; /* success-600 */
-  --warn: #9c5f1f; /* warning-600 */
-  --bad: #a8443a; /* error-600 */
 }
 
 @theme inline {
@@ -101,7 +106,7 @@
   --color-success-50: #eef6ec;
   --color-success-100: #d7ebd2;
   --color-success-500: #4f9159;
-  --color-success-600: #3f7d4a;
+  --color-success-600: #2f6239;
   --color-error-50: #fbeeec;
   --color-error-100: #f6d9d4;
   --color-error-500: #c0564a;
@@ -109,7 +114,7 @@
   --color-warning-50: #faf1e4;
   --color-warning-100: #f3ddb9;
   --color-warning-500: #c98a3f;
-  --color-warning-600: #9c5f1f;
+  --color-warning-600: #8f5518;
 
   --shadow-theme-xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
   --shadow-theme-sm: 0px 1px 3px 0px rgba(0, 0, 0, 0.35), 0px 1px 2px 0px rgba(0, 0, 0, 0.25);
@@ -238,7 +243,7 @@ select {
   @apply bg-brand-50 text-brand-500 dark:bg-brand-500/[0.12] dark:text-brand-400;
 }
 @utility menu-item-inactive {
-  @apply text-gray-300 hover:bg-white/5 hover:text-gray-300 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-gray-300;
+  @apply text-gray-700 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-gray-300;
 }
 
 @utility no-scrollbar {

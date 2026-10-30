@@ -40,9 +40,9 @@
   --so-soft: #eef2df;
   --so-hero: linear-gradient(180deg, #ececea 0%, #f2f2f0 100%);
   --so-shadow: 0 1px 2px rgba(20, 20, 15, .06), 0 2px 8px rgba(20, 20, 15, .07);
-  --so-success: #3f7d4a;
-  --so-success-rgb: 63, 125, 74;
-  --so-warning: #9c5f1f;
+  --so-success: #2f6239;
+  --so-success-rgb: 47, 98, 57;
+  --so-warning: #8f5518;
 }
 [data-bs-theme="dark"] {
   --tblr-primary: #c6ff3d;
