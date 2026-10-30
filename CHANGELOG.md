@@ -11,6 +11,8 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Saved searches (Profile > Saved searches): extra, named role lists searched alongside your profile's own target roles -- "Remote Backend Roles" as well as "Dhaka On-site, Any Role", say. Each is unioned into your search and scheduled digest only while it's on (up to 10, `STILLOPEN_MAX_SAVED_SEARCHES`); turning one off keeps it without searching it.
+- Fixed a dark-default persistence bug: `preferences.read()` fell back to a hard-coded "light" default for anyone with no stored theme choice, ignoring the site's own configured default (`SiteConfig.default_theme`). A signed-in person with no saved preference now actually sees the admin's chosen default theme, not light.
 - Full visual redesign (`design.md`): Bento Grid in light mode (clean modular tiles on neutral paper, an
   accessible dark-olive accent), Dark Command Center in dark mode (near-black, the same hue at full glowing
   lime brightness), one humanist sans (Albert Sans) for both headings and body text, moderate 12-18px corner

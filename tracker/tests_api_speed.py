@@ -135,6 +135,7 @@ class HowAnswersTravel(TestCase):
 class SavedPreferences(TestCase):
     def setUp(self):
         cache.clear()
+        SiteConfig.objects.update_or_create(pk=1, defaults={"default_theme": "light"})  # these tests are about preference mechanics, not the site's own theme default (see tests_preferences.py)
         self.a, self.b = person("alice"), person("bob")
         self.client.force_login(self.a)
 

@@ -78,7 +78,7 @@ from django.db import connections
 from django.utils import timezone
 
 from tracker.models import (
-    Application, Event, JobSource, Posting, PostingSighting, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile,
+    Application, Event, JobSource, Posting, PostingSighting, SavedSearch, ScanLogEntry, ScanRun, SiteConfig, Status, UserProfile,
 )
 from tracker.services import ai, fit, geo, integrations, knowledge, notifications
 from tracker.services.jobtext import html_to_text
@@ -94,8 +94,27 @@ SKILL_TERMS_KEPT = 80  # the candidate's own most-repeated skill-ish terms, same
 
 
 def _roles(owner) -> list[str]:
+    """Every role phrase a search should match against: the profile's own `target_roles`, plus every enabled
+    `SavedSearch`'s own list (a disabled one is skipped entirely, as if it did not exist). Deduplicated, order
+    kept (profile's own list first, then saved searches in their own order) so nothing is searched twice."""
     profile = UserProfile.for_user(owner)
-    return [r.strip().lower() for r in profile.target_roles.splitlines() if r.strip()]
+    roles = [r.strip().lower() for r in profile.target_roles.splitlines() if r.strip()]
+    for search in SavedSearch.objects.filter(owner=owner, enabled=True):
+        roles += [r.strip().lower() for r in search.target_roles.splitlines() if r.strip()]
+    seen: set[str] = set()
+    out = []
+    for role in roles:
+        if role not in seen:
+            seen.add(role)
+            out.append(role)
+    return out
+
+
+def save_saved_search(form, owner) -> SavedSearch:
+    item = form.save(commit=False)
+    item.owner = owner
+    item.save()
+    return item
 
 
 def _skill_terms(owner) -> set[str]:
@@ -1466,7 +1485,7 @@ def maybe_auto_start(owner, profile=None) -> ScanRun | None:
     if hours <= 0:
         return None
     profile = profile or UserProfile.for_user(owner)
-    if not (profile.target_roles.strip() or (profile.profile_cv or "").strip()):
+    if not (profile.target_roles.strip() or (profile.profile_cv or "").strip() or SavedSearch.objects.filter(owner=owner, enabled=True).exists()):
         return None
     if not searchable_sources(owner).exists():
         return None

@@ -686,6 +686,26 @@ class UserProfile(PersonalSettings):
         return missing
 
 
+class SavedSearch(models.Model):
+    """An extra, named list of role phrases searched alongside the profile's own `target_roles` -- "Remote
+    Backend Roles" as well as "Dhaka On-site, Any Role", say, each toggled independently. `scan._roles` unions
+    every enabled row's `target_roles` with the profile's own list; a disabled row is skipped entirely (kept,
+    not deleted, so turning it back on needs no retyping)."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_searches")
+    name = models.CharField(max_length=80, help_text="A short name for this search, e.g. Remote Backend Roles.")
+    target_roles = models.TextField(help_text="The roles this search looks for, one per line (e.g. Senior Backend Engineer).")
+    enabled = models.BooleanField(default=True, help_text="Off skips this search entirely -- your dashboard and scheduled search both ignore it.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+        constraints = [models.UniqueConstraint(fields=["owner", "name"], name="unique_saved_search_name_per_owner")]
+
+    def __str__(self):
+        return f"{self.name} ({self.owner})"
+
+
 class SearchArea(models.Model):
     """One place a person is willing to work, and on what terms. A job is checked against these rows."""
 

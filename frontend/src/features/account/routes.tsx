@@ -10,6 +10,7 @@ const ConnectionsPage = lazy(() => import("@/features/google/connections").then(
 const ProfilePage = lazy(() => import("./profile").then((m) => ({ default: m.ProfilePage })));
 const UsagePage = lazy(() => import("./usage").then((m) => ({ default: m.UsagePage })));
 const SourcesPage = lazy(() => import("./sources").then((m) => ({ default: m.SourcesPage })));
+const SavedSearchesPage = lazy(() => import("./saved-searches").then((m) => ({ default: m.SavedSearchesPage })));
 const WelcomePage = lazy(() => import("./welcome").then((m) => ({ default: m.WelcomePage })));
 
 /** The screens of this area, matched against the path inside the app (no /app prefix). Add a screen = add a line here. */
@@ -20,5 +21,6 @@ export const ROUTES: Route[] = [
   { pattern: /^\/profile\/connections$/, render: () => <ConnectionsPage /> },
   { pattern: /^\/profile\/assistant$/, render: () => <AssistantPage /> },
   { pattern: /^\/sources$/, render: () => <SourcesPage /> },
+  { pattern: /^\/saved-searches$/, render: () => <SavedSearchesPage /> },
   { pattern: /^\/welcome$/, render: () => <WelcomePage /> },
 ];

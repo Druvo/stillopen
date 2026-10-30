@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core import signing
 
 from .models import (
-    Application, Contact, Interview, JobSource, KnowledgeSource, Offer, PersonalSettings, Referral, SearchArea, UserProfile,
+    Application, Contact, Interview, JobSource, KnowledgeSource, Offer, PersonalSettings, Referral, SavedSearch, SearchArea, UserProfile,
 )
 from .services import abuse, geo, knowledge
 from .services.netguard import FetchError, check_public_url
@@ -538,6 +538,35 @@ class ContactForm(OwnedFormMixin, forms.ModelForm):
         model = Contact
         fields = ["name", "company", "title", "email", "link", "last_contacted", "notes"]
         widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+
+class SavedSearchForm(forms.ModelForm):
+    class Meta:
+        model = SavedSearch
+        fields = ["name", "target_roles", "enabled"]
+        widgets = {"target_roles": forms.Textarea(attrs={"rows": 4})}
+        labels = {"name": "Name", "target_roles": "Roles (one per line)"}
+
+    def __init__(self, *args, owner, **kwargs):
+        self.owner = owner
+        super().__init__(*args, **kwargs)
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        if not name:
+            raise forms.ValidationError("Give this search a name.")
+        clash = SavedSearch.objects.filter(owner=self.owner, name__iexact=name)
+        if self.instance.pk:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise forms.ValidationError("You already have a saved search with this name.")
+        return name
+
+    def clean_target_roles(self):
+        roles = self.cleaned_data["target_roles"].strip()
+        if not roles:
+            raise forms.ValidationError("Add at least one role.")
+        return roles
 
 
 class ReferralForm(OwnedFormMixin, forms.ModelForm):

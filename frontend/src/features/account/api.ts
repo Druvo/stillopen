@@ -63,6 +63,8 @@ export type NewToken = { token: string; record: Token; endpoint: string };
 
 export type WelcomeData = { done: boolean; target_roles: string; home_country: string; profile_cv: string; open_remote: boolean; other_places: string };
 
+export type SavedSearch = { id: number; name: string; target_roles: string; enabled: boolean };
+
 type Payload = Record<string, unknown> | FormData;
 
 export type DataImportReport = {
@@ -103,4 +105,9 @@ export const accountApi = {
   welcome: () => request<WelcomeData>("GET", "/welcome"),
   saveWelcome: (values: Payload) => request<{ ok: true }>("POST", "/welcome", values),
   skipWelcome: () => request<{ ok: true }>("POST", "/welcome/skip"),
+
+  savedSearches: () => request<{ saved_searches: SavedSearch[] }>("GET", "/saved-searches"),
+  addSavedSearch: (values: { name: string; target_roles: string }) => request<SavedSearch>("POST", "/saved-searches", values),
+  toggleSavedSearch: (id: number, enabled: boolean) => request<SavedSearch>("PATCH", `/saved-searches/${id}`, { enabled }),
+  removeSavedSearch: (id: number) => request<{ ok: true }>("DELETE", `/saved-searches/${id}`),
 };

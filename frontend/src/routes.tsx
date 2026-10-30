@@ -1,7 +1,7 @@
 "use client";
 
 import { Dashboard } from "@/features/dashboard/dashboard";
-import { BadgeDollarSign, BarChart3, Bot, Building2, CalendarClock, FileText, FolderOpen, GraduationCap, HelpCircle, LayoutDashboard, MessageCircleQuestion, Search, PlusCircle, Radar, Sparkles, UserRound, Users, type LucideIcon } from "lucide-react";
+import { BadgeDollarSign, BarChart3, BookmarkPlus, Bot, Building2, CalendarClock, FileText, FolderOpen, GraduationCap, HelpCircle, LayoutDashboard, MessageCircleQuestion, Search, PlusCircle, Radar, Sparkles, UserRound, Users, type LucideIcon } from "lucide-react";
 import { lazy } from "react";
 import type { Route } from "@/lib/router";
 import * as account from "@/features/account/routes";
@@ -63,6 +63,7 @@ export const NAV: NavGroup[] = [
       { label: "Profile", to: "/profile", icon: UserRound },
       { label: "AI settings", to: "/profile/ai", icon: Sparkles },
       { label: "Job sources", to: "/sources", icon: Radar },
+      { label: "Saved searches", to: "/saved-searches", icon: BookmarkPlus },
       { label: "Assistant", to: "/profile/assistant", icon: Bot, needs: "assistant_enabled" },
       { label: "Help", to: "/help", icon: HelpCircle },
     ],

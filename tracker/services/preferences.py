@@ -4,7 +4,7 @@ Nothing here is a secret and nothing changes what the app does for them: it is t
 sort and filters, whether the sidebar is collapsed, the theme, and two accessibility options (text size, density). The stored
 value is whatever the person last saved; reading always returns a complete, valid object, so old or damaged data can never break
 a page, and writing validates every value, so nothing odd is ever stored."""
-from ..models import Bucket
+from ..models import Bucket, SiteConfig
 
 DEFAULTS = {
     "view": "list",
@@ -58,12 +58,15 @@ def _filters(value) -> dict:
     return {key: (given.get(key) if isinstance(given.get(key), str) else "")[:FILTER_MAX] for key in FILTER_KEYS}
 
 
-def normalize(stored) -> dict:
-    """A complete, valid preferences object from whatever is stored (anything unknown or invalid falls back to the default)."""
+def normalize(stored, default_theme: str | None = None) -> dict:
+    """A complete, valid preferences object from whatever is stored (anything unknown or invalid falls back to the
+    default). `default_theme` is the site's own default (Site configuration > Appearance) for a person who has
+    never chosen for themselves -- once they do, their own choice always wins over it."""
     stored = stored if isinstance(stored, dict) else {}
     out = {}
     for key, options in CHOICES.items():
-        out[key] = stored.get(key) if stored.get(key) in options else DEFAULTS[key]
+        fallback = default_theme if key == "theme" and default_theme in CHOICES["theme"] else DEFAULTS[key]
+        out[key] = stored.get(key) if stored.get(key) in options else fallback
     for key in BOOLEANS:
         out[key] = stored[key] if isinstance(stored.get(key), bool) else DEFAULTS[key]
     for key, (low, high) in INTEGERS.items():
@@ -76,7 +79,7 @@ def normalize(stored) -> dict:
 
 
 def read(profile) -> dict:
-    return normalize(profile.ui_preferences)
+    return normalize(profile.ui_preferences, default_theme=SiteConfig.load().default_theme)
 
 
 def update(profile, patch: dict) -> dict:

@@ -84,6 +84,10 @@ def build(user) -> dict:
             {"name": s.name, "connector": s.connector, "board_token": s.board_token, "enabled": s.enabled}
             for s in user.job_sources.all()
         ],
+        "saved_searches": [
+            {"name": s.name, "target_roles": s.target_roles, "enabled": s.enabled}
+            for s in user.saved_searches.all()
+        ],
         "cover_letters": [
             {"for_job": f"{l.application.company} - {l.application.role}", "source": l.source,
              "created": l.created_at.isoformat(), "content": l.content}
