@@ -1,19 +1,34 @@
+export type PostingsSort = "newest" | "oldest" | "company" | "title";
+export const POSTINGS_SORT_OPTIONS: { value: PostingsSort; label: string }[] = [
+  { value: "newest", label: "Last seen, newest first" },
+  { value: "oldest", label: "Last seen, oldest first" },
+  { value: "company", label: "Company A to Z" },
+  { value: "title", label: "Title A to Z" },
+];
+
 /** The query string for the postings list: only what is set, so the address stays short and a reload shows the same page. */
-export function postingsQuery({ q, source, page }: { q: string; source: string; page: number }): string {
+export function postingsQuery({ q, source, page, sort }: { q: string; source: string; page: number; sort: PostingsSort }): string {
   const params = new URLSearchParams();
   if (q.trim()) params.set("q", q.trim());
   if (source) params.set("source", source);
   if (page > 1) params.set("page", String(page));
+  if (sort !== "newest") params.set("sort", sort);
   const text = params.toString();
   return text ? `?${text}` : "";
 }
 
-/** The reverse of `postingsQuery`, from `window.location.search`; unknown or broken values fall back to "everything, page 1". */
-export function readPostingsQuery(search: string): { q: string; source: string; page: number } {
+/** The reverse of `postingsQuery`, from `window.location.search`; unknown or broken values fall back to "everything, page 1, newest first". */
+export function readPostingsQuery(search: string): { q: string; source: string; page: number; sort: PostingsSort } {
   const params = new URLSearchParams(search);
   const source = params.get("source") ?? "";
   const page = Number(params.get("page"));
-  return { q: params.get("q") ?? "", source: /^\d+$/.test(source) ? source : "", page: Number.isInteger(page) && page > 0 ? page : 1 };
+  const sort = params.get("sort") ?? "";
+  return {
+    q: params.get("q") ?? "",
+    source: /^\d+$/.test(source) ? source : "",
+    page: Number.isInteger(page) && page > 0 ? page : 1,
+    sort: POSTINGS_SORT_OPTIONS.some((o) => o.value === sort) ? (sort as PostingsSort) : "newest",
+  };
 }
 
 /** "2 MB", "340 KB": how big a file may be, in words. */

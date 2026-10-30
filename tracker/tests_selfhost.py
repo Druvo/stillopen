@@ -60,14 +60,13 @@ class VendoredFiles(TestCase):
 
 FONTS_VENDOR = Path(__file__).resolve().parent.parent / "static" / "vendor" / "fonts"
 FONT_HASHES = {
-    "alumni-sans-variable.woff2": "49015c322cbd9ee7fbfbdb25295a57a5ba4b35e6f9c92c6d42fd570267e45c36",
     "albert-sans-variable.woff2": "c2fb6fda415c7bf5926c15aa98f759da45cdc5ac4ac6925a72a84db4eb3862a3",
 }
 
 
 class VendoredFonts(TestCase):
-    """Alumni Sans and Albert Sans (the design.md typography), vendored the same way as Tabler: checked
-    against a recorded hash, never loaded from Google at runtime."""
+    """Albert Sans (the design.md typography), vendored the same way as Tabler: checked against a recorded
+    hash, never loaded from Google at runtime."""
 
     def test_files_are_found_by_the_static_finders(self):
         for name in FONT_HASHES:
@@ -81,7 +80,6 @@ class VendoredFonts(TestCase):
 
     def test_the_stylesheet_references_them_locally_not_from_google(self):
         css = (Path(__file__).resolve().parent.parent / "static" / "css" / "stillopen.css").read_text(encoding="utf-8")
-        self.assertIn('url("/static/vendor/fonts/alumni-sans-variable.woff2")', css)
         self.assertIn('url("/static/vendor/fonts/albert-sans-variable.woff2")', css)
         self.assertIsNone(EXTERNAL_ASSET.search(css))
 
@@ -140,8 +138,8 @@ class NoThirdPartyAssets(TestCase):
             with override:
                 response = self.client.get("/app/")
                 self.assertEqual(response.status_code, 200)
-                html = b"".join(response.streaming_content).decode("utf-8", errors="replace")
-                close_quietly(response)  # a plain close() would close the test's own connection on PostgreSQL
+                html = response.content.decode("utf-8", errors="replace")
+                close_quietly(response)
         self.assertIsNone(EXTERNAL_ASSET.search(html), "the app shell loads something from a third-party host")
         policy = response["Content-Security-Policy"]
         for directive in ("default-src 'self'", "connect-src 'self'", "frame-ancestors 'none'"):
@@ -163,6 +161,23 @@ class NoThirdPartyAssets(TestCase):
             html = response.content.decode()
             self.assertNotIn("fonts.googleapis.com", html, url)
             self.assertIsNone(EXTERNAL_ASSET.search(html), url)
+
+
+class DefaultTheme(TestCase):
+    """Site configuration > Appearance > default_theme reaches the public pages' <html> attribute (static/js/theme.js
+    then only overrides it once a visitor has picked for themselves)."""
+
+    def test_model_defaults_to_dark(self):
+        self.assertEqual(SiteConfig.load().default_theme, "dark")
+
+    def test_public_pages_render_the_configured_default(self):
+        SiteConfig.objects.filter(pk=1).update(default_theme="light")
+        html = self.client.get(reverse("landing")).content.decode()
+        self.assertIn('data-bs-theme="light"', html)
+
+        SiteConfig.objects.filter(pk=1).update(default_theme="dark")
+        html = self.client.get(reverse("landing")).content.decode()
+        self.assertIn('data-bs-theme="dark"', html)
 
 
 class AdminLooksAndSelfHosts(TestCase):

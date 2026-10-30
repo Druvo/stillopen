@@ -158,10 +158,20 @@ def _repost(posting: Posting):
     return {"distinct_urls": signal["distinct_urls"], "distinct_dates": signal["distinct_dates"]} if signal else None
 
 
+POSTINGS_SORT = {
+    "newest": ("-last_seen_at", "-id"),
+    "oldest": ("last_seen_at", "id"),
+    "company": ("company", "title"),
+    "title": ("title", "company"),
+}
+
+
 @router.get("/postings", summary="Every posting any search has seen, with whether the person already tracks it")
-def list_postings(request, q: str = "", source: str = "", page: int = 1):
+def list_postings(request, q: str = "", source: str = "", page: int = 1, sort: str = "newest"):
     sources = JobSource.for_user(request.user)
-    qs = Posting.objects.filter(source__in=sources).select_related("source").order_by("-last_seen_at", "-id")
+    if sort not in POSTINGS_SORT:
+        raise HttpError(400, "Choose a sort order from the list.")
+    qs = Posting.objects.filter(source__in=sources).select_related("source").order_by(*POSTINGS_SORT[sort])
     q = q.strip()
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(company__icontains=q))

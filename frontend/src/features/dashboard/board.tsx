@@ -67,7 +67,7 @@ function Column({ bucket, jobs, ...common }: { bucket: Bucket; jobs: Job[] } & C
     <section
       ref={setNodeRef}
       aria-labelledby={`col-${bucket.key}`}
-      className={cn("flex w-[85vw] max-w-80 shrink-0 snap-start flex-col rounded-md border border-border bg-surface-2 p-2 transition-colors", isOver && "border-brand bg-surface")}
+      className={cn("flex w-[85vw] max-w-80 shrink-0 snap-start flex-col rounded-xl border border-border bg-surface-2 p-2 transition-colors", isOver && "border-brand bg-surface")}
     >
       <header className="px-2 pb-2 pt-1">
         <h2 id={`col-${bucket.key}`} className="flex items-baseline justify-between text-sm font-semibold">

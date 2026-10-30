@@ -1,8 +1,22 @@
+import functools
+import os
+
 from django.conf import settings
+from django.contrib.staticfiles import finders
 
 from . import legal
 from .models import JobSource, SiteConfig
 from .services import integrations
+
+
+@functools.lru_cache(maxsize=1)
+def _asset_version() -> int:
+    """A cache-busting number for the hand-written stylesheet/script (no content hash in their URL, unlike
+    the vendored, hash-verified Tabler files): the newer of the two files' own mtime, so a visitor's browser
+    fetches the new file right after a deploy instead of keeping whatever it cached before."""
+    paths = [finders.find("css/stillopen.css"), finders.find("js/theme.js")]
+    mtimes = [int(os.path.getmtime(p)) for p in paths if p]
+    return max(mtimes) if mtimes else 0
 
 
 def staff_flags(config) -> dict:
@@ -32,7 +46,7 @@ def staff_flags(config) -> dict:
 def site_config(request):
     config = SiteConfig.load()
     return {
-        "site_config": config, "google_login_on": config.google_login_enabled,
+        "site_config": config, "google_login_on": config.google_login_enabled, "asset_v": _asset_version(),
         # providers the owner switched on; a button also needs the provider's app configured (the templates check both)
         "enabled_social": [p for p in ("google", "github", "facebook") if config.social_enabled(p)],
         # an admin should know when sign-ups are not email-verified because this install cannot send email

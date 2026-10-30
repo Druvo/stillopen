@@ -502,7 +502,7 @@ export function Dashboard() {
 
           <div role="tabpanel" id={TAB_PANEL_ID} aria-labelledby={tabId(activeTab.key)} className="min-w-0">
             {empty ? (
-              <div className="rounded-md border border-dashed border-border p-8 text-center text-theme-sm text-muted">
+              <div className="rounded-xl border border-dashed border-border p-8 text-center text-theme-sm text-muted">
                 {empty === "searching" && (
                   <p className="flex items-center justify-center gap-2">
                     <Spinner />

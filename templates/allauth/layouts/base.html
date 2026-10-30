@@ -1,13 +1,13 @@
 {% load static %}
 <!doctype html>
-<html lang="en" data-bs-theme="light">
+<html lang="en" data-bs-theme="{{ site_config.default_theme }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block head_title %}{% endblock %} · {{ site_config.site_title|default:"StillOpen" }}</title>
-<script src="{% static 'js/theme.js' %}"></script>
+<script src="{% static 'js/theme.js' %}?v={{ asset_v }}"></script>
 <link href="{% static 'vendor/tabler/tabler.min.css' %}" rel="stylesheet">
-<link href="{% static 'css/stillopen.css' %}" rel="stylesheet">
+<link href="{% static 'css/stillopen.css' %}?v={{ asset_v }}" rel="stylesheet">
 </head>
 <body class="d-flex flex-column">
 <div class="page page-center">

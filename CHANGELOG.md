@@ -11,6 +11,18 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Full visual redesign (`design.md`): Bento Grid in light mode (clean modular tiles on neutral paper, an
+  accessible dark-olive accent), Dark Command Center in dark mode (near-black, the same hue at full glowing
+  lime brightness), one humanist sans (Albert Sans) for both headings and body text, moderate 12-18px corner
+  radius, admin-selectable default (Site configuration > Appearance, dark out of the box) applied to both
+  frontends -- the Next.js app's static export is patched per-request with the admin's choice, so it takes
+  effect with no rebuild. A door-ajar logo mark replaces the old generic checkmark. Also fixed two real
+  dashboard filter bugs found along the way: the "Posting" filter was missing its "Unclear" option
+  (`live_state: "uncertain"` had no matching dropdown entry, so it could never be selected), and the mobile
+  "Filters" toggle button was ambiguously labelled next to the always-visible search box; added sort
+  (newest/oldest/company/title) to the "All postings" page, which previously had none; and fixed two leftover
+  "stock blue" spots a full page sweep turned up (native checkbox/radio `accent-color`, and two `bg-blue-lt`
+  Tabler badges that should have been `bg-primary-lt`).
 - UI/UX polish pass (audit in `docs/design/ux-audit.md`): `?` keyboard-shortcuts help, `/` and Ctrl/Cmd+K jump-to palette (every screen, Add job, Search for jobs now, light/dark; a header button on phones), `g` then a letter go-to keys, a dismissible "Getting started" checklist on the dashboard (`checklist_dismissed` preference); one date format everywhere; no sideways scroll on Postings and CV compare at 375 px; the dashboard no longer opens scrolled down on a phone; errors stay on screen 20 s.
 - Sign-out now always leaves nothing of the person in the tab's storage (a queued cache write could land after the clearing); first load no longer repeats requests; the dashboard answers in 40 queries instead of 45.
 

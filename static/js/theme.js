@@ -1,11 +1,13 @@
-// Light for everyone by default (the familiar look of mainstream job and SaaS sites), with a toggle that remembers a visitor's choice of dark.
-// Loaded in <head> without defer so the right theme is set before anything paints (no flash).
+// The admin's chosen default (Site configuration > Appearance, server-rendered into data-bs-theme below)
+// for a first-time visitor; a visitor's own choice, once made, always wins. Loaded in <head> without defer
+// so the right theme is set before anything paints (no flash).
 (function () {
   var KEY = 'so-theme';
   function stored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
   function apply(theme) { document.documentElement.setAttribute('data-bs-theme', theme); }
   var saved = stored();
-  apply(saved === 'dark' ? 'dark' : 'light');
+  if (saved === 'dark' || saved === 'light') apply(saved);
+  // else: keep the server-rendered default already on <html> -- nothing to do.
 
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-theme-toggle]').forEach(function (button) {

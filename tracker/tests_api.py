@@ -258,10 +258,27 @@ class NewAppShell(TestCase):
         for path in ("/app/", "/app/jobs/12", "/app/prep/3/today"):
             r = self.client.get(path)
             self.assertEqual(r.status_code, 200, path)
-            self.assertIn(b"shell", b"".join(r.streaming_content))
+            self.assertIn(b"shell", r.content)
             close_quietly(r)
             self.assertEqual(r["Cache-Control"], "no-store")
         self.assertIn("csrftoken", self.client.cookies)
+
+    def test_the_admins_default_theme_choice_is_patched_into_the_served_shell(self):
+        from tracker.models import SiteConfig
+
+        root = Path(self.out.name)
+        (root / "index.html").write_text('<html data-default-theme="dark"><body>shell</body></html>', encoding="utf-8")
+        self.client.force_login(self.a)
+
+        SiteConfig.objects.filter(pk=1).update(default_theme="light")
+        r = self.client.get("/app/")
+        self.assertIn(b'data-default-theme="light"', r.content)
+        close_quietly(r)
+
+        SiteConfig.objects.filter(pk=1).update(default_theme="dark")
+        r = self.client.get("/app/")
+        self.assertIn(b'data-default-theme="dark"', r.content)
+        close_quietly(r)
 
     def test_the_page_carries_a_strict_policy_with_the_hashes_of_its_inline_scripts(self):
         import base64

@@ -212,6 +212,7 @@ describe("the filter panel", () => {
     expect(screen.queryByText("Clear filters")).toBeNull();
     expect(screen.getByRole("option", { name: "Not checked yet" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "Malaysia" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Unclear" })).toBeTruthy();
   });
 
   it("reports changes, and offers to clear them once something is set", () => {

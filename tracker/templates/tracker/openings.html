@@ -56,7 +56,7 @@
             </div>
             <div class="text-end text-secondary" style="font-size:.85rem;white-space:nowrap">{{ r.p.first_seen_at|date:"j M" }}</div>
           </div>
-          <div class="mt-2 d-flex flex-wrap gap-1"><span class="badge bg-secondary-lt">{{ r.where|truncatechars:48 }}</span>{% if r.p.remote and "emote" not in r.where %}<span class="badge bg-green-lt">Remote</span>{% endif %}{% if r.p.sponsorship == "yes" %}<span class="badge bg-green-lt">Visa sponsorship</span>{% endif %}{% if r.p.relocation == "yes" %}<span class="badge bg-green-lt">Relocation help</span>{% endif %}{% if r.p.employment_type %}<span class="badge bg-secondary-lt">{{ r.p.get_employment_type_display }}</span>{% endif %}<span class="badge bg-blue-lt">via {{ r.credit.label }}</span></div>
+          <div class="mt-2 d-flex flex-wrap gap-1"><span class="badge bg-secondary-lt">{{ r.where|truncatechars:48 }}</span>{% if r.p.remote and "emote" not in r.where %}<span class="badge bg-green-lt">Remote</span>{% endif %}{% if r.p.sponsorship == "yes" %}<span class="badge bg-green-lt">Visa sponsorship</span>{% endif %}{% if r.p.relocation == "yes" %}<span class="badge bg-green-lt">Relocation help</span>{% endif %}{% if r.p.employment_type %}<span class="badge bg-secondary-lt">{{ r.p.get_employment_type_display }}</span>{% endif %}<span class="badge bg-primary-lt">via {{ r.credit.label }}</span></div>
           {% if r.p.excerpt %}<p class="text-secondary mt-2 mb-0" style="font-size:.95rem">{{ r.p.excerpt|truncatechars:210 }}</p>{% endif %}
         </div></article>
         {% empty %}

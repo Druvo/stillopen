@@ -99,10 +99,12 @@ describe("filters", () => {
     expect(run({ country: "?" })).toEqual([2, 3]);
   });
 
-  it("filters by whether the posting is open, closed or not checked", () => {
+  it("filters by whether the posting is open, closed, unclear or not checked", () => {
     expect(run({ live: "active" })).toEqual([1]);
     expect(run({ live: "expired" })).toEqual([2]);
     expect(run({ live: "unknown" })).toEqual([3]);
+    const uncertain = job({ id: 4, live_state: "uncertain" });
+    expect(ids(visibleJobs([...jobs, uncertain], filters({ live: "uncertain" }), NOW))).toEqual([4]);
   });
 
   it("filters by when it was found, in the person's own calendar days", () => {
