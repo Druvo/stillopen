@@ -7,7 +7,7 @@
 # uploads and the generated secret key. Set DATABASE_URL to use PostgreSQL instead.
 
 # Stage 1: build the signed-in app (a static export). Node is only here; the final image has none.
-FROM node:22-alpine AS frontend
+FROM node:26-alpine AS frontend
 WORKDIR /frontend
 RUN corepack enable
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
