@@ -3,6 +3,7 @@ django-unfold>=0.91,<1
 requests>=2.32
 django-allauth[socialaccount,mfa]>=65,<66
 cryptography>=43
+PyJWT[crypto]>=2.8,<3  # checks Clerk's signed session tokens
 pypdf>=5
 python-docx>=1.1
 gunicorn>=23.0
