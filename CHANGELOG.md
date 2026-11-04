@@ -11,6 +11,8 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Sign-in and email verification through Clerk (optional, off until a publishable and secret key are set in Site configuration > Clerk sign-in or in `CLERK_PUBLISHABLE_KEY`/`CLERK_SECRET_KEY`). The sign-in and sign-up pages then show Clerk's forms; we check the signed session token and Clerk's own word that the email is verified before opening a normal session. A Clerk person is always a new account here (never matched to an older one by email); registration follows the existing open/closed switch. Staff keep the admin password login.
+
 - "Check my fit" on All postings: a free, zero-token keyword match against any posting, before you track it. Fetches the full posting text on demand the same guarded way the quick-add bar does, cached per posting for a day and falling back to the stored excerpt if the fetch fails. Nothing is saved.
 - Saved searches (Profile > Saved searches): extra, named role lists searched alongside your profile's own target roles -- "Remote Backend Roles" as well as "Dhaka On-site, Any Role", say. Each is unioned into your search and scheduled digest only while it's on (up to 10, `STILLOPEN_MAX_SAVED_SEARCHES`); turning one off keeps it without searching it.
 - Fixed a dark-default persistence bug: `preferences.read()` fell back to a hard-coded "light" default for anyone with no stored theme choice, ignoring the site's own configured default (`SiteConfig.default_theme`). A signed-in person with no saved preference now actually sees the admin's chosen default theme, not light.

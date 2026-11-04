@@ -1,0 +1,26 @@
+{% extends "account/base_entrance.html" %}
+{% load static %}
+{% block head_title %}{% if signup %}Create an account{% else %}Sign in{% endif %}{% endblock %}
+{% block content %}
+<h2 class="card-title">{{ site_config.site_title|default:"StillOpen" }}</h2>
+{% if error %}
+<p class="text-danger" role="alert">{{ error }}</p>
+{% else %}
+<p class="text-secondary mb-3">{% if signup %}Create your account. Clerk will check your email address.{% else %}Welcome back. Sign in to pick up where you left off.{% endif %}</p>
+<div id="clerk-root"
+     data-mode="{% if signup %}signup{% else %}signin{% endif %}"
+     data-key="{{ publishable_key }}"
+     data-src="{{ script_url }}"
+     data-exchange="{% url 'clerk_session' %}"
+     data-csrf="{{ csrf_token }}"
+     data-next="{{ next }}"
+     data-signed-out="{% if signed_out %}1{% endif %}"
+     data-signin-url="{% url 'account_login' %}"
+     data-signup-url="{% url 'account_signup' %}">
+  <p class="text-secondary" id="clerk-loading">Loading the sign-in form&hellip;</p>
+</div>
+<p id="clerk-error" class="text-danger mt-3" role="alert" aria-live="assertive" hidden></p>
+<noscript><p class="text-danger">Signing in needs JavaScript.</p></noscript>
+<script src="{% static 'js/clerk-signin.js' %}" defer></script>
+{% endif %}
+{% endblock %}

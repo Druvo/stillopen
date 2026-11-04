@@ -82,6 +82,11 @@ class SiteConfigForm(forms.ModelForm):
         "The GOOGLE_OAUTH_CLIENT_SECRET environment variable takes precedence.",
     )
 
+    clerk_secret = forms.CharField(
+        required=False, widget=forms.PasswordInput(render_value=False),
+        help_text="Clerk secret key. Stored encrypted and never shown again. Leave blank to keep the saved one. The CLERK_SECRET_KEY environment variable takes precedence.",
+    )
+
     class Meta:
         model = SiteConfig
         fields = "__all__"
@@ -92,6 +97,8 @@ class SiteConfigForm(forms.ModelForm):
             obj.set_adzuna_app_key(self.cleaned_data["adzuna_app_key"])
         if self.cleaned_data.get("email_password"):
             obj.set_email_password(self.cleaned_data["email_password"])
+        if self.cleaned_data.get("clerk_secret"):
+            obj.set_clerk_secret(self.cleaned_data["clerk_secret"])
         if self.cleaned_data.get("google_connect_secret"):
             obj.set_google_connect_secret(self.cleaned_data["google_connect_secret"])
         for provider in ("google", "github", "facebook"):
@@ -215,6 +222,20 @@ class SiteConfigAdmin(ModelAdmin):
                     "Redirect addresses: <code>{base}/accounts/google/login/callback/</code>, "
                     "<code>{base}/accounts/github/login/callback/</code>, <code>{base}/accounts/facebook/login/callback/</code>. "
                     "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (and the GITHUB_ and FACEBOOK_ ones) in the environment take precedence."
+                ).format(base=_public_base()),
+            },
+        ),
+        (
+            "Clerk sign-in",
+            {
+                "classes": ("tab",),
+                "fields": ("clerk_publishable_key", "clerk_secret"),
+                "description": (
+                    "Optional. Turns sign-in and email verification over to <a href=\"https://clerk.com\">Clerk</a>: the built-in sign-in and sign-up pages then show Clerk's "
+                    "forms, and people are signed in here only after Clerk has verified their email. It is off while either key is blank. In the Clerk dashboard copy the "
+                    "publishable key (pk_...) and the secret key (sk_...), and allow <code>{base}</code> as an allowed origin. Clerk's script is loaded from your Clerk "
+                    "address on the sign-in page only. The admin site keeps its own password sign-in for staff. "
+                    "CLERK_PUBLISHABLE_KEY / CLERK_SECRET_KEY in the environment take precedence."
                 ).format(base=_public_base()),
             },
         ),
