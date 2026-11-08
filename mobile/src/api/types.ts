@@ -5,6 +5,8 @@ export interface Me {
   is_staff: boolean;
   greeting: string;
   site_title: string;
+  prep_enabled?: boolean;
+  assistant_enabled?: boolean;
 }
 
 export interface Band {

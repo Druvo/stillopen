@@ -6,13 +6,6 @@ import { ActivityIndicator, View } from "react-native";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { colors } from "../src/theme";
 
-const screenOptions = {
-  headerStyle: { backgroundColor: colors.background },
-  headerTintColor: colors.text,
-  headerShadowVisible: false,
-  contentStyle: { backgroundColor: colors.background },
-};
-
 function Nav() {
   const { loading, signedIn } = useAuth();
 
@@ -24,15 +17,14 @@ function Nav() {
     );
   }
 
+  // Everything a signed-in person can open lives in the (app) group, so signed out nothing in it can be reached.
   return (
-    <Stack screenOptions={screenOptions}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
       <Stack.Protected guard={signedIn}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="job/[id]" options={{ title: "Job" }} />
-        <Stack.Screen name="cv/[id]" options={{ title: "CV" }} />
+        <Stack.Screen name="(app)" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
-        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="login" />
       </Stack.Protected>
     </Stack>
   );
