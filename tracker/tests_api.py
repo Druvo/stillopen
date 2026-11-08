@@ -14,6 +14,9 @@ from tracker.models import Application, Event, SiteConfig, Status, UserProfile
 User = get_user_model()
 PW = "correct-horse-battery-staple"
 BASE = "/api/v1"
+# The one deliberately public route: a mobile client has no session yet when it calls this, so it cannot be behind
+# the usual signed-out-is-401 rule. See `tracker/api/mobileauth.py`; covered on its own in MobileAuth below.
+PUBLIC_ROUTES = {("POST", "/api/v1/auth/login")}
 
 
 def person(name):
@@ -113,6 +116,8 @@ class RouteInventory(TestCase):
     def test_every_route_refuses_a_signed_out_caller_with_json_401(self):
         client = Client()
         for method, path in routes():
+            if (method, path) in PUBLIC_ROUTES:
+                continue
             r = self.call(client, method, path, self.ids_a)
             self.assertEqual(r.status_code, 401, f"{method} {path} must answer 401 when signed out")
             self.assertTrue(r["Content-Type"].startswith("application/json"), f"{method} {path}")

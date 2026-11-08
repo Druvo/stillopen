@@ -11,6 +11,7 @@ from django.template.loader import render_to_string
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_GET, require_POST
 
+from .api.mobileauth import bearer_or_login_required
 from .models import Application, CVVersion
 from .services import cvbuilder, cvexport
 from .services.cvversions import CVError
@@ -36,7 +37,7 @@ def _template(request) -> str:
     return name if name in cvexport.TEMPLATES else cvexport.DEFAULT_TEMPLATE
 
 
-@login_required
+@bearer_or_login_required
 @require_GET
 def cv_download(request, pk, fmt):
     version = _version(request, pk)
@@ -56,7 +57,7 @@ def cv_download(request, pk, fmt):
     return response
 
 
-@login_required
+@bearer_or_login_required
 @require_GET
 def cv_print(request, pk):
     version = _version(request, pk)
@@ -123,7 +124,7 @@ def _slug(text: str, fallback: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", text or "").strip("-")[:40] or fallback
 
 
-@login_required
+@bearer_or_login_required
 @require_GET
 def job_documents_zip(request, pk):
     """The person's newest tailored CV and cover letter for one job as DOCX, plain text and Markdown. Same rule as each download: anything flagged and not approved refuses the whole zip."""

@@ -12,12 +12,17 @@ from ..services.cards import card_for
 from ..services.pipeline import upcoming_interviews
 from ..services.throttle import throttled
 from .common import ApiFormError, owned_job, too_many
+from .mobileauth import BearerAuth
 
 api = NinjaAPI(
     title="StillOpen",
     version="1",
     urls_namespace="api",
-    auth=django_auth,  # session cookie plus CSRF on every unsafe method; unauthenticated -> 401
+    # a personal access token (Authorization: Bearer so_...) for a native mobile client, or session cookie plus CSRF
+    # for the web app -- tried in order, first one that authenticates wins. BearerAuth must come first: django_auth's
+    # CSRF check runs unconditionally on every unsafe method before it even looks for a session, which would reject
+    # a bearer-authenticated POST before BearerAuth got a turn. Unauthenticated -> 401.
+    auth=[BearerAuth(), django_auth],
     docs_url=None,
 )
 

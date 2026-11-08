@@ -334,6 +334,7 @@ STILLOPEN_MAX_API_TOKENS = int(os.environ.get("STILLOPEN_MAX_API_TOKENS", "10"))
 STILLOPEN_TOKEN_ISSUES_PER_HOUR = int(os.environ.get("STILLOPEN_TOKEN_ISSUES_PER_HOUR", "10"))
 STILLOPEN_MCP_CALLS_PER_MINUTE = int(os.environ.get("STILLOPEN_MCP_CALLS_PER_MINUTE", "120"))
 STILLOPEN_MCP_BAD_TOKENS_PER_MINUTE = int(os.environ.get("STILLOPEN_MCP_BAD_TOKENS_PER_MINUTE", "20"))
+STILLOPEN_MOBILE_LOGIN_ATTEMPTS_PER_HOUR = int(os.environ.get("STILLOPEN_MOBILE_LOGIN_ATTEMPTS_PER_HOUR", "20"))
 # Private calendar link (/calendar/<token>.ics): reads per visitor address per hour, wrong-token tries per hour, new links per person per hour.
 STILLOPEN_CALENDAR_FEED_PER_HOUR = int(os.environ.get("STILLOPEN_CALENDAR_FEED_PER_HOUR", "120"))
 STILLOPEN_CALENDAR_FEED_BAD_PER_HOUR = int(os.environ.get("STILLOPEN_CALENDAR_FEED_BAD_PER_HOUR", "20"))
