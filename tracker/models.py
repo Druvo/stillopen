@@ -358,6 +358,10 @@ class SiteConfig(PersonalSettings):
     # because it asks for more scopes and has its own redirect address. Blank = the feature is off. GOOGLE_OAUTH_CLIENT_ID / _SECRET take precedence.
     google_connect_client_id = models.CharField(max_length=200, blank=True)
     google_connect_secret_encrypted = models.CharField(max_length=500, blank=True)
+    # Sign-in and email verification by Clerk (clerk.com). Both blank = Clerk is off and the built-in sign-in pages stay.
+    # CLERK_PUBLISHABLE_KEY / CLERK_SECRET_KEY in the environment take precedence.
+    clerk_publishable_key = models.CharField(max_length=200, blank=True)
+    clerk_secret_encrypted = models.CharField(max_length=500, blank=True)
 
     # Email sending (Brevo, Mailgun, any SMTP). The EMAIL_HOST environment variable takes precedence.
     email_host = models.CharField(max_length=200, blank=True, help_text="SMTP server, e.g. smtp-relay.brevo.com. Blank = email is not set up.")
@@ -470,6 +474,16 @@ class SiteConfig(PersonalSettings):
         client_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip() or self.google_connect_client_id.strip()
         secret = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip() or crypto.decrypt(self.google_connect_secret_encrypted)
         return (client_id, secret) if client_id and secret else None
+
+    def set_clerk_secret(self, plain: str) -> None:
+        self.clerk_secret_encrypted = crypto.encrypt(plain.strip())
+
+    @property
+    def effective_clerk(self):
+        """(publishable key, secret key) for Clerk sign-in, or None while either is blank: sign-in then stays the built-in one."""
+        publishable = os.environ.get("CLERK_PUBLISHABLE_KEY", "").strip() or self.clerk_publishable_key.strip()
+        secret = os.environ.get("CLERK_SECRET_KEY", "").strip() or crypto.decrypt(self.clerk_secret_encrypted)
+        return (publishable, secret) if publishable and secret else None
 
     def social_enabled(self, provider: str) -> bool:
         return bool(getattr(self, f"{provider}_login_enabled", False))
@@ -595,6 +609,7 @@ class UserProfile(PersonalSettings):
         default=dict, blank=True, editable=False,
         help_text="How this person likes the app laid out (dashboard view, filters, sidebar, theme, text size). Saved so it follows them to every device; see services/preferences.py.",
     )
+    clerk_user_id = models.CharField(max_length=64, unique=True, null=True, blank=True, editable=False, help_text="The person's id at Clerk, once they signed in that way. Never shown.")
     draft_ahead_enabled = models.BooleanField(
         default=False, verbose_name="Also prepare tailored CV drafts for my best new matches",
         help_text="After a scheduled search, writes a draft CV for the top new matches using your own AI settings. Drafts wait on your "
