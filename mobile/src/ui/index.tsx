@@ -1,4 +1,5 @@
-// The shared building blocks every screen uses, so the whole app looks and behaves the same. Import from "../../ui" (or "../ui").
+// The shared building blocks every screen uses, so the whole app looks and behaves the same, and follows the website's light/dark colours.
+// Import from "../../ui" (or "../ui"). Use `Text` and `TextInput` from here, never react-native's, and `useStyles`/`useTheme` for colours.
 import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import React, { useState } from "react";
@@ -13,19 +14,88 @@ import {
   ScrollView,
   StyleSheet,
   Switch,
-  Text,
-  TextInput,
+  Text as RNText,
+  TextInput as RNTextInput,
   TouchableOpacity,
   View,
   type StyleProp,
   type TextInputProps,
+  type TextProps,
+  type TextStyle,
   type ViewStyle,
 } from "react-native";
 
-import { colors } from "../theme";
+import { useStyles, useTheme } from "../context/ThemeContext";
+import { radius, type Palette } from "../theme";
 
 export type IconName = React.ComponentProps<typeof Ionicons>["name"];
 export { Ionicons };
+export { useStyles, useTheme } from "../context/ThemeContext";
+
+const FAMILY: Record<string, string> = {
+  "400": "AlbertSans_400Regular",
+  "500": "AlbertSans_500Medium",
+  "600": "AlbertSans_600SemiBold",
+  "700": "AlbertSans_700Bold",
+  "800": "AlbertSans_800ExtraBold",
+};
+function familyFor(style: unknown): { fontFamily: string } {
+  const flat = (StyleSheet.flatten(style as never) ?? {}) as { fontWeight?: string | number };
+  const weight = Number(flat.fontWeight === "bold" ? 700 : (flat.fontWeight ?? 400));
+  return { fontFamily: FAMILY[weight >= 800 ? "800" : weight >= 700 ? "700" : weight >= 600 ? "600" : weight >= 500 ? "500" : "400"] };
+}
+
+/** The app's text: Albert Sans in the theme's text colour. Use this (and `TextInput` below) instead of react-native's, everywhere. */
+export function Text({ style, ...rest }: TextProps) {
+  const { colors } = useTheme();
+  return <RNText {...rest} style={[{ color: colors.text }, style, familyFor(style), { fontWeight: "normal" }]} />;
+}
+
+export const TextInput = React.forwardRef<React.ComponentRef<typeof RNTextInput>, TextInputProps>(function TextInput({ style, ...rest }, ref) {
+  const { colors } = useTheme();
+  return (
+    <RNTextInput
+      ref={ref}
+      placeholderTextColor={colors.textMuted}
+      selectionColor={colors.accent}
+      {...rest}
+      style={[{ color: colors.text }, style, familyFor(style), { fontWeight: "normal" }]}
+    />
+  );
+});
+
+const make = (c: Palette) => ({
+  card: { backgroundColor: c.surface, borderRadius: radius.card, borderWidth: 1, borderColor: c.border, padding: 16, marginBottom: 12 },
+  heading: { fontSize: 22, fontWeight: "700", marginBottom: 6, letterSpacing: -0.3 },
+  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8, marginBottom: 10 },
+  sectionTitle: { fontSize: 17, fontWeight: "700" },
+  link: { color: c.accent, fontWeight: "600" },
+  body: { fontSize: 15, lineHeight: 22 },
+  muted: { color: c.textMuted, fontSize: 13, lineHeight: 19 },
+  button: { borderRadius: radius.control, paddingVertical: 13, paddingHorizontal: 18, alignItems: "center", justifyContent: "center", minHeight: 46 },
+  button_primary: { backgroundColor: c.accent },
+  button_secondary: { backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
+  button_danger: { backgroundColor: "transparent", borderWidth: 1, borderColor: c.danger },
+  button_ghost: { backgroundColor: "transparent" },
+  buttonText: { fontWeight: "700", fontSize: 15 },
+  label: { color: c.textMuted, fontSize: 13, marginBottom: 6, fontWeight: "600" },
+  input: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: radius.control, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
+  hint: { color: c.textMuted, fontSize: 12, marginTop: 5 },
+  error: { color: c.danger, fontSize: 12, marginTop: 5 },
+  toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  toggleLabel: { fontSize: 15 },
+  chip: { borderWidth: 1, borderColor: c.border, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: c.surface },
+  chipText: { fontSize: 13 },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  badge: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 9, paddingVertical: 3, alignSelf: "flex-start" },
+  badgeText: { fontSize: 12, fontWeight: "700" },
+  modalShade: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  modalSheet: { backgroundColor: c.surface, borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card, padding: 18, maxHeight: "70%" },
+  optionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
+  listItem: { flexDirection: "row", alignItems: "center", backgroundColor: c.surface, borderRadius: radius.card, borderWidth: 1, borderColor: c.border, padding: 14, marginBottom: 10 },
+  listTitle: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
+});
+const useS = () => useStyles(make) as unknown as Record<string, never>;
 
 /** A scrolling page with a header title, pull-to-refresh and room for the keyboard. Every screen starts with this. */
 export function Screen({
@@ -45,6 +115,7 @@ export function Screen({
   padded?: boolean;
   headerRight?: () => React.ReactNode;
 }) {
+  const { colors } = useTheme();
   const options = title !== undefined || headerRight ? { title, headerRight } : undefined;
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -66,6 +137,7 @@ export function Screen({
 }
 
 export function Card({ children, style, onPress }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void }) {
+  const s = useS();
   const body = <View style={[s.card, style]}>{children}</View>;
   return onPress ? (
     <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
@@ -76,11 +148,13 @@ export function Card({ children, style, onPress }: { children: React.ReactNode; 
   );
 }
 
-export function Heading({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <Text style={[s.heading, style as never]}>{children}</Text>;
+export function Heading({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
+  const s = useS();
+  return <Text style={[s.heading, style]}>{children}</Text>;
 }
 
 export function SectionTitle({ children, action }: { children: React.ReactNode; action?: { label: string; onPress: () => void } }) {
+  const s = useS();
   return (
     <View style={s.sectionRow}>
       <Text style={s.sectionTitle}>{children}</Text>
@@ -93,12 +167,14 @@ export function SectionTitle({ children, action }: { children: React.ReactNode; 
   );
 }
 
-export function Body({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <Text style={[s.body, style as never]}>{children}</Text>;
+export function Body({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
+  const s = useS();
+  return <Text style={[s.body, style]}>{children}</Text>;
 }
 
-export function Muted({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <Text style={[s.muted, style as never]}>{children}</Text>;
+export function Muted({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
+  const s = useS();
+  return <Text style={[s.muted, style]}>{children}</Text>;
 }
 
 export function Button({
@@ -118,8 +194,10 @@ export function Button({
   icon?: IconName;
   style?: StyleProp<ViewStyle>;
 }) {
+  const s = useS();
+  const { colors } = useTheme();
   const off = busy || disabled;
-  const text = variant === "primary" ? "#0a0e07" : variant === "danger" ? colors.danger : colors.text;
+  const text = variant === "primary" ? colors.accentContrast : variant === "danger" ? colors.danger : colors.text;
   return (
     <TouchableOpacity
       accessibilityRole="button"
@@ -150,6 +228,8 @@ export function Field({
   multiline,
   ...rest
 }: { label: string; value: string; onChangeText: (v: string) => void; hint?: string; error?: string } & Omit<TextInputProps, "value" | "onChangeText">) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <View style={{ marginBottom: 14 }}>
       <Text style={s.label}>{label}</Text>
@@ -157,7 +237,6 @@ export function Field({
         value={value}
         onChangeText={onChangeText}
         multiline={multiline}
-        placeholderTextColor={colors.textMuted}
         accessibilityLabel={label}
         style={[s.input, multiline && { minHeight: 96, textAlignVertical: "top" }, error ? { borderColor: colors.danger } : null]}
         {...rest}
@@ -168,6 +247,8 @@ export function Field({
 }
 
 export function Toggle({ label, value, onChange, hint }: { label: string; value: boolean; onChange: (v: boolean) => void; hint?: string }) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <View style={[s.toggleRow, { marginBottom: 14 }]}>
       <View style={{ flex: 1, paddingRight: 12 }}>
@@ -180,10 +261,12 @@ export function Toggle({ label, value, onChange, hint }: { label: string; value:
 }
 
 export function Chip({ label, selected, onPress, color }: { label: string; selected?: boolean; onPress?: () => void; color?: string }) {
+  const s = useS();
+  const { colors } = useTheme();
   const tint = color ?? colors.accent;
   const body = (
     <View style={[s.chip, selected && { backgroundColor: tint, borderColor: tint }]}>
-      <Text style={[s.chipText, selected && { color: "#0a0e07", fontWeight: "700" }]}>{label}</Text>
+      <Text style={[s.chipText, selected && { color: colors.accentContrast, fontWeight: "700" }]}>{label}</Text>
     </View>
   );
   return onPress ? (
@@ -195,15 +278,18 @@ export function Chip({ label, selected, onPress, color }: { label: string; selec
   );
 }
 
-export function Badge({ label, color = colors.accent }: { label: string; color?: string }) {
+export function Badge({ label, color }: { label: string; color?: string }) {
+  const s = useS();
+  const { colors } = useTheme();
+  const tint = color ?? colors.accent;
   return (
-    <View style={[s.badge, { borderColor: color }]}>
-      <Text style={[s.badgeText, { color }]}>{label}</Text>
+    <View style={[s.badge, { borderColor: tint }]}>
+      <Text style={[s.badgeText, { color: tint }]}>{label}</Text>
     </View>
   );
 }
 
-/** A row of chips to pick one option (or none when `allowNone`). */
+/** A row of chips to pick one option. */
 export function Choice<T extends string | number>({
   label,
   options,
@@ -215,6 +301,7 @@ export function Choice<T extends string | number>({
   value: T | null;
   onChange: (v: T) => void;
 }) {
+  const s = useS();
   return (
     <View style={{ marginBottom: 14 }}>
       {label ? <Text style={s.label}>{label}</Text> : null}
@@ -241,6 +328,8 @@ export function Select<T extends string | number>({
   onChange: (v: T) => void;
   placeholder?: string;
 }) {
+  const s = useS();
+  const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.value === value);
   return (
@@ -277,6 +366,7 @@ export function Select<T extends string | number>({
 }
 
 export function Loading() {
+  const { colors } = useTheme();
   return (
     <View style={{ padding: 40, alignItems: "center" }}>
       <ActivityIndicator color={colors.accent} />
@@ -285,6 +375,7 @@ export function Loading() {
 }
 
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { colors } = useTheme();
   return (
     <Card style={{ borderColor: colors.danger }}>
       <Text style={{ color: colors.danger, marginBottom: onRetry ? 10 : 0 }}>{message}</Text>
@@ -295,6 +386,7 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
 
 /** Every empty list says what to do next (a project rule), so `hint` is required. */
 export function Empty({ title, hint, action }: { title: string; hint: string; action?: { label: string; onPress: () => void } }) {
+  const s = useS();
   return (
     <View style={{ padding: 28, alignItems: "center" }}>
       <Text style={[s.heading, { fontSize: 17, textAlign: "center" }]}>{title}</Text>
@@ -309,11 +401,14 @@ export function Row({ children, style }: { children: React.ReactNode; style?: St
 }
 
 export function Divider() {
+  const { colors } = useTheme();
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: 12 }} />;
 }
 
 /** A tappable list row with an optional right-hand value and chevron. */
 export function ListItem({ title, subtitle, right, onPress, icon }: { title: string; subtitle?: string; right?: React.ReactNode; onPress?: () => void; icon?: IconName }) {
+  const s = useS();
+  const { colors } = useTheme();
   return (
     <TouchableOpacity activeOpacity={onPress ? 0.7 : 1} onPress={onPress} style={s.listItem} disabled={!onPress}>
       {icon ? <Ionicons name={icon} size={22} color={colors.accent} style={{ marginRight: 14 }} /> : null}
@@ -340,35 +435,3 @@ export function confirm(title: string, message?: string, confirmLabel = "Delete"
 export function notify(title: string, message?: string) {
   Alert.alert(title, message);
 }
-
-const s = StyleSheet.create({
-  card: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 12 },
-  heading: { color: colors.text, fontSize: 22, fontWeight: "700", marginBottom: 6 },
-  sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8, marginBottom: 10 },
-  sectionTitle: { color: colors.text, fontSize: 17, fontWeight: "700" },
-  link: { color: colors.accent, fontWeight: "600" },
-  body: { color: colors.text, fontSize: 15, lineHeight: 21 },
-  muted: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
-  button: { borderRadius: 12, paddingVertical: 13, paddingHorizontal: 18, alignItems: "center", justifyContent: "center", minHeight: 46 },
-  button_primary: { backgroundColor: colors.accent },
-  button_secondary: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
-  button_danger: { backgroundColor: "transparent", borderWidth: 1, borderColor: colors.danger },
-  button_ghost: { backgroundColor: "transparent" },
-  buttonText: { fontWeight: "700", fontSize: 15 },
-  label: { color: colors.textMuted, fontSize: 13, marginBottom: 6, fontWeight: "600" },
-  input: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: colors.text, fontSize: 15 },
-  hint: { color: colors.textMuted, fontSize: 12, marginTop: 5 },
-  error: { color: colors.danger, fontSize: 12, marginTop: 5 },
-  toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  toggleLabel: { color: colors.text, fontSize: 15 },
-  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: colors.surface },
-  chipText: { color: colors.text, fontSize: 13 },
-  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, alignSelf: "flex-start" },
-  badgeText: { fontSize: 12, fontWeight: "700" },
-  modalShade: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
-  modalSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, maxHeight: "70%" },
-  optionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  listItem: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 10 },
-  listTitle: { color: colors.text, fontSize: 15, fontWeight: "600", marginBottom: 2 },
-});
