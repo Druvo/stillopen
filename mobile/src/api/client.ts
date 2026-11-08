@@ -49,7 +49,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+/** Send files and fields as multipart form data (no JSON Content-Type: fetch sets the boundary itself). */
+async function upload<T>(path: string, form: FormData, method: "POST" | "PUT" | "PATCH" = "POST"): Promise<T> {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`${API_BASE}${path}`, { method, headers, body: form });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    if (response.status === 401) await setToken(null);
+    throw new ApiError(response.status, (data && data.error) || `Request failed (${response.status})`, data && data.fields);
+  }
+  return data as T;
+}
+
 export const api = {
+  upload,
   get: <T>(path: string) => request<T>(path, { method: "GET" }),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body: body !== undefined ? JSON.stringify(body) : undefined }),
