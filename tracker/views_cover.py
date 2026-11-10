@@ -2,6 +2,7 @@
 import re
 
 from django.contrib.auth.decorators import login_required
+from .api.mobileauth import bearer_or_login_required
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
@@ -19,7 +20,7 @@ def _filename(letter: CoverLetter, ext: str) -> str:
     return f"{base}-{letter.pk}.{ext}"
 
 
-@login_required
+@bearer_or_login_required
 @require_GET
 def cover_download(request, pk, fmt):
     letter = _letter(request, pk)
