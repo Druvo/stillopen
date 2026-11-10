@@ -1,95 +1,131 @@
-import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useRouter, type Href } from "expo-router";
+import React, { useState } from "react";
+import { View } from "react-native";
 
-import * as endpoints from "../../api/endpoints";
-import type { CvList, CvSummary } from "../../api/types";
-import { colors } from "../../theme";
+import { cvApi, type CvSummary } from "../../api/cv";
+import { useTheme } from "../../context/ThemeContext";
+import { Badge, Button, Card, confirm, Empty, ErrorBox, Loading, Muted, notify, Screen, SectionTitle, Text } from "../../ui";
+import { errorText, useLoad } from "../../ui/useApi";
+import { readinessTone } from "./logic/quality";
+import { when } from "./parts";
 
-function Row({ item, onPress }: { item: CvSummary; onPress: () => void }) {
+function VersionCard({ v, children, onOpen }: { v: CvSummary; children?: React.ReactNode; onOpen: () => void }) {
+  const { colors } = useTheme();
+  const tone = typeof v.ats_readiness === "number" ? readinessTone(v.ats_readiness) : null;
+  const atsColor = tone === "good" ? colors.good : tone === "warn" ? colors.warn : colors.danger;
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.label}>{item.label}</Text>
-        <Text style={styles.meta}>
-          {item.job ? `${item.job.role} · ${item.job.company}` : item.kind_label}
-        </Text>
+    <Card onPress={onOpen}>
+      <Text style={{ fontWeight: "700", fontSize: 16 }}>{v.label || `Version ${v.id}`}</Text>
+      <Muted style={{ marginTop: 2 }}>
+        v{v.id} - {when(v.created_at)} - {v.source_label}
+        {v.provider ? ` (${v.provider})` : ""}
+      </Muted>
+      {v.job ? <Muted>For {v.job.company} - {v.job.role}</Muted> : null}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+        {v.current ? <Badge label="Current" /> : null}
+        {v.kind === "tailored" ? (
+          v.flagged && !v.approved ? (
+            <Badge label={`${v.flagged_count} to review`} color={colors.warn} />
+          ) : v.flagged ? (
+            <Badge label="Approved" color={colors.good} />
+          ) : (
+            <Badge label="Checked" color={colors.good} />
+          )
+        ) : null}
+        {tone ? <Badge label={`ATS check ${v.ats_readiness}/100`} color={atsColor} /> : null}
       </View>
-      {item.flagged && !item.approved ? (
-        <View style={styles.badgeWarn}>
-          <Text style={styles.badgeWarnText}>Review</Text>
-        </View>
-      ) : item.exportable ? (
-        <View style={styles.badgeOk}>
-          <Text style={styles.badgeOkText}>Ready</Text>
-        </View>
-      ) : null}
-    </TouchableOpacity>
+      {children}
+    </Card>
   );
 }
 
 export default function CvListScreen() {
   const router = useRouter();
-  const [data, setData] = useState<CvList | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { data, error, loading, refreshing, refresh, reload } = useLoad(() => cvApi.list());
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [message, setMessage] = useState("");
 
-  const load = useCallback(async () => setData(await endpoints.listCvVersions()), []);
+  const open = (id: number) => router.push({ pathname: "/cv/[id]", params: { id: String(id) } });
 
-  useFocusEffect(
-    useCallback(() => {
-      load().finally(() => setLoading(false));
-    }, [load]),
-  );
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  };
-
-  if (loading || !data) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
+  async function restore(v: CvSummary) {
+    if (!(await confirm("Make this your current CV?", "Your history is kept.", "Restore"))) return;
+    setBusyId(v.id);
+    setMessage("");
+    try {
+      const made = await cvApi.restore(v.id);
+      notify("Restored", "It is now your current CV. The history is kept.");
+      await reload();
+      open(made.id);
+    } catch (e) {
+      setMessage(errorText(e));
+    } finally {
+      setBusyId(null);
+    }
   }
 
-  const sections = [
-    { title: "Tailored for a job", data: data.tailored },
-    { title: "Master CV", data: data.masters },
-  ].filter((s) => s.data.length > 0);
+  async function remove(v: CvSummary) {
+    if (!(await confirm("Delete this tailored CV?", `"${v.label || `Version ${v.id}`}" will be removed. Your master CV is not affected.`))) return;
+    setBusyId(v.id);
+    setMessage("");
+    try {
+      await cvApi.remove(v.id);
+      await reload();
+    } catch (e) {
+      setMessage(errorText(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
-    <FlatList
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: 16 }}
-      data={sections}
-      keyExtractor={(s) => s.title}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
-      renderItem={({ item: section }) => (
-        <View style={{ marginBottom: 20 }}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-          {section.data.map((v) => (
-            <View key={v.id} style={{ marginBottom: 8 }}>
-              <Row item={v} onPress={() => router.push({ pathname: "/cv/[id]", params: { id: String(v.id), label: v.label } })} />
-            </View>
-          ))}
-        </View>
-      )}
-    />
+    <Screen title="Your CV" onRefresh={refresh} refreshing={refreshing}>
+      <Muted style={{ marginBottom: 12 }}>
+        Every change to your CV is kept. Each tailored CV is saved with the job it was made for, so you always know exactly what you sent.
+      </Muted>
+      <View style={{ flexDirection: "row", gap: 10, marginBottom: 8 }}>
+        <Button label="Build, import or tailor" icon="add-circle-outline" onPress={() => router.push("/cv/new" as Href)} style={{ flex: 1 }} />
+        <Button label="Documents" variant="secondary" icon="folder-open-outline" onPress={() => router.push("/documents" as Href)} />
+      </View>
+      {message ? <ErrorBox message={message} /> : null}
+      {loading ? <Loading /> : null}
+      {error && !data ? <ErrorBox message={error} onRetry={reload} /> : null}
+      {data ? (
+        <>
+          <SectionTitle>Tailored for jobs</SectionTitle>
+          {data.tailored.length === 0 ? (
+            <Empty title="No tailored CVs yet" hint="Pick a job and a CV matched to it is saved here." action={{ label: "Tailor a CV for a job", onPress: () => router.push("/cv/new" as Href) }} />
+          ) : (
+            data.tailored.map((v) => (
+              <VersionCard key={v.id} v={v} onOpen={() => open(v.id)}>
+                <View style={{ flexDirection: "row", marginTop: 10 }}>
+                  <Button label="Delete" variant="danger" busy={busyId === v.id} onPress={() => remove(v)} />
+                </View>
+              </VersionCard>
+            ))
+          )}
+
+          <SectionTitle>Your CV over time</SectionTitle>
+          {data.masters.length === 0 ? (
+            <Empty title="No CV yet" hint="Build one in about five minutes, or import the file you already have." action={{ label: "Build or import a CV", onPress: () => router.push("/cv/new" as Href) }} />
+          ) : (
+            data.masters.map((v, i) => (
+              <VersionCard key={v.id} v={{ ...v, current: i === 0 }} onOpen={() => open(v.id)}>
+                {i > 0 ? (
+                  <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                    <Button
+                      label="Compare with current"
+                      variant="secondary"
+                      style={{ flex: 1 }}
+                      onPress={() => router.push({ pathname: "/cv/[id]/diff", params: { id: String(data.masters[0].id), against: String(v.id) } })}
+                    />
+                    <Button label="Restore" busy={busyId === v.id} onPress={() => restore(v)} />
+                  </View>
+                ) : null}
+              </VersionCard>
+            ))
+          )}
+        </>
+      ) : null}
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  center: { flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center" },
-  sectionTitle: { color: colors.text, fontWeight: "700", fontSize: 16, marginBottom: 8 },
-  row: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: 12, padding: 14 },
-  label: { color: colors.text, fontWeight: "600" },
-  meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
-  badgeWarn: { backgroundColor: "#3a2a12", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeWarnText: { color: "#f0b94d", fontSize: 12, fontWeight: "700" },
-  badgeOk: { backgroundColor: "#16321c", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeOkText: { color: colors.good, fontSize: 12, fontWeight: "700" },
-});
