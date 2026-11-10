@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
 
+import { useUnread } from "../../../src/components/account/useUnread";
 import { useTheme } from "../../../src/context/ThemeContext";
 
 type Icon = React.ComponentProps<typeof Ionicons>["name"];
@@ -9,6 +10,7 @@ const icon = (name: Icon, focused: Icon) => ({ color, focused: f, size }: { colo
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const unread = useUnread();
   return (
     <Tabs
       screenOptions={{
@@ -25,7 +27,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: icon("home-outline", "home") }} />
       <Tabs.Screen name="postings" options={{ title: "Postings", tabBarIcon: icon("search-outline", "search") }} />
       <Tabs.Screen name="cv/index" options={{ title: "CVs", tabBarIcon: icon("document-text-outline", "document-text") }} />
-      <Tabs.Screen name="more" options={{ title: "More", tabBarIcon: icon("menu-outline", "menu") }} />
+      <Tabs.Screen name="more" options={{ title: "More", tabBarIcon: icon("menu-outline", "menu"), tabBarBadge: unread > 0 ? (unread > 9 ? "9+" : unread) : undefined, tabBarBadgeStyle: { backgroundColor: colors.accent, color: colors.accentContrast, fontFamily: "AlbertSans_700Bold" } }} />
     </Tabs>
   );
 }
