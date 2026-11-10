@@ -6,6 +6,7 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_GET, require_http_methods
 
+from .api.mobileauth import bearer_or_login_required
 from .models import Application, Document, SiteConfig
 from .services import dataexport
 from .services.files import resolve_document_path
@@ -72,7 +73,7 @@ def document_file(request, pk):
 
 # --- your data ----------------------------------------------------------------------------------
 
-@login_required
+@bearer_or_login_required
 @require_GET
 def export_data(request):
     """Everything this person has stored, as one JSON file. Secrets (API keys) are never included."""

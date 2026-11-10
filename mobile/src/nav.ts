@@ -32,6 +32,7 @@ export const NAV: NavGroup[] = [
       { label: "Documents", to: "/documents", icon: "folder-outline" },
       { label: "Profile", to: "/profile", icon: "person-outline" },
       { label: "AI settings", to: "/profile/ai", icon: "sparkles-outline" },
+      { label: "Emails", to: "/profile/emails", icon: "mail-outline" },
       { label: "Connections", to: "/profile/connections", icon: "link-outline" },
       { label: "Assistant", to: "/profile/assistant", icon: "hardware-chip-outline", needs: "assistant_enabled" },
       { label: "Notifications", to: "/notifications", icon: "notifications-outline" },
