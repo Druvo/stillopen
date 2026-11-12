@@ -59,7 +59,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v5.5.1
+        uses: docker/metadata-action@v6.2.0
         with:
           # the action lower-cases the name, which the registry requires
           images: ghcr.io/${{ github.repository }}
