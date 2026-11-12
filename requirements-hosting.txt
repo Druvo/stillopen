@@ -1,5 +1,5 @@
 # For running StillOpen as a shared service: PostgreSQL support.
 -r requirements.txt
 dj-database-url>=2.2
-psycopg[binary]>=3.2
+psycopg[binary]>=3.3.6
 redis>=5
