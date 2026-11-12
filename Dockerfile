@@ -16,7 +16,7 @@ COPY frontend/ ./
 RUN pnpm build
 
 # Stage 2: the Python image that runs it.
-FROM python:3.12-slim
+FROM python:3.15-slim
 LABEL org.opencontainers.image.title="StillOpen" \
       org.opencontainers.image.description="A job-search tracker you host yourself." \
       org.opencontainers.image.source="https://github.com/Druvo/stillopen" \
