@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tracker', '0069_savedsearch'),
+        ('tracker', '0070_clerk_signin'),
     ]
 
     operations = [
