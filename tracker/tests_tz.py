@@ -270,11 +270,11 @@ class RequestsRunInTheirZone(TestCase):
         la = set_zone(person("la"), "America/Los_Angeles")
         app = job(la)
         self.client.force_login(la)
-        r = self.client.post(f"{BASE}/interviews", data=json.dumps({"application": app.pk, "scheduled_at": "2026-11-03T10:00", "kind": "video"}), content_type="application/json")
+        r = self.client.post(f"{BASE}/interviews", data=json.dumps({"application": app.pk, "scheduled_at": "2030-01-15T10:00", "kind": "video"}), content_type="application/json")
         self.assertEqual(r.status_code, 200, r.content)
         item = la.interviews.get()
-        self.assertEqual(item.scheduled_at, dt.datetime(2026, 11, 3, 18, 0, tzinfo=dt.timezone.utc))  # 10:00 in Los Angeles is 18:00 UTC
-        self.assertEqual(self.client.get(f"{BASE}/interviews").json()["upcoming"][0]["scheduled_local"], "2026-11-03T10:00")
+        self.assertEqual(item.scheduled_at, dt.datetime(2030, 1, 15, 18, 0, tzinfo=dt.timezone.utc))  # 10:00 in Los Angeles is 18:00 UTC
+        self.assertEqual(self.client.get(f"{BASE}/interviews").json()["upcoming"][0]["scheduled_local"], "2030-01-15T10:00")
 
 
 class FrontEndHasIt(SimpleTestCase):
