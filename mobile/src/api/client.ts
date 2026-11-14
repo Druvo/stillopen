@@ -1,8 +1,40 @@
 import * as SecureStore from "expo-secure-store";
 
-// Change this to your machine's LAN IP (or deployed host) when testing on a physical device --
-// "localhost" only reaches the backend from the same machine / an emulator with host loopback set up.
-export const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "http://127.0.0.1:8111";
+// Which StillOpen server this phone talks to. The released app is not tied to one site: the person types their server's address on the
+// sign-in screen (or opens a stillopen://connect?server=... link from their server's "Get the app" page) and it is remembered. A developer
+// build can set EXPO_PUBLIC_API_BASE to skip that. `API_BASE` is a live binding: it changes when `setApiBase` runs.
+const SERVER_KEY = "stillopen_server";
+export let API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "";
+
+/** An address as people type it ("jobs.example.com", "https://jobs.example.com/") -> "https://jobs.example.com", or null if it is not usable. */
+export function normalizeServer(input: string): string | null {
+  let text = input.trim();
+  if (!text) return null;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) text = `https://${text}`;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && __DEV__)) return null; // a release build only talks over HTTPS
+    if (!url.hostname || url.username || url.password) return null;
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadApiBase(): Promise<string> {
+  const saved = await SecureStore.getItemAsync(SERVER_KEY);
+  if (saved) API_BASE = saved;
+  return API_BASE;
+}
+
+export async function setApiBase(address: string): Promise<boolean> {
+  const clean = normalizeServer(address);
+  if (!clean) return false;
+  if (clean !== API_BASE) await setToken(null); // a token belongs to one server
+  API_BASE = clean;
+  await SecureStore.setItemAsync(SERVER_KEY, clean);
+  return true;
+}
 
 const TOKEN_KEY = "stillopen_token";
 

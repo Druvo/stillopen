@@ -11,3 +11,6 @@ paperless/
 *.log
 
 docs/images/.frames/
+
+# The Android app file a server may hand out (see /android/); a build output, never committed
+media/downloads/

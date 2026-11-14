@@ -14,7 +14,7 @@ from xml.sax.saxutils import escape as xml_escape
 from django.conf import settings
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
-from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponsePermanentRedirect
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.feedgenerator import Rss201rev2Feed
@@ -265,3 +265,45 @@ def sitemap(request):
         body.append(f"<url><loc>{xml_escape(loc)}</loc>" + (f"<lastmod>{lastmod}</lastmod>" if lastmod else "") + "</url>")
     body.append("</urlset>")
     return HttpResponse("\n".join(body), content_type="application/xml; charset=utf-8")
+
+
+# --- the Android app -------------------------------------------------------------------------------------------------------------------
+
+def _apk_file():
+    path = settings.STILLOPEN_APK_FILE
+    return path if path.is_file() else None
+
+
+def _read_version() -> str:
+    try:
+        return (settings.BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+@require_GET
+def android_app(request):
+    """The page people open on their phone to get the app. The app is one file for every server: it asks for the server's address when
+    it first opens, so this page also shows this server's address (and a link that fills it in)."""
+    config = SiteConfig.load()
+    apk = _apk_file()
+    if apk is not None:
+        download = reverse("android_apk")
+        size_mb = round(apk.stat().st_size / (1024 * 1024), 1)
+    else:
+        download, size_mb = config.android_apk_url or "", None
+    server = request.build_absolute_uri("/").rstrip("/")
+    return render(request, "tracker/android.html", {
+        "config": config, "download": download, "size_mb": size_mb, "version": _read_version(),
+        "server": server, "connect_link": f"stillopen://connect?server={server}", "https_ok": request.is_secure(),
+    })
+
+
+@require_GET
+def android_apk(request):
+    apk = _apk_file()
+    if apk is None:
+        raise Http404("No app file on this server.")
+    response = FileResponse(open(apk, "rb"), content_type="application/vnd.android.package-archive", as_attachment=True, filename="stillopen.apk")
+    response["X-Content-Type-Options"] = "nosniff"
+    return response

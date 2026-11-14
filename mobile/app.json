@@ -1,23 +1,25 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "StillOpen",
+    "slug": "stillopen",
     "scheme": "stillopen",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "org.stillopen.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#c6ff3d",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "org.stillopen.app",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"

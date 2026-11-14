@@ -205,6 +205,8 @@ WHITENOISE_USE_FINDERS = DEBUG
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = Path(os.environ.get("STILLOPEN_MEDIA", str(BASE_DIR / "media")))
+# The Android app file this server hands out at /android/stillopen.apk, when the admin has not set a download address instead.
+STILLOPEN_APK_FILE = Path(os.environ.get("STILLOPEN_APK_FILE", str(MEDIA_ROOT / "downloads" / "stillopen.apk")))
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 AUTHENTICATION_BACKENDS = [

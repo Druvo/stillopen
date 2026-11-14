@@ -1,7 +1,7 @@
 "use client";
 
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronDown, HelpCircle, Keyboard, Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Sun, UserRound, X } from "lucide-react";
+import { Bell, ChevronDown, HelpCircle, Keyboard, Loader2, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Smartphone, Sun, UserRound, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import { focusableIn, trapTab } from "@/lib/a11y";
 import { csrfToken } from "@/lib/api";
@@ -143,6 +143,11 @@ function UserMenu({ me, onShortcuts }: { me?: Me; onShortcuts: () => void }) {
             <Link to="/help" onClick={() => setOpen(false)} className={item}>
               <HelpCircle className="size-4 text-gray-500" aria-hidden /> Help
             </Link>
+          </li>
+          <li>
+            <a href="/android/" className={item}>
+              <Smartphone className="size-4 text-gray-500" aria-hidden /> Get the Android app
+            </a>
           </li>
           <li>
             <button

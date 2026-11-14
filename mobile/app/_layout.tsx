@@ -28,6 +28,7 @@ function Nav() {
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="login" />
+          <Stack.Screen name="connect" />
         </Stack.Protected>
       </Stack>
     </>

@@ -55,3 +55,24 @@ Where the app code lives: `app/` (routes), `src/screens/<area>/`, `src/api/<area
 - Adding or changing email addresses, and `.ics` downloads, are web-only.
 - Text size and density are saved but not applied yet. Push notifications are not built (the backend sends none yet).
 - Screens were checked in an Android emulator, not on iOS or a physical phone.
+
+## Build the installable Android app (.apk)
+
+The app is one file for every StillOpen server: it asks for the server's address on the sign-in screen (HTTPS only in a release build;
+`stillopen://connect?server=https://...` fills it in). The website's `/android/` page offers the file; the admin points it at the file
+(Site configuration > Mobile app, or put it at `media/downloads/stillopen.apk`).
+
+```bash
+cd mobile
+npm install
+npx expo prebuild --platform android --no-install     # makes android/ (not committed)
+cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64
+# then zipalign and sign with YOUR release key (keep it safe: every update must use the same one):
+zipalign -f -p 4 app/build/outputs/apk/release/app-release.apk stillopen-aligned.apk
+apksigner sign --ks your-release.jks --out stillopen.apk stillopen-aligned.apk
+```
+
+Needs JDK 17+ and the Android SDK (`ANDROID_HOME`). On Windows the native build fails when the project sits in a long path
+(ninja stops at 260 characters): build from a short folder such as `D:\m` and, in the generated `android/build.gradle`, move every
+subproject except `expo` to a short build folder (`layout.buildDirectory.set(file("D:/g/${project.name}"))`) and set
+`externalNativeBuild.cmake.buildStagingDirectory` in `app/build.gradle`. Linux and macOS need none of that.
