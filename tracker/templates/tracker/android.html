@@ -36,12 +36,13 @@
 
       <div class="col-12">
         <div class="card"><div class="card-body">
-          <h2 class="h4">3. Sign in to this site</h2>
-          <p>The app works with any {{ config.site_title }} server, so it asks for the address the first time. Yours is:</p>
+          <h2 class="h4">3. Sign in</h2>
+          <p>Open the app and sign in with the same username or email and password as on the website. The app opens on the main {{ config.site_title }} site already.</p>
+          <p class="mb-2">Using a different {{ config.site_title }} server, such as one you run yourself? Tap <strong>Change</strong> above the sign-in form and enter this site's address:</p>
           <p class="mb-2"><code class="fs-5" id="server-address">{{ server }}</code></p>
           {% if not https_ok %}<p class="text-warning small">This page is not on HTTPS. The app only connects to servers over HTTPS, so ask whoever runs this site to turn it on.</p>{% endif %}
-          <p class="mb-2">If you are reading this on the phone with the app already installed, <a href="{{ connect_link }}">tap here to fill in the address</a>.</p>
-          <p class="text-secondary small mb-0">Then use the same username or email and password as on the website. People who sign in some other way (such as Google) should set a password under Profile first.</p>
+          <p class="mb-2">If the app is already installed on this phone, <a href="{{ connect_link }}">tap here to set this site as the server</a>.</p>
+          <p class="text-secondary small mb-0">People who sign in some other way (such as Google) should set a password under Profile first.</p>
         </div></div>
       </div>
     </div>

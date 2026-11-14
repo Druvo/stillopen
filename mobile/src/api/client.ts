@@ -1,10 +1,12 @@
 import * as SecureStore from "expo-secure-store";
 
-// Which StillOpen server this phone talks to. The released app is not tied to one site: the person types their server's address on the
-// sign-in screen (or opens a stillopen://connect?server=... link from their server's "Get the app" page) and it is remembered. A developer
-// build can set EXPO_PUBLIC_API_BASE to skip that. `API_BASE` is a live binding: it changes when `setApiBase` runs.
+// Which StillOpen server this phone talks to. It opens on the default below; a person who runs their own server taps "Change" on the sign-in
+// screen (or opens a stillopen://connect?server=... link from their server's "Get the app" page) and that address is remembered. `API_BASE` is a live binding: it changes when `setApiBase` runs.
 const SERVER_KEY = "stillopen_server";
-export let API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "";
+// The server the app opens with. Set EXPO_PUBLIC_API_BASE when building to point your own build at your own server; the sign-in screen's
+// "Change" link still lets anyone use a different one.
+export const DEFAULT_SERVER = process.env.EXPO_PUBLIC_API_BASE ?? "https://stillopen.rnd.place";
+export let API_BASE = DEFAULT_SERVER;
 
 /** An address as people type it ("jobs.example.com", "https://jobs.example.com/") -> "https://jobs.example.com", or null if it is not usable. */
 export function normalizeServer(input: string): string | null {
