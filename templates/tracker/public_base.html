@@ -30,6 +30,7 @@
       <ul class="navbar-nav me-auto ms-md-4">
         {% if config.public_board_enabled %}<li class="nav-item"><a class="nav-link" href="{% url 'openings' %}">Browse jobs</a></li>{% endif %}
         <li class="nav-item"><a class="nav-link" href="{% url 'tools_index' %}">Free tools</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'android_app' %}">Android app</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'landing' %}#how">How it works</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'landing' %}#why">Why {{ config.site_title }}</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'landing' %}#faq">FAQ</a></li>

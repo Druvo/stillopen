@@ -1,12 +1,15 @@
+import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, View } from "react-native";
 
 import { API_BASE, normalizeServer, setApiBase } from "../api/client";
+import { openWebSignIn } from "../api/webSignIn";
 import { useAuth } from "../context/AuthContext";
 import { Button, Field, Heading, Muted, Text, useTheme } from "../ui";
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
+  const { notice } = useLocalSearchParams<{ notice?: string }>();
   const { colors } = useTheme();
   const [server, setServer] = useState(API_BASE);
   const [editingServer, setEditingServer] = useState(!API_BASE);
@@ -35,6 +38,20 @@ export default function LoginScreen() {
       setError(err?.message === "Network request failed" ? "Could not reach that server. Check the address and your connection." : (err?.message ?? "Could not sign in."));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const viaWebsite = async () => {
+    setError(null);
+    if (!(await setApiBase(server))) {
+      setError("That server address does not look right. It should start with https:// and be the address you use for StillOpen in a browser.");
+      setEditingServer(true);
+      return;
+    }
+    try {
+      await openWebSignIn();
+    } catch {
+      setError("Could not open the sign-in page. Check your connection and try again.");
     }
   };
 
@@ -69,9 +86,17 @@ export default function LoginScreen() {
         <Field label="Username or email" value={username} onChangeText={setUsername} autoCapitalize="none" autoCorrect={false} />
         <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
 
-        {error ? <Text style={{ color: colors.danger, marginBottom: 10 }}>{error}</Text> : null}
+        {error || notice ? <Text style={{ color: colors.danger, marginBottom: 10 }}>{error ?? notice}</Text> : null}
 
         <Button label="Sign in" onPress={submit} busy={busy} disabled={!server || !username || !password} />
+
+        <View style={{ flexDirection: "row", alignItems: "center", marginVertical: 18, gap: 10 }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+          <Muted>or</Muted>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+        </View>
+        <Button label="Sign in with Google, GitHub or Facebook" variant="secondary" icon="open-outline" onPress={viaWebsite} disabled={!server} />
+        <Muted style={{ marginTop: 8, textAlign: "center" }}>Opens the website's sign-in page in your browser, then brings you back here.</Muted>
       </ScrollView>
     </KeyboardAvoidingView>
   );

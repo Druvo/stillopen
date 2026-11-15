@@ -10,6 +10,8 @@ interface AuthState {
   me: Me | null;
   error: string | null;
   signIn: (username: string, password: string) => Promise<void>;
+  /** After signing in through the website's own page: keep the token the server handed over and open the app. */
+  completeSignIn: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<void>;
 }
@@ -59,6 +61,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [refreshMe],
   );
 
+  const completeSignIn = useCallback(
+    async (token: string) => {
+      await persistToken(token);
+      await refreshMe();
+      setSignedIn(true);
+    },
+    [refreshMe],
+  );
+
   const signOut = useCallback(async () => {
     try {
       await endpoints.logout();
@@ -70,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSignedIn(false);
   }, []);
 
-  const value = useMemo(() => ({ loading, signedIn, me, error, signIn, signOut, refreshMe }), [loading, signedIn, me, error, signIn, signOut, refreshMe]);
+  const value = useMemo(() => ({ loading, signedIn, me, error, signIn, completeSignIn, signOut, refreshMe }), [loading, signedIn, me, error, signIn, completeSignIn, signOut, refreshMe]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

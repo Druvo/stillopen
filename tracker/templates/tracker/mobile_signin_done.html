@@ -1,0 +1,17 @@
+{% extends "tracker/public_base.html" %}
+{% block title %}Back to the app | {{ config.site_title }}{% endblock %}
+{% block main %}
+<section class="so-hero">
+  <div class="container-xl py-5" style="max-width:34rem">
+    {% if link %}
+      <h1 class="so-display h2 mb-2">You are signed in</h1>
+      <p class="so-lead mb-4">Tap the button to go back to the {{ config.site_title }} app and finish.</p>
+      <p><a class="btn btn-primary btn-lg" id="open-app" href="{{ link }}">Open the app</a></p>
+      <p class="text-secondary small">If nothing happens, make sure the app is installed on this phone. This page works once; you can close it afterwards.</p>
+    {% else %}
+      <h1 class="so-display h2 mb-2">Open the app and try again</h1>
+      <p class="so-lead mb-0">This sign-in link has expired or was already used. Go back to the {{ config.site_title }} app and tap the sign-in button again.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
