@@ -1,50 +1,123 @@
 {% extends "tracker/public_base.html" %}
-{% block title %}Get the Android app | {{ config.site_title }}{% endblock %}
-{% block description %}Download the {{ config.site_title }} Android app: your job search on your phone, signed in to your own {{ config.site_title }} address.{% endblock %}
+{% load static %}
+{% block title %}{{ config.site_title }} for Android: your whole job search in your pocket{% endblock %}
+{% block description %}The {{ config.site_title }} Android app: see which jobs are still open, tailor your CV without made-up claims, track every application and prepare for interviews, from your phone. Free, and it never applies for you.{% endblock %}
 
 {% block main %}
+<style>
+  .app-phone { width: 100%; max-width: 15rem; border-radius: 2rem; border: .5rem solid var(--so-border); background: #000; box-shadow: var(--so-shadow); overflow: hidden; }
+  .app-phone img { display: block; width: 100%; height: auto; }
+  .app-shots { display: flex; gap: 1.25rem; overflow-x: auto; padding: .5rem .25rem 1.25rem; scroll-snap-type: x mandatory; }
+  .app-shots figure { flex: 0 0 auto; width: 15rem; margin: 0; scroll-snap-align: center; }
+  .app-shots figcaption { margin-top: .6rem; font-size: .92rem; color: var(--so-muted); }
+  .app-point { height: 100%; }
+</style>
+
 <section class="so-hero">
   <div class="container-xl py-4 py-lg-5">
-    <span class="so-eyebrow">Android app</span>
-    <h1 class="so-display so-display-hero mt-1 mb-2">{{ config.site_title }} on your phone</h1>
-    <p class="so-lead mb-4">Everything you do on the website, in one app: your board, jobs, CVs, interviews and prep. You sign in with the same account. The app never applies or sends anything for you.</p>
-
-    <div class="row g-3">
-      <div class="col-12 col-lg-6">
-        <div class="card h-100"><div class="card-body d-flex flex-column">
-          <h2 class="h4">1. Download</h2>
+    <div class="row align-items-center g-4">
+      <div class="col-lg-7">
+        <span class="so-eyebrow">Android app</span>
+        <h1 class="so-display so-display-hero mt-1 mb-3">Never apply to a dead job again, from your pocket</h1>
+        <p class="so-lead mb-4">{{ config.site_title }} checks which postings are still open, tailors your CV without inventing anything, and keeps every application, interview and follow-up in one place. Now on your phone, with the same account.</p>
+        <div class="d-flex flex-wrap gap-2 mb-2">
           {% if download %}
-            <p class="text-secondary">Android phones and tablets (Android 7 or newer){% if version %} · version {{ version }}{% endif %}{% if size_mb %} · {{ size_mb }} MB{% endif %}.</p>
-            <p><a class="btn btn-primary btn-lg" href="{{ download }}" {% if not size_mb %}rel="noopener"{% endif %}>Download for Android</a></p>
-            <p class="text-secondary small mb-0">The file is the installer (.apk). It is not on the Play Store yet, so your phone will ask you to allow installing it.</p>
+            <a class="btn btn-primary btn-lg" href="{{ download }}">Download for Android</a>
+          {% else %}
+            <span class="btn btn-secondary btn-lg disabled" aria-disabled="true">Download coming soon</span>
+          {% endif %}
+          <a class="btn btn-outline-secondary btn-lg" href="#install">How to install</a>
+        </div>
+        <p class="text-secondary small mb-0">{% if download %}Free · Android 7 or newer{% if version %} · version {{ version }}{% endif %}{% if size_mb %} · {{ size_mb }} MB{% endif %}{% else %}The app is not available from this site yet.{% endif %} · No ads, no tracking, you press apply yourself.</p>
+      </div>
+      <div class="col-lg-5 d-flex justify-content-center gap-3">
+        <div class="app-phone"><img src="{% static 'img/app/home-dark.png' %}" width="480" height="960" alt="The app's home screen: your jobs with a match score for each, and what to do next" loading="eager"></div>
+        <div class="app-phone d-none d-sm-block"><img src="{% static 'img/app/job-light.png' %}" width="480" height="960" alt="One job in the app's light theme: match score, status and the next steps" loading="lazy"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="py-5">
+  <div class="container-xl">
+    <span class="so-eyebrow">What you get</span>
+    <h2 class="so-display mt-1 mb-4">Everything the website does, built for a phone</h2>
+    <div class="row g-3">
+      <div class="col-12 col-md-6 col-lg-4"><div class="card app-point"><div class="card-body"><h3 class="h4">See what is still open</h3><p class="text-secondary mb-0">Each job shows whether the posting is still up, how well it fits you and when it closes, so you only spend time on live ones.</p></div></div></div>
+      <div class="col-12 col-md-6 col-lg-4"><div class="card app-point"><div class="card-body"><h3 class="h4">A CV that tells the truth</h3><p class="text-secondary mb-0">Tailor your CV for a job. Anything that is not in your own material is flagged, and a flagged CV stays locked until you approve it.</p></div></div></div>
+      <div class="col-12 col-md-6 col-lg-4"><div class="card app-point"><div class="card-body"><h3 class="h4">Every application in one board</h3><p class="text-secondary mb-0">Move jobs through your stages, keep notes, set follow-ups, and get a nudge when a reply is overdue.</p></div></div></div>
+      <div class="col-12 col-md-6 col-lg-4"><div class="card app-point"><div class="card-body"><h3 class="h4">Interviews and prep</h3><p class="text-secondary mb-0">Keep dates, people and questions for every round, practise a few questions a day, and see your hiring process as a timeline.</p></div></div></div>
+      <div class="col-12 col-md-6 col-lg-4"><div class="card app-point"><div class="card-body"><h3 class="h4">Numbers that are honest</h3><p class="text-secondary mb-0">Plain counts of what you sent, what got a reply and where you are waiting. Nothing is predicted and small numbers are labelled as such.</p></div></div></div>
+      <div class="col-12 col-md-6 col-lg-4"><div class="card app-point"><div class="card-body"><h3 class="h4">You stay in charge</h3><p class="text-secondary mb-0">The app never applies for you and never sends anything on its own. It is open source, and you can run your own server.</p></div></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="py-5 so-hero">
+  <div class="container-xl">
+    <span class="so-eyebrow">A look inside</span>
+    <h2 class="so-display mt-1 mb-3">Light or dark, the same as the website</h2>
+    <div class="app-shots">
+      <figure><div class="app-phone"><img src="{% static 'img/app/home-dark.png' %}" width="480" height="960" alt="Home: your jobs, ranked, with what to do next" loading="lazy"></div><figcaption>Your next step, always on top.</figcaption></figure>
+      <figure><div class="app-phone"><img src="{% static 'img/app/cv-check-dark.png' %}" width="480" height="960" alt="A tailored CV with a warning that one number is not in your own material" loading="lazy"></div><figcaption>Claims that are not yours get flagged before you can send them.</figcaption></figure>
+      <figure><div class="app-phone"><img src="{% static 'img/app/insights-dark.png' %}" width="480" height="960" alt="Insights: how many applications you sent this week and who replied" loading="lazy"></div><figcaption>Your week in plain numbers.</figcaption></figure>
+      <figure><div class="app-phone"><img src="{% static 'img/app/job-light.png' %}" width="480" height="960" alt="A job in the light theme with its match score and status" loading="lazy"></div><figcaption>Light theme, if you prefer it.</figcaption></figure>
+    </div>
+    <p class="text-secondary small mb-0">Screens show invented demo data.</p>
+  </div>
+</section>
+
+<section class="py-5" id="install">
+  <div class="container-xl">
+    <span class="so-eyebrow">Get started</span>
+    <h2 class="so-display mt-1 mb-4">Three steps, about a minute</h2>
+    <div class="row g-3">
+      <div class="col-12 col-lg-4">
+        <div class="card h-100"><div class="card-body d-flex flex-column">
+          <h3 class="h4">1. Download</h3>
+          {% if download %}
+            <p class="text-secondary">The installer file (.apk) for Android phones and tablets.</p>
+            <p class="mt-auto mb-0"><a class="btn btn-primary" href="{{ download }}">Download for Android</a></p>
           {% else %}
             <p class="text-secondary mb-0">The Android app is not available from this site yet. If you run this site, see the admin's "Mobile app" settings.</p>
           {% endif %}
         </div></div>
       </div>
-
-      <div class="col-12 col-lg-6">
+      <div class="col-12 col-lg-4">
         <div class="card h-100"><div class="card-body">
-          <h2 class="h4">2. Install</h2>
+          <h3 class="h4">2. Install</h3>
+          <p class="text-secondary mb-2">It is not on the Play Store yet, so your phone asks once to allow it.</p>
           <ol class="mb-0">
-            <li>Open the downloaded file. If your phone says it blocks installs from this source, tap <strong>Settings</strong> and allow it for your browser or Files app, then go back.</li>
-            <li>Tap <strong>Install</strong>, then <strong>Open</strong>.</li>
-            <li>You can turn the permission off again afterwards.</li>
+            <li>Open the downloaded file.</li>
+            <li>If your phone blocks it, tap <strong>Settings</strong>, allow installs from your browser or Files app, and go back.</li>
+            <li>Tap <strong>Install</strong>, then <strong>Open</strong>. You can turn the permission off again.</li>
           </ol>
         </div></div>
       </div>
-
-      <div class="col-12">
-        <div class="card"><div class="card-body">
-          <h2 class="h4">3. Sign in</h2>
-          <p>Open the app and sign in with the same username or email and password as on the website. The app opens on the main {{ config.site_title }} site already.</p>
-          <p class="mb-2">Using a different {{ config.site_title }} server, such as one you run yourself? Tap <strong>Change</strong> above the sign-in form and enter this site's address:</p>
-          <p class="mb-2"><code class="fs-5" id="server-address">{{ server }}</code></p>
+      <div class="col-12 col-lg-4">
+        <div class="card h-100"><div class="card-body">
+          <h3 class="h4">3. Sign in</h3>
+          <p class="text-secondary">Use the same account as on the website: your username or email and password, or tap <strong>Sign in with Google, GitHub or Facebook</strong> if you use those here.</p>
+          <p class="mb-2 small">Using a different {{ config.site_title }} server, such as one you run yourself? Tap <strong>Change</strong> above the sign-in form and enter:</p>
+          <p class="mb-2"><code id="server-address">{{ server }}</code></p>
           {% if not https_ok %}<p class="text-warning small">This page is not on HTTPS. The app only connects to servers over HTTPS, so ask whoever runs this site to turn it on.</p>{% endif %}
-          <p class="mb-2">If the app is already installed on this phone, <a href="{{ connect_link }}">tap here to set this site as the server</a>.</p>
-          <p class="text-secondary small mb-0">People who sign in some other way (such as Google) should set a password under Profile first.</p>
+          <p class="mb-0 small">Already installed? <a href="{{ connect_link }}">Tap here to set this site as the server.</a></p>
         </div></div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section class="py-5 so-hero">
+  <div class="container-xl" style="max-width:52rem">
+    <span class="so-eyebrow">Questions</span>
+    <h2 class="so-display mt-1 mb-3">Good to know</h2>
+    <div class="accordion" id="app-faq">
+      <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q1">Does it cost anything?</button></h3><div id="q1" class="accordion-collapse collapse" data-bs-parent="#app-faq"><div class="accordion-body">No. {{ config.site_title }} is free and open source. If you add your own AI key, the AI provider charges you directly; without one you still get the free keyword checks.</div></div></div>
+      <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q2">Does it apply to jobs for me?</button></h3><div id="q2" class="accordion-collapse collapse" data-bs-parent="#app-faq"><div class="accordion-body">Never. It helps you find, prepare and keep track. You press apply yourself, and nothing is sent to an employer by the app.</div></div></div>
+      <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q3">Is there an iPhone version?</button></h3><div id="q3" class="accordion-collapse collapse" data-bs-parent="#app-faq"><div class="accordion-body">Not yet. On an iPhone you can use the website in your browser, which has the same features.</div></div></div>
+      <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q4">Why is it not on the Play Store?</button></h3><div id="q4" class="accordion-collapse collapse" data-bs-parent="#app-faq"><div class="accordion-body">It is a new, independent project. Until it is listed, you install the file directly. The file is signed, and updates must come from the same publisher, so it cannot be swapped for another app.</div></div></div>
+      <div class="accordion-item"><h3 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q5">What does the app know about me?</button></h3><div id="q5" class="accordion-collapse collapse" data-bs-parent="#app-faq"><div class="accordion-body">Only what is in your own {{ config.site_title }} account, which the app shows you from the server. It keeps a sign-in token in your phone's secure storage and nothing else, and you can sign out or revoke it any time from your profile.</div></div></div>
     </div>
   </div>
 </section>

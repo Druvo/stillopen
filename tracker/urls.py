@@ -1,7 +1,7 @@
 from django.urls import include, path, re_path
 
 from . import views_export
-from . import views, views_app, views_calendar, views_cover, views_cv, views_google, views_mcp, views_public, views_tools
+from . import views, views_app, views_calendar, views_cover, views_cv, views_google, views_mcp, views_mobilesignin, views_public, views_tools
 
 urlpatterns = [
     path("", views_public.landing, name="landing"),
@@ -24,6 +24,9 @@ urlpatterns = [
     path("tools/is-it-still-open/", views_tools.liveness_check, name="tool_liveness"),
     path("tools/compare-offers/", views_tools.offer_compare, name="tool_offer_compare"),
     re_path(r"^calendar/(?P<token>[A-Za-z0-9_-]{8,100})\.ics$", views_calendar.calendar_feed, name="calendar_feed"),
+    path("auth/mobile/start/", views_mobilesignin.start, name="mobile_signin_start"),
+    path("auth/mobile/finish/", views_mobilesignin.finish, name="mobile_signin_finish"),
+    path("auth/mobile/exchange/", views_mobilesignin.exchange, name="mobile_signin_exchange"),
     path("google/callback/", views_google.google_callback, name="google_callback"),
     path("developers/", views_tools.api_reference, name="api_reference"),
     path("tools/sample-interview-questions/", views_tools.sample_questions, name="tool_sample_questions"),

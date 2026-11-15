@@ -11,6 +11,9 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- App sign-in through the website's own page: a "Sign in with Google, GitHub or Facebook" button in the Android app opens the site's sign-in page in the phone's browser (so every method the site offers works, including Clerk), then hands back a one-time code that is traded for a normal token together with a secret only the app holds (`/auth/mobile/start`, `finish`, `exchange`). The app never sees a provider password or token.
+- The "Get the Android app" page is now a full public page for the app (what you get, screenshots, install steps, questions) and is linked from the top menu and footer.
+
 - Android app download: a public "Get the Android app" page at `/android/` (install steps, this server's address, a link that fills the address into the app) and an admin setting for where the file comes from (Site configuration > Mobile app, or a file at `media/downloads/stillopen.apk`). The app asks for the server address on sign-in, so one file works for every server.
 - Sign-in and email verification through Clerk (optional, off until a publishable and secret key are set in Site configuration > Clerk sign-in or in `CLERK_PUBLISHABLE_KEY`/`CLERK_SECRET_KEY`). The sign-in and sign-up pages then show Clerk's forms; we check the signed session token and Clerk's own word that the email is verified before opening a normal session. A Clerk person is always a new account here (never matched to an older one by email); registration follows the existing open/closed switch. Staff keep the admin password login.
 
