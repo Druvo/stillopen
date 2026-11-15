@@ -11,7 +11,7 @@ from tracker.services import stats
 
 User = get_user_model()
 PW = "correct-horse-battery-staple"
-TODAY = date(2026, 10, 25)
+TODAY = timezone.localdate()  # real today: the interview in the week-ahead count is made relative to the real clock
 
 
 def person(name):

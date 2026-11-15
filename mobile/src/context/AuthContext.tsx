@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { getToken, setToken as persistToken } from "../api/client";
+import { getToken, loadApiBase, setToken as persistToken } from "../api/client";
 import * as endpoints from "../api/endpoints";
 import type { Me } from "../api/types";
 
@@ -29,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      await loadApiBase();
       const token = await getToken();
       if (token) {
         try {

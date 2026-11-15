@@ -134,3 +134,48 @@ class MobileCvDownload(TestCase):
         _, bob_token = ApiToken.issue(self.bob, "mobile", can_write=True)
         r = self.client.get(reverse("cv_download", args=[self.version.pk, "md"]), **auth(bob_token))
         self.assertEqual(r.status_code, 404)
+
+
+class MobileMoreDownloads(TestCase):
+    """The other files a phone fetches directly: a cover letter, the printed CV page, the jobs spreadsheet and the data export."""
+
+    def setUp(self):
+        cache.clear()
+        from tracker.models import CoverLetter
+
+        self.ann = User.objects.create_user("ann", email="ann@example.com", password=PW)
+        self.bob = User.objects.create_user("bob", email="bob@example.com", password=PW)
+        self.version = CVVersion.objects.create(owner=self.ann, kind="master", source="manual", content="# Ann Example\n\nSUMMARY\n\nBuilds things.", approved=True)
+        self.job = Application.objects.create(owner=self.ann, company="Acme", role="Engineer", status=Status.objects.first())
+        self.letter = CoverLetter.objects.create(owner=self.ann, application=self.job, content="Dear Acme,\n\nI build things.", approved=True)
+        _, self.token = ApiToken.issue(self.ann, "mobile", can_write=True)
+        _, self.bob_token = ApiToken.issue(self.bob, "mobile", can_write=True)
+        self.urls = {
+            "cover": reverse("cover_download", args=[self.letter.pk, "txt"]),
+            "preview": reverse("cv_preview", args=[self.version.pk]),
+            "csv": reverse("jobs_export_csv"),
+            "export": reverse("export_data"),
+        }
+        self.client = Client()
+
+    def test_a_valid_token_reaches_each_file(self):
+        for name, url in self.urls.items():
+            r = self.client.get(url, **auth(self.token))
+            self.assertEqual(r.status_code, 200, (name, r.status_code))
+
+    def test_no_token_and_no_session_goes_to_login(self):
+        for name, url in self.urls.items():
+            self.assertEqual(self.client.get(url).status_code, 302, name)
+
+    def test_a_bad_token_is_401(self):
+        for name, url in self.urls.items():
+            self.assertEqual(self.client.get(url, **auth("so_not-a-real-token")).status_code, 401, name)
+
+    def test_another_persons_token_never_sees_this_persons_cover_letter_or_cv(self):
+        self.assertEqual(self.client.get(self.urls["cover"], **auth(self.bob_token)).status_code, 404)
+        self.assertEqual(self.client.get(self.urls["preview"], **auth(self.bob_token)).status_code, 404)
+
+    def test_the_export_and_spreadsheet_hold_only_the_tokens_owner(self):
+        self.assertNotIn("Acme", self.client.get(self.urls["csv"], **auth(self.bob_token)).content.decode())
+        self.assertIn("Acme", self.client.get(self.urls["csv"], **auth(self.token)).content.decode())
+        self.assertNotIn("Acme", self.client.get(self.urls["export"], **auth(self.bob_token)).content.decode())

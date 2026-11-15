@@ -34,30 +34,45 @@ Sign in with any existing StillOpen account (same username/password as the websi
   same bearer token via `bearer_or_login_required` in `tracker/api/mobileauth.py`, since those return files, not
   JSON, and a mobile client has no session cookie to use.
 
-## What's built so far
+## What's built
 
-- Sign in / sign out, token persisted across restarts
-- Dashboard: stats, "Worth a look next", job list with match score
-- Job detail: status change (the board's columns), fit check, notes, next action
-- CV list (master + tailored) and CV detail: full text, the fact-check lock/approve flow, DOCX/Markdown download
-  via a proper authenticated download + native share sheet (not a browser hop)
-- Profile: read-only, sign out
+The app now covers the website's screens, in the website's own light and dark colours (Albert Sans; the theme follows the saved
+preference, dark by default). Tabs: Home, Postings, CVs and More; More lists everything else, grouped like the website sidebar.
 
-## Not built yet (real feature-parity backlog)
+- **Home**: board and list views, filters, "Find jobs now" with progress, guide cards, bulk actions, archive.
+- **Jobs**: full job page (status, notes, "How you match", history), add / edit, apply assistant, all postings, saved searches, job sources.
+- **After you apply**: interviews (with the calendar link), contacts and referrals, companies, question bank, offers, hiring-process timeline, Insights charts.
+- **CVs and documents**: CV list/detail with the fact-check lock, builder, import, tailor, compare, "Ask for changes", ATS check, cover letters, documents.
+- **Prep**: prep plans, today's practice, interview prep, message drafts (never sent).
+- **Account**: profile, AI settings and usage, assistant tokens, notifications, help, data export/import, Google mail per job.
 
-The web app's JSON API is large (`/api/v1/openapi.json` lists 100+ routes). This first pass covers the daily-use
-core; the rest is still backend-API-ready, just not wired into a screen yet:
+Where the app code lives: `app/` (routes), `src/screens/<area>/`, `src/api/<area>.ts`, shared kit in `src/ui` and theme in `src/theme.ts` +
+`src/context/ThemeContext.tsx` (use `Text`/`TextInput` from `src/ui` and `useTheme`/`useStyles`, never a hard-coded colour).
 
-- Cover letters (view/edit/refine/approve, same pattern as CV)
-- Documents (upload, Paperless linking)
-- Interviews, offers, referrals, contacts, companies -- the whole post-"Applied" pipeline
-- Prep plans / quiz
-- Saved searches, job sources, "Add a job" / paste-a-link quick-add
-- Notifications list (only the unread count is wired in; no screen yet)
-- Profile editing (roles, places, CV text, preferences, AI settings)
-- Insights/stats charts
-- Google connection, calendar feed
-- Push notifications (would need a server-side piece too: APNs/FCM registration, nothing in the backend sends these yet)
+## Known gaps
 
-Each of these already has a working `/api/v1/...` endpoint (see `tracker/api/routes.py` and friends) -- this is a
-UI backlog, not a backend one.
+- Connecting a Google account needs the website (the OAuth return can't reach a phone session yet); everything after it works here.
+- Adding or changing email addresses, and `.ics` downloads, are web-only.
+- Text size and density are saved but not applied yet. Push notifications are not built (the backend sends none yet).
+- Screens were checked in an Android emulator, not on iOS or a physical phone.
+
+## Build the installable Android app (.apk)
+
+The app is one file for every StillOpen server: it asks for the server's address on the sign-in screen (HTTPS only in a release build;
+`stillopen://connect?server=https://...` fills it in). The website's `/android/` page offers the file; the admin points it at the file
+(Site configuration > Mobile app, or put it at `media/downloads/stillopen.apk`).
+
+```bash
+cd mobile
+npm install
+npx expo prebuild --platform android --no-install     # makes android/ (not committed)
+cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64
+# then zipalign and sign with YOUR release key (keep it safe: every update must use the same one):
+zipalign -f -p 4 app/build/outputs/apk/release/app-release.apk stillopen-aligned.apk
+apksigner sign --ks your-release.jks --out stillopen.apk stillopen-aligned.apk
+```
+
+Needs JDK 17+ and the Android SDK (`ANDROID_HOME`). On Windows the native build fails when the project sits in a long path
+(ninja stops at 260 characters): build from a short folder such as `D:\m` and, in the generated `android/build.gradle`, move every
+subproject except `expo` to a short build folder (`layout.buildDirectory.set(file("D:/g/${project.name}"))`) and set
+`externalNativeBuild.cmake.buildStagingDirectory` in `app/build.gradle`. Linux and macOS need none of that.

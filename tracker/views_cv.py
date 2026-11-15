@@ -92,7 +92,7 @@ def _message_page(text: str):
     return response
 
 
-@login_required
+@bearer_or_login_required
 @require_GET
 @xframe_options_sameorigin
 def cv_preview(request, pk):

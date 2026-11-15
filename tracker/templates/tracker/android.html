@@ -1,0 +1,51 @@
+{% extends "tracker/public_base.html" %}
+{% block title %}Get the Android app | {{ config.site_title }}{% endblock %}
+{% block description %}Download the {{ config.site_title }} Android app: your job search on your phone, signed in to your own {{ config.site_title }} address.{% endblock %}
+
+{% block main %}
+<section class="so-hero">
+  <div class="container-xl py-4 py-lg-5">
+    <span class="so-eyebrow">Android app</span>
+    <h1 class="so-display so-display-hero mt-1 mb-2">{{ config.site_title }} on your phone</h1>
+    <p class="so-lead mb-4">Everything you do on the website, in one app: your board, jobs, CVs, interviews and prep. You sign in with the same account. The app never applies or sends anything for you.</p>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="card h-100"><div class="card-body d-flex flex-column">
+          <h2 class="h4">1. Download</h2>
+          {% if download %}
+            <p class="text-secondary">Android phones and tablets (Android 7 or newer){% if version %} · version {{ version }}{% endif %}{% if size_mb %} · {{ size_mb }} MB{% endif %}.</p>
+            <p><a class="btn btn-primary btn-lg" href="{{ download }}" {% if not size_mb %}rel="noopener"{% endif %}>Download for Android</a></p>
+            <p class="text-secondary small mb-0">The file is the installer (.apk). It is not on the Play Store yet, so your phone will ask you to allow installing it.</p>
+          {% else %}
+            <p class="text-secondary mb-0">The Android app is not available from this site yet. If you run this site, see the admin's "Mobile app" settings.</p>
+          {% endif %}
+        </div></div>
+      </div>
+
+      <div class="col-12 col-lg-6">
+        <div class="card h-100"><div class="card-body">
+          <h2 class="h4">2. Install</h2>
+          <ol class="mb-0">
+            <li>Open the downloaded file. If your phone says it blocks installs from this source, tap <strong>Settings</strong> and allow it for your browser or Files app, then go back.</li>
+            <li>Tap <strong>Install</strong>, then <strong>Open</strong>.</li>
+            <li>You can turn the permission off again afterwards.</li>
+          </ol>
+        </div></div>
+      </div>
+
+      <div class="col-12">
+        <div class="card"><div class="card-body">
+          <h2 class="h4">3. Sign in</h2>
+          <p>Open the app and sign in with the same username or email and password as on the website. The app opens on the main {{ config.site_title }} site already.</p>
+          <p class="mb-2">Using a different {{ config.site_title }} server, such as one you run yourself? Tap <strong>Change</strong> above the sign-in form and enter this site's address:</p>
+          <p class="mb-2"><code class="fs-5" id="server-address">{{ server }}</code></p>
+          {% if not https_ok %}<p class="text-warning small">This page is not on HTTPS. The app only connects to servers over HTTPS, so ask whoever runs this site to turn it on.</p>{% endif %}
+          <p class="mb-2">If the app is already installed on this phone, <a href="{{ connect_link }}">tap here to set this site as the server</a>.</p>
+          <p class="text-secondary small mb-0">People who sign in some other way (such as Google) should set a password under Profile first.</p>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

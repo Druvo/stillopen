@@ -1,5 +1,7 @@
 """The jobs spreadsheet download. A file, not JSON, so it lives beside the other downloads rather than under /api/v1/."""
 from django.contrib.auth.decorators import login_required
+
+from .api.mobileauth import bearer_or_login_required
 from django.http import HttpResponse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
@@ -8,7 +10,7 @@ from django.views.decorators.http import require_GET
 from .services import jobexport
 
 
-@login_required
+@bearer_or_login_required
 @require_GET
 @never_cache
 def jobs_csv(request):

@@ -412,6 +412,12 @@ class SiteConfig(PersonalSettings):
         help_text="What a first-time visitor sees before they pick for themselves (their own choice, once made, always wins, remembered in their browser).",
     )
 
+    android_apk_url = models.URLField(
+        blank=True, max_length=300, verbose_name="Android app download address",
+        help_text="Where the \"Get the Android app\" page sends people to download the app (an https address, for example the file on this project's GitHub release). "
+        "Leave blank to serve a file from this server instead (see STILLOPEN_APK_FILE), or to hide the download.",
+    )
+
     class Meta:
         verbose_name = "Site configuration"
         verbose_name_plural = "Site configuration"

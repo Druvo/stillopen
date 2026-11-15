@@ -11,6 +11,7 @@ supported version, so entries are grouped under **Unreleased** until the first t
 
 ## [Unreleased]
 
+- Android app download: a public "Get the Android app" page at `/android/` (install steps, this server's address, a link that fills the address into the app) and an admin setting for where the file comes from (Site configuration > Mobile app, or a file at `media/downloads/stillopen.apk`). The app asks for the server address on sign-in, so one file works for every server.
 - Sign-in and email verification through Clerk (optional, off until a publishable and secret key are set in Site configuration > Clerk sign-in or in `CLERK_PUBLISHABLE_KEY`/`CLERK_SECRET_KEY`). The sign-in and sign-up pages then show Clerk's forms; we check the signed session token and Clerk's own word that the email is verified before opening a normal session. A Clerk person is always a new account here (never matched to an older one by email); registration follows the existing open/closed switch. Staff keep the admin password login.
 
 - "Check my fit" on All postings: a free, zero-token keyword match against any posting, before you track it. Fetches the full posting text on demand the same guarded way the quick-add bar does, cached per posting for a day and falling back to the stored excerpt if the fetch fails. Nothing is saved.

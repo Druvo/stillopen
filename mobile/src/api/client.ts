@@ -1,8 +1,42 @@
 import * as SecureStore from "expo-secure-store";
 
-// Change this to your machine's LAN IP (or deployed host) when testing on a physical device --
-// "localhost" only reaches the backend from the same machine / an emulator with host loopback set up.
-export const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "http://127.0.0.1:8111";
+// Which StillOpen server this phone talks to. It opens on the default below; a person who runs their own server taps "Change" on the sign-in
+// screen (or opens a stillopen://connect?server=... link from their server's "Get the app" page) and that address is remembered. `API_BASE` is a live binding: it changes when `setApiBase` runs.
+const SERVER_KEY = "stillopen_server";
+// The server the app opens with. Set EXPO_PUBLIC_API_BASE when building to point your own build at your own server; the sign-in screen's
+// "Change" link still lets anyone use a different one.
+export const DEFAULT_SERVER = process.env.EXPO_PUBLIC_API_BASE ?? "https://stillopen.rnd.place";
+export let API_BASE = DEFAULT_SERVER;
+
+/** An address as people type it ("jobs.example.com", "https://jobs.example.com/") -> "https://jobs.example.com", or null if it is not usable. */
+export function normalizeServer(input: string): string | null {
+  let text = input.trim();
+  if (!text) return null;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) text = `https://${text}`;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && __DEV__)) return null; // a release build only talks over HTTPS
+    if (!url.hostname || url.username || url.password) return null;
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadApiBase(): Promise<string> {
+  const saved = await SecureStore.getItemAsync(SERVER_KEY);
+  if (saved) API_BASE = saved;
+  return API_BASE;
+}
+
+export async function setApiBase(address: string): Promise<boolean> {
+  const clean = normalizeServer(address);
+  if (!clean) return false;
+  if (clean !== API_BASE) await setToken(null); // a token belongs to one server
+  API_BASE = clean;
+  await SecureStore.setItemAsync(SERVER_KEY, clean);
+  return true;
+}
 
 const TOKEN_KEY = "stillopen_token";
 
@@ -49,7 +83,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+/** Send files and fields as multipart form data (no JSON Content-Type: fetch sets the boundary itself). */
+async function upload<T>(path: string, form: FormData, method: "POST" | "PUT" | "PATCH" = "POST"): Promise<T> {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`${API_BASE}${path}`, { method, headers, body: form });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    if (response.status === 401) await setToken(null);
+    throw new ApiError(response.status, (data && data.error) || `Request failed (${response.status})`, data && data.fields);
+  }
+  return data as T;
+}
+
 export const api = {
+  upload,
   get: <T>(path: string) => request<T>(path, { method: "GET" }),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body: body !== undefined ? JSON.stringify(body) : undefined }),

@@ -169,6 +169,18 @@ class SiteConfigAdmin(ModelAdmin):
                 "description": "What a first-time visitor sees before they pick for themselves. A visitor's own light/dark choice, once made, always wins over this.",
             },
         ),
+        (
+            "Mobile app",
+            {
+                "classes": ("tab",),
+                "fields": ("android_apk_url",),
+                "description": (
+                    "The public \"Get the Android app\" page is at <code>/android/</code>. The app is the same for every StillOpen server (people type their server's address "
+                    "when they sign in), so the download can come from anywhere. Either put an https address here, or put the file on this server at <code>media/downloads/stillopen.apk</code> "
+                    "(or the path in <code>STILLOPEN_APK_FILE</code>) and leave this blank. Without either, the page says the app is not available from this site yet."
+                ),
+            },
+        ),
         ("Landing page", {"classes": ("tab",), "fields": ("landing_enabled", "landing_headline", "landing_subheadline", "landing_github_url")}),
         (
             "Job board",
